@@ -2,18 +2,14 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 
-#include "wasm3/source/wasm3.h"
+#include "device_driver.h"
+#include "wasm_module.h"
 #include "wasm3/source/m3_api_libc.h"
 
 #define PRIi32 "i"
 #define PRIi64 "lli"
 
 #define MAX_MODULES 16
-
-#define FATAL(msg, ...)                                    \
-    {                                                      \
-        printk("Error: [Fatal] " msg "\n", ##__VA_ARGS__); \
-    }
 
 static IM3Environment env;
 static IM3Runtime runtime;
@@ -28,7 +24,7 @@ static int wasm_bins_qty = 0;
 //       local.get $y
 //       i32.add)
 //     (export "sum" (func $sum_f)))
-static const unsigned char SUM_WASM[] = {
+unsigned char sum_wasm[] = {
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01,
     0x7f, 0x03, 0x02, 0x01, 0x00, 0x07, 0x07, 0x01, 0x03, 0x73, 0x75, 0x6d, 0x00, 0x00, 0x0a, 0x09,
     0x01, 0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x6a, 0x0b, 0x00, 0x24, 0x04, 0x6e, 0x61, 0x6d, 0x65,
@@ -36,7 +32,28 @@ static const unsigned char SUM_WASM[] = {
     0x01, 0x78, 0x01, 0x01, 0x79, 0x04, 0x08, 0x01, 0x00, 0x05, 0x73, 0x75, 0x6d, 0x5f, 0x74,
 };
 
-static const unsigned int SUM_WASM_SIZE = 79;
+unsigned int sum_wasm_len = 79;
+
+//   (module
+//     (import "env" "printf" (func $printf (param i32 i32) (result i32)))
+//     (import "env" "clock_ms" (func $clock_ms (param) (result i32)))
+//     (type $sum_t (func (param i32 i32) (result i32)))
+//     (func $sum_f (type $sum_t) (param $x i32) (param $y i32) (result i32)
+//       (call $clock_ms)
+//     ;;   local.get $x
+//       local.get $y
+//       i32.add)
+//     (export "sum" (func $sum_f)))
+unsigned char hello_wasm[] = {
+  0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x0b, 0x02, 0x60,
+  0x02, 0x7f, 0x7f, 0x01, 0x7f, 0x60, 0x00, 0x01, 0x7f, 0x02, 0x1d, 0x02,
+  0x03, 0x65, 0x6e, 0x76, 0x06, 0x70, 0x72, 0x69, 0x6e, 0x74, 0x66, 0x00,
+  0x00, 0x03, 0x65, 0x6e, 0x76, 0x08, 0x63, 0x6c, 0x6f, 0x63, 0x6b, 0x5f,
+  0x6d, 0x73, 0x00, 0x01, 0x03, 0x02, 0x01, 0x00, 0x07, 0x07, 0x01, 0x03,
+  0x73, 0x75, 0x6d, 0x00, 0x02, 0x0a, 0x09, 0x01, 0x07, 0x00, 0x10, 0x01,
+  0x20, 0x01, 0x6a, 0x0b
+};
+unsigned int hello_wasm_len = 76;
 
 M3Result link_all(IM3Module module)
 {
@@ -104,7 +121,7 @@ M3Result repl_init(unsigned stack)
     return m3Err_none;
 }
 
-M3Result repl_load(unsigned char wasm_code[], unsigned int wasm_code_size)
+M3Result repl_load(const char *module_name, unsigned char wasm_code[], unsigned int wasm_code_size)
 {
     M3Result result = m3Err_none;
     IM3Module module = NULL;
@@ -128,7 +145,7 @@ M3Result repl_load(unsigned char wasm_code[], unsigned int wasm_code_size)
     if (result)
         goto on_error;
 
-    m3_SetModuleName(module, "sum");
+    m3_SetModuleName(module, module_name);
 
     result = link_all(module);
     if (result)
@@ -274,7 +291,7 @@ static int __init wasm3_init(void)
     if (result)
         FATAL("repl_init: %s", result);
 
-    result = repl_load(SUM_WASM, SUM_WASM_SIZE);
+    result = repl_load("sum", hello_wasm, hello_wasm_len);
     if (result)
         FATAL("repl_load: %s", result);
 
@@ -284,11 +301,12 @@ static int __init wasm3_init(void)
     if (result)
         FATAL("repl_call: %s", result);
 
-    return 0;
+    return chardev_init();
 }
 
 static void __exit wasm3_exit(void)
 {
+    chardev_exit();
     pr_info("%s: goodbye %s\n", MODULE_NAME, name);
     pr_info("%s: module unloaded from 0x%p\n", MODULE_NAME, wasm3_exit);
 }
