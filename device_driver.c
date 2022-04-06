@@ -138,7 +138,7 @@ static ssize_t device_write(struct file *file, const char __user *buffer,
     if (result)
         FATAL("repl_load: %s", result);
 
-    result = repl_call("_start", 0, NULL);
+    result = repl_call("main", 0, NULL);
     if (result)
         FATAL("repl_call: %s", result);
 

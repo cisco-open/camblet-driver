@@ -41,13 +41,14 @@ Send a wasm module (non-WASI) to the runtime through the char device:
 
 ```wat
 (module
-  (import "env" "printf" (func $printf (param i32 i32) (result i32))) ;; printf is exported by the wasm3 runtime
+  ;; _debug is exported by the wasm3 runtime
+  (import "env" "_debug" (func $printf (param i32 i32) (result i32))) 
   (memory $0 1)
   (data (i32.const 0) "Hello")
-  (func (export "_start") (result i32)
+  (func (export "main") (result i32)
       i32.const 0  ;; pass offset 0 to printf
       i32.const 5  ;; pass length 5 to printf
-      (call $printf))
+      (call $printf)))
 ```
 
 ```bash
