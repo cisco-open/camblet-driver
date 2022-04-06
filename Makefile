@@ -20,7 +20,8 @@ wasm3-objs := wasm3/source/m3_api_libc.o \
 			  wasm3/source/m3_module.o \
 			  wasm3/source/m3_parse.o \
 			  wasm_module.o \
-			  device_driver.o
+			  device_driver.o \
+			  netfilter.o
 
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/

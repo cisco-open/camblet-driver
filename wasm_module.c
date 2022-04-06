@@ -3,6 +3,7 @@
 #include <linux/slab.h>
 
 #include "device_driver.h"
+#include "netfilter.h"
 #include "wasm_module.h"
 #include "wasm3/source/m3_api_libc.h"
 
@@ -173,10 +174,10 @@ M3Result repl_call(const char *name, int argc, const char *argv[])
     if (result)
         return result;
 
-    if (argc && (!strcmp(name, "main") || !strcmp(name, "_main")))
-    {
-        return "passing arguments to libc main() not implemented";
-    }
+    // if (argc && (!strcmp(name, "main") || !strcmp(name, "_main")))
+    // {
+    //     return "passing arguments to libc main() not implemented";
+    // }
 
     if (!strcmp(name, "_start"))
     {
@@ -301,11 +302,14 @@ static int __init wasm3_init(void)
     if (result)
         FATAL("repl_call: %s", result);
 
+    start_netfilter_submodule();
+
     return chardev_init();
 }
 
 static void __exit wasm3_exit(void)
 {
+    stop_netfilter_submodule();
     chardev_exit();
     pr_info("%s: goodbye %s\n", MODULE_NAME, name);
     pr_info("%s: module unloaded from 0x%p\n", MODULE_NAME, wasm3_exit);
