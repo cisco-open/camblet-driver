@@ -11,8 +11,8 @@ static ssize_t device_write(struct file *, const char __user *, size_t,
                             loff_t *);
 
 #define SUCCESS 0
-#define DEVICE_NAME "wasm3" /* Dev name as it appears in /proc/devices   */
-#define BUF_LEN 64 * 1024   /* Max length of the message from the device */
+#define DEVICE_NAME "wasm3"                /* Dev name as it appears in /proc/devices   */
+#define DEVICE_BUFFER_SIZE 2 * 1024 * 1024 /* Max length of the message from the device */
 
 int chardev_init(void);
 void chardev_exit(void);

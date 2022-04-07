@@ -14,7 +14,8 @@ enum
 /* Is device open? Used to prevent multiple access to device */
 static atomic_t already_open = ATOMIC_INIT(CDEV_NOT_USED);
 
-static char msg[BUF_LEN]; /* The msg the device will give when asked */
+static char device_buffer[DEVICE_BUFFER_SIZE];
+static unsigned int device_buffer_size = 0;
 
 static struct class *cls;
 
@@ -80,20 +81,30 @@ static int device_release(struct inode *inode, struct file *file)
      */
     module_put(THIS_MODULE);
 
+    M3Result result;
+    result = repl_load("device", device_buffer, device_buffer_size);
+    if (result)
+        FATAL("repl_load: %s", result);
+
+    const char *argv[2] = {"1", "main"};
+    result = repl_call("main", 2, argv);
+    if (result)
+        FATAL("repl_call: %s", result);
+
     return SUCCESS;
 }
 
 /* Called when a process, which already opened the dev file, attempts to
  * read from it.
  */
-static ssize_t device_read(struct file *filp,   /* see include/linux/fs.h   */
+static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
                            char __user *buffer, /* buffer to fill with data */
                            size_t length,       /* length of the buffer     */
                            loff_t *offset)
 {
     /* Number of bytes actually written to the buffer */
     int bytes_read = 0;
-    const char *msg_ptr = msg;
+    const char *msg_ptr = device_buffer;
 
     if (!*(msg_ptr + *offset))
     {                /* we are at the end of message */
@@ -123,25 +134,21 @@ static ssize_t device_read(struct file *filp,   /* see include/linux/fs.h   */
 }
 
 /* called when somebody tries to write into our device file. */
-static ssize_t device_write(struct file *file, const char __user *buffer,
-                            size_t length, loff_t *offset)
+static ssize_t device_write(struct file *file, const char *buffer, size_t length, loff_t *offset)
 {
-    int i;
+    int maxbytes;           /* maximum bytes that can be read from offset to DEVICE_BUFFER_SIZE*/
+    int bytes_to_write;     /* gives the number of bytes to write*/
+    int bytes_writen;       /* number of bytes actually writen*/
+    maxbytes = DEVICE_BUFFER_SIZE - *offset;
+    if (maxbytes > length)
+            bytes_to_write = length;
+    else
+            bytes_to_write = maxbytes;
 
-    pr_info("device_write(%p,%p,%ld)", file, buffer, length);
-
-    for (i = 0; i < length && i < BUF_LEN; i++)
-        get_user(msg[i], buffer + i);
-    
-    M3Result result;
-    result = repl_load("device", msg, length);
-    if (result)
-        FATAL("repl_load: %s", result);
-
-    result = repl_call("main", 0, NULL);
-    if (result)
-        FATAL("repl_call: %s", result);
-
-    /* Again, return the number of input characters used. */
-    return i;
+    bytes_writen = bytes_to_write - copy_from_user(device_buffer + *offset, buffer, bytes_to_write);
+    printk(KERN_INFO "charDev: device has been written %d\n", bytes_writen);
+    *offset += bytes_writen;
+    printk(KERN_INFO "charDev: device has been written\n");
+    device_buffer_size = *offset;
+    return bytes_writen;
 }
