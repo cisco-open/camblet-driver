@@ -83,13 +83,17 @@ static int device_release(struct inode *inode, struct file *file)
 
     M3Result result;
     result = repl_load("device", device_buffer, device_buffer_size);
-    if (result)
+    if (result) {
         FATAL("repl_load: %s", result);
+        return -EINVAL;
+    }
 
     const char *argv[2] = {"1", "main"};
     result = repl_call("main", 2, argv);
-    if (result)
+    if (result) {
         FATAL("repl_call: %s", result);
+        return -EINVAL;
+    }
 
     return SUCCESS;
 }
