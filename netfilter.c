@@ -2,6 +2,7 @@
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
 
+#include "wasm_module.h"
 #include "netfilter.h"
 
 char *outiplist[50]; // array holding outgoing ip address to block
@@ -24,11 +25,44 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
 
     ip_header = ip_hdr(sock_buff); // grab network header using accessor
 
-    char destination[50];
-    snprintf(destination, 50, "%pI4", &ip_header->daddr);
+    // Get the VM memory if there is at least one module loaded,
+    // if not, accept the packet anyhow.
+    uint8_t* mem = repl_get_memory();
+    if (!mem)
+    {
+        return NF_ACCEPT;
+    }
 
-    char source[50];
-    snprintf(source, 50, "%pI4", &ip_header->saddr);
+    uint64_t sourceAddr = repl_global_get("SOURCE");
+    if (!sourceAddr)
+    {
+        return NF_ACCEPT;
+    }
+
+    uint64_t destinationAddr = repl_global_get("DESTINATION");
+    if (!destinationAddr)
+    {
+        return NF_ACCEPT;
+    }
+
+    printk("source: %lld, destination: %lld", sourceAddr, destinationAddr);
+
+    char *source = mem + sourceAddr;
+    int len = snprintf(source, 20, "%pI4", &ip_header->saddr);
+
+    char *destination = mem + destinationAddr;
+    len = snprintf(destination, 20, "%pI4", &ip_header->daddr);
+
+    int i;
+    // const char *argv[4] = {source, source_len, destination, destination_len};
+    // for (i = 0; i < 4; i++) {
+    //     printk(argv[i]);
+    // }
+    M3Result result = repl_call("ip_debugger", 0, NULL);
+    if (result)
+    {
+        FATAL("netfilter.repl_call ip_debugger: %s", result);
+    }
 
     // for debug purpose
     // printk(KERN_INFO "got source address: %s\n", source);
@@ -39,7 +73,6 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
     // printk("iniplist[0] length: %d\n", strlen(iniplist[0]));
 
     // if the source address and destination address is in the proc file, drop it;
-    int i;
 
     for (i = 0; i < out_index; i++)
     {

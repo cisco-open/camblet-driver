@@ -5,6 +5,7 @@
 #include "device_driver.h"
 #include "netfilter.h"
 #include "wasm_module.h"
+#include "wasm3/source/m3_env.h"
 #include "wasm3/source/m3_api_libc.h"
 
 #define PRIi32 "i"
@@ -263,6 +264,28 @@ M3Result repl_call(const char *name, int argc, const char *argv[])
     }
 
     return result;
+}
+
+uint8_t* repl_get_memory() {
+    uint32_t len;
+    uint8_t* mem = m3_GetMemory(runtime, &len, 0);
+    printk("length of memory: %d", len);
+    return mem;
+}
+
+uint64_t repl_global_get(const char* name)
+{
+    IM3Global g = m3_FindGlobal(runtime->modules, name);
+
+    M3TaggedValue tagged;
+    M3Result err = m3_GetGlobal(g, &tagged);
+    if (err) return 0;
+
+    switch (tagged.type) {
+    case c_m3Type_i32:  return tagged.value.i32;
+    case c_m3Type_i64:  return tagged.value.i64;
+    default:            return 0;
+    }
 }
 
 //  Define the module metadata.
