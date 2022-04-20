@@ -1,0 +1,17 @@
+[package]
+name = "webassembly"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[[bin]]
+name = "webassembly"
+path = "main.rs"
+
+
+# [lib]
+# crate-type = ["cdylib"]
+# bench = false
+# name = "webassembly"
+# path = "main.rs"

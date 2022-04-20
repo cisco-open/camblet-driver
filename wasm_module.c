@@ -266,11 +266,10 @@ M3Result repl_call(const char *name, int argc, const char *argv[])
     return result;
 }
 
-uint8_t* repl_get_memory() {
+uint8_t* repl_get_memory()
+{
     uint32_t len;
-    uint8_t* mem = m3_GetMemory(runtime, &len, 0);
-    printk("length of memory: %d", len);
-    return mem;
+    return m3_GetMemory(runtime, &len, 0);
 }
 
 uint64_t repl_global_get(const char* name)
