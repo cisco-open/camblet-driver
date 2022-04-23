@@ -67,6 +67,12 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
                 return NF_ACCEPT;
             }
 
+            uint64_t dnsPacketAddr = repl_global_get("DNS_PACKET");
+            if (!dnsPacketAddr)
+            {
+                return NF_ACCEPT;
+            }
+
             // printk("source: %lld, destination: %lld", sourceAddr, destinationAddr);
 
             char *source = mem + sourceAddr;
@@ -77,6 +83,9 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
 
             char *dnsName = mem + dnsNameAddr;
             snprintf(dnsName, 20, "%s", data + DNS_HEADER_SIZE);
+
+            char *dnsPacket = mem + dnsPacketAddr;
+            memcpy(dnsPacket, data, udp_length);
 
             const char *argv[1];
             char dnsId[10];
@@ -163,6 +172,12 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
                 return NF_ACCEPT;
             }
 
+            uint64_t dnsPacketAddr = repl_global_get("DNS_PACKET");
+            if (!dnsPacketAddr)
+            {
+                return NF_ACCEPT;
+            }
+
             // printk("source: %lld, destination: %lld", sourceAddr, destinationAddr);
 
             char *source = mem + sourceAddr;
@@ -173,6 +188,9 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
 
             char *dnsName = mem + dnsNameAddr;
             snprintf(dnsName, 20, "%s", data + DNS_HEADER_SIZE);
+
+            char *dnsPacket = mem + dnsPacketAddr;
+            memcpy(dnsPacket, (char *)udp_header + sizeof(struct udphdr), udp_length);
 
             const char *argv[3];
             char dnsId[10];
