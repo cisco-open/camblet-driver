@@ -18,7 +18,7 @@ pub static mut DNS_PACKET: [u8; 512] = [0; 512];
 
 // source: &str, destination: &str
 #[no_mangle]
-extern "C" fn dns_query(id: i32) -> bool {
+extern "C" fn dns_query(id: i32) {
     unsafe {
         let source = CString::from_raw(SOURCE.as_mut_ptr());
         let destination = CString::from_raw(DESTINATION.as_mut_ptr());
@@ -45,13 +45,11 @@ extern "C" fn dns_query(id: i32) -> bool {
             }
         }
     }
-
-    return true;
 }
 
 #[no_mangle]
 // source: &str, destination: &str
-extern "C" fn dns_response(id: i32, answers: i32, ttl: i32) -> bool {
+extern "C" fn dns_response(id: i32, answers: i32, ttl: i32) {
     unsafe {
         let source = CString::from_raw(SOURCE.as_mut_ptr());
         let destination = CString::from_raw(DESTINATION.as_mut_ptr());
@@ -80,8 +78,6 @@ extern "C" fn dns_response(id: i32, answers: i32, ttl: i32) -> bool {
             }
         }
     }
-
-    return true;
 }
 
 fn main() {

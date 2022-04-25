@@ -5,7 +5,7 @@
 
 #define FATAL(msg, ...)                                    \
     {                                                      \
-        printk("Error: [Fatal] " msg "\n", ##__VA_ARGS__); \
+        printk("wasm3: Error: [Fatal] " msg "\n", ##__VA_ARGS__); \
     }
 
 M3Result repl_load(const char *module_name, unsigned char wasm_code[], unsigned int wasm_code_size);

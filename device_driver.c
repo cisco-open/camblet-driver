@@ -32,16 +32,16 @@ int chardev_init(void)
 
     if (major < 0)
     {
-        pr_alert("Registering char device failed with %d\n", major);
+        pr_alert("wasm3: Registering char device failed with %d\n", major);
         return major;
     }
 
-    pr_info("I was assigned major number %d.\n", major);
+    pr_info("wasm3: I was assigned major number %d.\n", major);
 
     cls = class_create(THIS_MODULE, DEVICE_NAME);
     device_create(cls, NULL, MKDEV(major, 0), NULL, DEVICE_NAME);
 
-    pr_info("Device created on /dev/%s\n", DEVICE_NAME);
+    pr_info("wasm3: Device created on /dev/%s\n", DEVICE_NAME);
 
     return SUCCESS;
 }
@@ -150,9 +150,9 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
             bytes_to_write = maxbytes;
 
     bytes_writen = bytes_to_write - copy_from_user(device_buffer + *offset, buffer, bytes_to_write);
-    printk(KERN_INFO "charDev: device has been written %d\n", bytes_writen);
+    printk(KERN_INFO "wasm3: device has been written %d\n", bytes_writen);
     *offset += bytes_writen;
-    printk(KERN_INFO "charDev: device has been written\n");
+    printk(KERN_INFO "wasm3: device has been written\n");
     device_buffer_size = *offset;
     return bytes_writen;
 }
