@@ -1,18 +1,19 @@
 use dns_parser::Packet;
 use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::sync::Mutex;
 
-#[derive(Debug)]
-struct DnsTurnaround<'a> {
-    packet: Packet<'a>,
+#[derive(Debug, Serialize, Deserialize)]
+struct DnsTurnaround {
+    name: String,
+    records: Vec<String>,
     latency_ns: i64,
 }
 
 lazy_static! {
-    static ref DNS_PACKETS: Mutex<HashMap<i32, DnsTurnaround<'static>>> =
-        Mutex::new(HashMap::new());
+    static ref DNS_PACKETS: Mutex<HashMap<i32, DnsTurnaround>> = Mutex::new(HashMap::new());
 }
 
 // import some WASM runtime functions from the module `env`
@@ -53,7 +54,8 @@ extern "C" fn dns_query(id: i32) {
                 _debug(&s);
 
                 let turnaround = DnsTurnaround {
-                    packet: dns,
+                    name: dns.questions[0].qname.to_string(),
+                    records: Vec::new(),
                     latency_ns: timestamp,
                 };
                 DNS_PACKETS.lock().unwrap().insert(id, turnaround);
@@ -92,7 +94,8 @@ extern "C" fn dns_response(id: i32) {
                 match DNS_PACKETS.lock().unwrap().get_mut(&id) {
                     Some(t) => {
                         *t = DnsTurnaround {
-                            packet: dns,
+                            name: dns.questions[0].qname.to_string(),
+                            records: Vec::new(),
                             latency_ns: timestamp - t.latency_ns,
                         };
                     }
@@ -107,8 +110,9 @@ extern "C" fn dns_response(id: i32) {
             }
         }
 
+        // print out the answers in JSON
         for (k, v) in &*DNS_PACKETS.lock().unwrap() {
-            s = format!("wasm3: entry: {} -> {:?}", k, v);
+            s = format!("wasm3: entry: {} -> {:?}", k, serde_json::to_string(&v));
             _debug(&s);
         }
     }
