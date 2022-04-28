@@ -42,6 +42,9 @@ sudo dmesg -T --follow
 ```
 
 ## Load a wasm module to the kernel module runtime:
+
+### Simple Hello World
+
 The kernel module exposes a character device, which can be used to interact with the module.
 
 Send a wasm module (non-WASI) to the runtime through the char device:
@@ -65,3 +68,20 @@ sudo sh -c "cat hello.wasm > /dev/wasm3"
 
 Check the kernel logs for the `Hello` message.
 
+### DNS Parser module
+
+The `samples/` directory contains webassembly targeted example applications, the main one is a DNS packet capturer/parser application, which gets called back by the kernel module through netfilter.
+
+```bash
+cd samples/
+# check/edit the code if you like
+vim main.rs
+# build the webassembly module from the code
+cargo build --target wasm32-unknown-unknown --release
+# load the wasm module to the kernel module
+sudo sh -c "cat ./target/wasm32-unknown-unknown/release/webassembly.wasm > /dev/wasm3"
+# exercise DNS a bit to capture some packages
+dig +ttlunits telex.hu
+# check the logs to see the parsed messages
+sudo dmesg -T --follow
+```
