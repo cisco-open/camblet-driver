@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 dns-parser = "0.8.0"
+lazy_static = "1.4.0"
 
 [[bin]]
 name = "webassembly"

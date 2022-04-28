@@ -308,7 +308,7 @@ static int __init wasm3_init(void)
     if (!env)
         FATAL("m3_NewEnvironment: NULL");
 
-    unsigned argStackSize = 64 * 1024;
+    unsigned argStackSize = 256 * 1024;
 
     result = repl_init(argStackSize);
     if (result)

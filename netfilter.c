@@ -154,7 +154,7 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
 
             const char *argv[1];
             char dnsId[10];
-
+            snprintf(dnsId, 10, "%d", ntohs(dns_header.id));
             argv[0] = dnsId;
 
             M3Result result = repl_call("dns_response", 1, argv);

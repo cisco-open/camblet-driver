@@ -1,5 +1,19 @@
 use dns_parser::Packet;
+use lazy_static::lazy_static;
+use std::collections::HashMap;
 use std::ffi::CString;
+use std::sync::Mutex;
+
+#[derive(Debug)]
+struct DnsTurnaround<'a> {
+    packet: Packet<'a>,
+    latency_ns: i64,
+}
+
+lazy_static! {
+    static ref DNS_PACKETS: Mutex<HashMap<i32, DnsTurnaround<'static>>> =
+        Mutex::new(HashMap::new());
+}
 
 // import some WASM runtime functions from the module `env`
 #[link(wasm_import_module = "env")]
@@ -19,6 +33,7 @@ pub static mut DNS_PACKET: [u8; 512] = [0; 512];
 #[no_mangle]
 extern "C" fn dns_query(id: i32) {
     unsafe {
+        let timestamp = clock_ns();
         let source = CString::from_raw(SOURCE.as_mut_ptr());
         let destination = CString::from_raw(DESTINATION.as_mut_ptr());
 
@@ -36,9 +51,15 @@ extern "C" fn dns_query(id: i32) {
             Ok(dns) => {
                 s = format!("wasm3: {:?}", dns);
                 _debug(&s);
+
+                let turnaround = DnsTurnaround {
+                    packet: dns,
+                    latency_ns: timestamp,
+                };
+                DNS_PACKETS.lock().unwrap().insert(id, turnaround);
             }
             Err(e) => {
-                s = format!("wasm3: {:?}", e);
+                s = format!("wasm3: error: {:?}", e);
                 _debug(&s);
             }
         }
@@ -49,6 +70,7 @@ extern "C" fn dns_query(id: i32) {
 // source: &str, destination: &str
 extern "C" fn dns_response(id: i32) {
     unsafe {
+        let timestamp = clock_ns();
         let source = CString::from_raw(SOURCE.as_mut_ptr());
         let destination = CString::from_raw(DESTINATION.as_mut_ptr());
 
@@ -66,17 +88,34 @@ extern "C" fn dns_response(id: i32) {
             Ok(dns) => {
                 s = format!("wasm3: {:?}", dns);
                 _debug(&s);
+
+                match DNS_PACKETS.lock().unwrap().get_mut(&id) {
+                    Some(t) => {
+                        *t = DnsTurnaround {
+                            packet: dns,
+                            latency_ns: timestamp - t.latency_ns,
+                        };
+                    }
+                    None => {
+                        _debug("wasm3: can't find entry in hashmap");
+                    }
+                }
             }
             Err(e) => {
-                s = format!("wasm3: {:?}", e);
+                s = format!("wasm3: error: {:?}", e);
                 _debug(&s);
             }
+        }
+
+        for (k, v) in &*DNS_PACKETS.lock().unwrap() {
+            s = format!("wasm3: entry: {} -> {:?}", k, v);
+            _debug(&s);
         }
     }
 }
 
 fn main() {
-    unsafe {
-        _debug("wasm3: hello world");
-    }
+    // unsafe {
+    //     _debug("wasm3: hello world");
+    // }
 }
