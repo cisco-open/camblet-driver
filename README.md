@@ -14,6 +14,13 @@ Current restrictions for kernel-space wasm3:
 
 ## Build and install
 
+Checkout the code:
+```
+bash
+git clone --recurse-submodules git@wwwin-github.cisco.com:eti/wasm3-kernel-module.git
+cd wasm3-kernel-module
+```
+
 Build the module:
 ```bash
 make
