@@ -38,10 +38,10 @@ unsigned int sum_wasm_len = 79;
 
 //   (module
 //     (import "env" "printf" (func $printf (param i32 i32) (result i32)))
-//     (import "env" "clock_ms" (func $clock_ms (param) (result i32)))
+//     (import "env" "clock_ns" (func $clock_ns (param) (result i64)))
 //     (type $sum_t (func (param i32 i32) (result i32)))
 //     (func $sum_f (type $sum_t) (param $x i32) (param $y i32) (result i32)
-//       (call $clock_ms)
+//       (call $clock_ns)
 //     ;;   local.get $x
 //       local.get $y
 //       i32.add)
@@ -314,15 +314,15 @@ static int __init wasm3_init(void)
     if (result)
         FATAL("repl_init: %s", result);
 
-    result = repl_load("sum", hello_wasm, hello_wasm_len);
-    if (result)
-        FATAL("repl_load: %s", result);
+    // result = repl_load("sum", hello_wasm, hello_wasm_len);
+    // if (result)
+    //     FATAL("repl_load: %s", result);
 
-    const char *args[] = {"30", "20"};
+    // const char *args[] = {"30", "20"};
 
-    result = repl_call("sum", 2, args);
-    if (result)
-        FATAL("repl_call: %s", result);
+    // result = repl_call("sum", 2, args);
+    // if (result)
+    //     FATAL("repl_call: %s", result);
 
     start_netfilter_submodule();
 

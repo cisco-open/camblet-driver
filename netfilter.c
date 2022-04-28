@@ -37,10 +37,8 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
 
             memcpy(&dns_header, data, DNS_HEADER_SIZE);
 
-            printk("wasm3: dns questions in request id %u: q/r: %u: %u", ntohs(dns_header.id), ntohs(dns_header.qr), ntohs(dns_header.qdcount));
-            printk("wasm3: dns request fly, length: %u, %s", udp_length, data + DNS_HEADER_SIZE);
+            printk("wasm3: dns question (%d bytes) in request id %u questions: %u", udp_length, ntohs(dns_header.id), ntohs(dns_header.qdcount));
 
-            
             // Get the VM memory if there is at least one module loaded,
             // if not, accept the packet regardless.
             uint8_t *mem = repl_get_memory();
@@ -61,28 +59,17 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
                 return NF_ACCEPT;
             }
 
-            uint64_t dnsNameAddr = repl_global_get("DNS_NAME");
-            if (!dnsNameAddr)
-            {
-                return NF_ACCEPT;
-            }
-
             uint64_t dnsPacketAddr = repl_global_get("DNS_PACKET");
             if (!dnsPacketAddr)
             {
                 return NF_ACCEPT;
             }
 
-            // printk("source: %lld, destination: %lld", sourceAddr, destinationAddr);
-
             char *source = mem + sourceAddr;
             snprintf(source, 20, "%pI4", &ip_header->saddr);
 
             char *destination = mem + destinationAddr;
             snprintf(destination, 20, "%pI4", &ip_header->daddr);
-
-            char *dnsName = mem + dnsNameAddr;
-            snprintf(dnsName, 20, "%s", data + DNS_HEADER_SIZE);
 
             char *dnsPacket = mem + dnsPacketAddr;
             memcpy(dnsPacket, data, udp_length);
@@ -128,24 +115,8 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
 
             memcpy(&dns_header, data, DNS_HEADER_SIZE);
 
-            data = data + DNS_HEADER_SIZE;
+            printk("wasm3: dns answer (%d bytes) in request id %u answers: %u", udp_length, ntohs(dns_header.id), ntohs(dns_header.ancount));
 
-            printk("wasm3: dns answers in request id %u: questions: %u: %u", ntohs(dns_header.id), ntohs(dns_header.qdcount), ntohs(dns_header.ancount));
-
-            unsigned name_len = strlen(data);
-            uint32_t ttl = 0;
-
-            // skip the original query from the answer
-            data = data + name_len + 1 + 2 + 2;
-
-            // skip the name, type, class from the answer
-            data = data + name_len + 1 + 2 + 2;
-
-            memcpy(&ttl, data, 4); // TODO
-
-            printk("wasm3: dns answer fly, length: %u, ttl: %u", udp_length, ttl);
-
-            
             // Get the VM memory if there is at least one module loaded,
             // if not, accept the packet regardless.
             uint8_t *mem = repl_get_memory();
@@ -166,19 +137,11 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
                 return NF_ACCEPT;
             }
 
-            uint64_t dnsNameAddr = repl_global_get("DNS_NAME");
-            if (!dnsNameAddr)
-            {
-                return NF_ACCEPT;
-            }
-
             uint64_t dnsPacketAddr = repl_global_get("DNS_PACKET");
             if (!dnsPacketAddr)
             {
                 return NF_ACCEPT;
             }
-
-            // printk("source: %lld, destination: %lld", sourceAddr, destinationAddr);
 
             char *source = mem + sourceAddr;
             snprintf(source, 20, "%pI4", &ip_header->saddr);
@@ -186,26 +149,15 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
             char *destination = mem + destinationAddr;
             snprintf(destination, 20, "%pI4", &ip_header->daddr);
 
-            char *dnsName = mem + dnsNameAddr;
-            snprintf(dnsName, 20, "%s", data + DNS_HEADER_SIZE);
-
             char *dnsPacket = mem + dnsPacketAddr;
-            memcpy(dnsPacket, (char *)udp_header + sizeof(struct udphdr), udp_length);
+            memcpy(dnsPacket, data, udp_length);
 
-            const char *argv[3];
+            const char *argv[1];
             char dnsId[10];
-            char answers[3];
-            char ttl_[10];
-            
-            snprintf(dnsId, 10, "%d", ntohs(dns_header.id));
-            snprintf(answers, 10, "%d", ntohs(dns_header.ancount));
-            snprintf(ttl_, 10, "%d", ntohs(ttl));
-            
-            argv[0] = dnsId;
-            argv[1] = answers;
-            argv[2] = ttl_;
 
-            M3Result result = repl_call("dns_response", 3, argv);
+            argv[0] = dnsId;
+
+            M3Result result = repl_call("dns_response", 1, argv);
             if (result)
             {
                 FATAL("netfilter.repl_call dns_response: %s", result);
@@ -236,7 +188,7 @@ int start_netfilter_submodule(void)
 
     nf_register_net_hook(&init_net, &nfho_in);
 
-    pr_info("---- netfilter started ----");
+    pr_info("---- netfilter submodule started ----");
 
     return 0;
 }
