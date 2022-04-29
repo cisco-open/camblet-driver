@@ -10,6 +10,8 @@ struct DnsTurnaround {
     name: String,
     records: Vec<String>,
     latency_ns: i64,
+    client: String,
+    server: String,
 }
 
 lazy_static! {
@@ -57,6 +59,8 @@ extern "C" fn dns_query(id: i32) {
                     name: dns.questions[0].qname.to_string(),
                     records: Vec::new(),
                     latency_ns: timestamp,
+                    client: source.to_str().unwrap().to_owned(),
+                    server: destination.to_str().unwrap().to_owned(),
                 };
                 DNS_PACKETS.lock().unwrap().insert(id, turnaround);
             }
@@ -93,11 +97,12 @@ extern "C" fn dns_response(id: i32) {
 
                 match DNS_PACKETS.lock().unwrap().get_mut(&id) {
                     Some(t) => {
-                        *t = DnsTurnaround {
-                            name: dns.questions[0].qname.to_string(),
-                            records: Vec::new(),
-                            latency_ns: timestamp - t.latency_ns,
-                        };
+                        t.records = dns
+                            .answers
+                            .into_iter()
+                            .map(|a| format!("{:?}", a.data))
+                            .collect();
+                        t.latency_ns = timestamp - t.latency_ns;
                     }
                     None => {
                         _debug("wasm3: can't find entry in hashmap");
