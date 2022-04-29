@@ -73,7 +73,33 @@ static int device_open(struct inode *inode, struct file *file)
 /* Called when a process closes the device file. */
 static int device_release(struct inode *inode, struct file *file)
 {
+    int status = SUCCESS;
+
     /* We're now ready for our next caller */
+    if (device_buffer_size)
+    {
+        M3Result result;
+        result = repl_load("device", device_buffer, device_buffer_size);
+        if (result)
+        {
+            FATAL("repl_load: %s", result);
+            status = -EINVAL;
+            goto cleanup;
+        }
+
+        const char *argv[2] = {"1", "main"};
+        result = repl_call("main", 2, argv);
+        if (result)
+        {
+            FATAL("repl_call: %s", result);
+            status = -EINVAL;
+            goto cleanup;
+        }
+    }
+
+cleanup:
+    device_buffer_size = 0;
+
     atomic_set(&already_open, CDEV_NOT_USED);
 
     /* Decrement the usage count, or else once you opened the file, you will
@@ -81,21 +107,7 @@ static int device_release(struct inode *inode, struct file *file)
      */
     module_put(THIS_MODULE);
 
-    M3Result result;
-    result = repl_load("device", device_buffer, device_buffer_size);
-    if (result) {
-        FATAL("repl_load: %s", result);
-        return -EINVAL;
-    }
-
-    const char *argv[2] = {"1", "main"};
-    result = repl_call("main", 2, argv);
-    if (result) {
-        FATAL("repl_call: %s", result);
-        return -EINVAL;
-    }
-
-    return SUCCESS;
+    return status;
 }
 
 /* Called when a process, which already opened the dev file, attempts to
@@ -109,6 +121,8 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
     /* Number of bytes actually written to the buffer */
     int bytes_read = 0;
     const char *msg_ptr = device_buffer;
+
+    printk("wasm3: device_read: length: %lu offset: %llu", length, *offset);
 
     if (!*(msg_ptr + *offset))
     {                /* we are at the end of message */
@@ -140,14 +154,14 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
 /* called when somebody tries to write into our device file. */
 static ssize_t device_write(struct file *file, const char *buffer, size_t length, loff_t *offset)
 {
-    int maxbytes;           /* maximum bytes that can be read from offset to DEVICE_BUFFER_SIZE*/
-    int bytes_to_write;     /* gives the number of bytes to write*/
-    int bytes_writen;       /* number of bytes actually writen*/
+    int maxbytes;       /* maximum bytes that can be read from offset to DEVICE_BUFFER_SIZE*/
+    int bytes_to_write; /* gives the number of bytes to write*/
+    int bytes_writen;   /* number of bytes actually writen*/
     maxbytes = DEVICE_BUFFER_SIZE - *offset;
     if (maxbytes > length)
-            bytes_to_write = length;
+        bytes_to_write = length;
     else
-            bytes_to_write = maxbytes;
+        bytes_to_write = maxbytes;
 
     bytes_writen = bytes_to_write - copy_from_user(device_buffer + *offset, buffer, bytes_to_write);
     printk(KERN_INFO "wasm3: device has been written %d\n", bytes_writen);
