@@ -4,14 +4,19 @@
 
 #include "device_driver.h"
 #include "netfilter.h"
+#include "worker_thread.h"
 #include "wasm_module.h"
 #include "wasm3/source/m3_env.h"
 #include "wasm3/source/m3_api_libc.h"
+#include "wasm3/source/m3_exception.h"
 
 #define PRIi32 "i"
 #define PRIi64 "lli"
 
 #define MAX_MODULES 16
+
+typedef uint32_t wasm_ptr_t;
+typedef uint32_t wasm_size_t;
 
 static IM3Environment env;
 static IM3Runtime runtime;
@@ -57,6 +62,50 @@ unsigned char hello_wasm[] = {
 };
 unsigned int hello_wasm_len = 76;
 
+m3ApiRawFunction(m3_ext_submit_metric)
+{
+    m3ApiReturnType (uint32_t)
+    
+    m3ApiGetArgMem  (void*,           i_ptr)
+    m3ApiGetArg     (wasm_size_t,     i_size)
+
+    m3ApiCheckMem(i_ptr, i_size);
+    
+    char *metric_line = (char *)kmalloc(i_size, GFP_KERNEL);
+    if (!metric_line)
+    {
+        printk("cannot allocate memory for metric_line");
+        m3ApiReturn(0);
+    }
+
+    memcpy(metric_line, i_ptr, i_size);
+
+    submit_metric(metric_line);
+
+    m3ApiReturn(i_size);
+}
+
+static
+M3Result  SuppressLookupFailure(M3Result i_result)
+{
+    if (i_result == m3Err_functionLookupFailed)
+        return m3Err_none;
+    else
+        return i_result;
+}
+
+M3Result  m3_LinkRuntimeExtension(IM3Module module)
+{
+    M3Result result = m3Err_none;
+
+    const char* env = "env";
+
+_   (SuppressLookupFailure (m3_LinkRawFunction (module, env, "submit_metric", "i(*i)", &m3_ext_submit_metric)));
+
+_catch:
+    return result;
+}
+
 M3Result link_all(IM3Module module)
 {
     M3Result res;
@@ -65,6 +114,10 @@ M3Result link_all(IM3Module module)
         return res;
 
     res = m3_LinkLibC(module);
+    if (res)
+        return res;
+
+    res = m3_LinkRuntimeExtension(module);
     if (res)
         return res;
 
@@ -326,11 +379,14 @@ static int __init wasm3_init(void)
 
     start_netfilter_submodule();
 
+    worker_thread_init();
+
     return chardev_init();
 }
 
 static void __exit wasm3_exit(void)
 {
+    worker_thread_exit();
     stop_netfilter_submodule();
     chardev_exit();
     pr_info("%s: goodbye %s\n", MODULE_NAME, name);

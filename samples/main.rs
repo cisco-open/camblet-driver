@@ -12,6 +12,7 @@ struct DnsTurnaround {
     latency_ns: i64,
     client: String,
     server: String,
+    response_code: u8,
 }
 
 lazy_static! {
@@ -21,6 +22,7 @@ lazy_static! {
 // import some WASM runtime functions from the module `env`
 #[link(wasm_import_module = "env")]
 extern "C" {
+    fn submit_metric(metric: &str) -> i32;
     fn _debug(s: &str) -> i32;
     fn clock_ns() -> i64;
 }
@@ -61,6 +63,7 @@ extern "C" fn dns_query(id: i32) {
                     latency_ns: timestamp,
                     client: source.to_str().unwrap().to_owned(),
                     server: destination.to_str().unwrap().to_owned(),
+                    response_code: dns.header.response_code.into(),
                 };
                 DNS_PACKETS.lock().unwrap().insert(id, turnaround);
             }
@@ -103,6 +106,7 @@ extern "C" fn dns_response(id: i32) {
                             .map(|a| format!("{:?}", a.data))
                             .collect();
                         t.latency_ns = timestamp - t.latency_ns;
+                        t.response_code = dns.header.response_code.into();
                     }
                     None => {
                         _debug("wasm3: can't find entry in hashmap");
@@ -117,8 +121,10 @@ extern "C" fn dns_response(id: i32) {
 
         // print out the answers in JSON
         for (k, v) in &*DNS_PACKETS.lock().unwrap() {
-            s = format!("wasm3: entry: {} -> {:?}", k, serde_json::to_string(&v));
+            let json = serde_json::to_string(&v).unwrap() + "\n";
+            s = format!("wasm3: entry: {} -> {:?}", k, json);
             _debug(&s);
+            submit_metric(&json);
         }
     }
 }

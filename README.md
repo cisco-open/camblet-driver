@@ -84,4 +84,10 @@ sudo sh -c "cat ./target/wasm32-unknown-unknown/release/webassembly.wasm > /dev/
 dig +ttlunits telex.hu
 # check the logs to see the parsed messages
 sudo dmesg -T --follow
+
+
+# use exported metrics through UNIX socket
+sudo socat - UNIX-CONNECT:/tmp/wasm3
+# always delete the socket file before loading the kernel module again
+sudo rm -f /tmp/wasm3
 ```
