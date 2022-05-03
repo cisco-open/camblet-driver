@@ -91,3 +91,19 @@ sudo socat - UNIX-CONNECT:/tmp/wasm3
 # always delete the socket file before loading the kernel module again
 sudo rm -f /tmp/wasm3
 ```
+
+## Development environment
+
+### Vagrant/Virtualbox
+
+```bash
+brew install vagrant virtualbox virtualbox-extension-pack
+```
+
+```bash
+vagrant up
+```
+
+```bash
+vagrant ssh
+```

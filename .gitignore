@@ -6,3 +6,4 @@
 *.symvers
 .vscode
 .idea
+.vagrant
