@@ -9,7 +9,7 @@
 #define LISTEN 10
 
 static struct socket *sock;
-static struct socket *c_sock = NULL;
+static struct socket *c_sock;
 
 static void accept_work(struct work_struct *);
 static int send_msg(struct socket *sock, char *);
@@ -25,8 +25,8 @@ struct metric_work_struct
 static int make_server_socket(void)
 {
     int ret;
-
     struct sockaddr_un addr;
+    c_sock = NULL;
 
     // create
     ret = sock_create_kern(&init_net, AF_UNIX, SOCK_STREAM, 0, &sock);
@@ -107,7 +107,7 @@ void submit_metric_handler(struct work_struct *work)
 
 void submit_metric(char *metric_line)
 {
-    printk("wasm3: submit_metric: %s", metric_line);
+    printk("wasm3: submit_metric: %s, %d", metric_line, c_sock);
 
     if (!c_sock)
     {
