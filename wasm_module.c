@@ -390,9 +390,11 @@ static int __init wasm3_init(void)
 
 static void __exit wasm3_exit(void)
 {
-    worker_thread_exit();
-    stop_netfilter_submodule();
     chardev_exit();
+    stop_netfilter_submodule();
+    worker_thread_exit();
+    repl_free();
+    m3_FreeEnvironment(env);
     pr_info("%s: goodbye %s\n", MODULE_NAME, name);
     pr_info("%s: module unloaded from 0x%p\n", MODULE_NAME, wasm3_exit);
 }
