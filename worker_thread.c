@@ -5,12 +5,16 @@
 #include <linux/workqueue.h>
 #include <net/sock.h>
 
-#define SOCK_PATH "/tmp/wasm3"
 #define LISTEN 10
 
 static struct socket *sock;
 static struct socket *c_sock;
 static bool c_connected = false;
+
+static char *sock_path = "/run/wasm3.socket";
+
+module_param(sock_path, charp, 0000);
+MODULE_PARM_DESC(sock_path, "communication socket patch");
 
 static void accept_work(struct work_struct *);
 static int send_msg(struct socket *sock, char *);
@@ -34,7 +38,7 @@ static int make_server_socket(void)
         goto err;
 
     addr.sun_family = AF_UNIX;
-    strcpy(addr.sun_path, SOCK_PATH);
+    strcpy(addr.sun_path, sock_path);
 
     // bind
     ret = kernel_bind(sock, (struct sockaddr *)&addr, sizeof(addr));

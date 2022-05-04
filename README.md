@@ -87,9 +87,9 @@ sudo dmesg -T --follow
 
 
 # use exported metrics through UNIX socket
-sudo socat - UNIX-CONNECT:/tmp/wasm3
+sudo socat - UNIX-CONNECT:/run/wasm3.socket
 # always delete the socket file before loading the kernel module again
-sudo rm -f /tmp/wasm3
+sudo rm -f /run/wasm3.socket
 ```
 
 ## Development environment
