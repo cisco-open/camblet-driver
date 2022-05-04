@@ -319,9 +319,13 @@ M3Result repl_call(const char *name, int argc, const char *argv[])
     return result;
 }
 
-uint8_t* repl_get_memory()
+uint8_t *repl_get_memory()
 {
     uint32_t len;
+    if (!runtime->memory.mallocated)
+    {
+        return 0;
+    }
     return m3_GetMemory(runtime, &len, 0);
 }
 
