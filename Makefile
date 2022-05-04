@@ -39,4 +39,4 @@ menuconfig:
 ALPINE_VERSION ?= 3.13
 build-in-docker:
 	docker build -t builder -f Dockerfile.dev --build-arg KERNEL_VERSION=$(shell docker info -f "{{ json .KernelVersion }}" | tr -d '"' | cut -d '-' -f 1) --build-arg ALPINE_VERSION=${ALPINE_VERSION} .
-	docker run -ti --rm -v $(shell pwd):/workspace -v /dev:/dev -v /lib/modules:/lib/modules --privileged builder
+	docker run -ti --rm -v $(shell pwd):/workspace -v /dev:/dev -v /run:/run -v /lib/modules:/lib/modules --privileged builder
