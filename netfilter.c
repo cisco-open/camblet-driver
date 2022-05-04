@@ -168,9 +168,11 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
     return NF_ACCEPT;
 }
 
-int start_netfilter_submodule(void)
+static int init_network(struct net *net)
 {
-    pr_info("---- netfilter submodule init() ---");
+    int ret = 0;
+
+    printk("wasm3: init_network: %u\n", net->ns.inum);
 
     // register hook for outgoing traffic
     nfho_out.hook = hook_func_out;
@@ -178,7 +180,7 @@ int start_netfilter_submodule(void)
     nfho_out.pf = PF_INET;
     nfho_out.priority = NF_IP_PRI_FIRST;
 
-    nf_register_net_hook(&init_net, &nfho_out);
+    ret += nf_register_net_hook(net, &nfho_out);
 
     // register hook for outgoing traffic
     nfho_in.hook = hook_func_in;
@@ -186,7 +188,30 @@ int start_netfilter_submodule(void)
     nfho_in.pf = PF_INET;
     nfho_in.priority = NF_IP_PRI_FIRST;
 
-    nf_register_net_hook(&init_net, &nfho_in);
+    ret += nf_register_net_hook(net, &nfho_in);
+
+    printk("wasm3: init_network: %u returned: %d\n", net->ns.inum, ret);
+
+    return 0;
+}
+
+static void exit_network(struct net *net)
+{
+    printk("wasm3: exit_network: %u\n", net->ns.inum);
+    nf_unregister_net_hook(net, &nfho_in);
+    nf_unregister_net_hook(net, &nfho_out);
+}
+
+static struct pernet_operations net_operations = {
+    .init = init_network,
+    .exit = exit_network,
+};
+
+int start_netfilter_submodule(void)
+{
+    pr_info("---- netfilter submodule init() ---");
+
+    register_pernet_device(&net_operations);
 
     pr_info("---- netfilter submodule started ----");
 
@@ -195,8 +220,11 @@ int start_netfilter_submodule(void)
 
 int stop_netfilter_submodule(void)
 {
-    nf_unregister_net_hook(&init_net, &nfho_in);
-    nf_unregister_net_hook(&init_net, &nfho_out);
+    pr_info("---- netfilter submodule exit() ---");
+
+    unregister_pernet_device(&net_operations);
+
+    pr_info("---- netfilter submodule exited ---");
 
     return 0;
 }
