@@ -1,3 +1,5 @@
+#include <linux/uaccess.h>
+
 #include "device_driver.h"
 #include "wasm_module.h"
 
