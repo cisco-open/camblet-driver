@@ -31,12 +31,19 @@ Vagrant.configure("2") do |config|
     vbox.name   = vbox_name
   end
 
-  config.vm.provision "shell", inline: <<-SHELL
+  config.vm.provision "shell", privileged: false, inline: <<-SHELL
     set KERNEL="$(uname -r)"
-    apt-get update -q
-    apt-get install -q -y curl \
+    sudo apt-get update -q
+    sudo apt-get install -q -y curl \
         "linux-headers-${KERNEL}" \
         build-essential \
-        kmod
+        kmod \
+        docker.io \
+        socat \
+        zsh
+    sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+    sudo usermod -s /bin/zsh ${USER}
+    curl -sfL https://get.k3s.io | sh -
+    sudo chmod 0644 /etc/rancher/k3s/k3s.yaml
   SHELL
 end
