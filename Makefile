@@ -1,6 +1,8 @@
 # TODO: Otherwise __popcountdi2 is undefined.
 # https://stackoverflow.com/questions/52161596/why-is-builtin-popcount-slower-than-my-own-bit-counting-function
-EXTRA_CFLAGS := -march=native
+EXTRA_CFLAGS := -march=native -foptimize-sibling-calls
+
+VERBOSE := 1
 
 # obj-m specifie we're a kernel module.
 obj-m += wasm3.o
@@ -28,7 +30,7 @@ wasm3-objs := wasm3/source/m3_api_libc.o \
 KBUILD=/lib/modules/$(shell uname -r)/build/
  
 default:
-	$(MAKE) -C $(KBUILD) M=$(PWD) modules
+	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) modules
 
 clean:
 	$(MAKE) -C $(KBUILD) M=$(PWD) clean
@@ -44,3 +46,5 @@ build-in-docker:
 insmod-in-docker:
 	insmod /workspace/wasm3.ko sock_path=/run/guest-services/wasm3.socket
 
+load-dns-wasm:
+	sudo sh -c "cat samples/target/wasm32-unknown-unknown/release/webassembly.wasm > /dev/wasm3"
