@@ -44,7 +44,7 @@ extern "C" fn dns_query(id: i32) {
 
         let mut s = format!(
             "wasm3: {}: dns_query {} -> source ip: {}, destination ip: {}",
-            clock_ns(),
+            timestamp,
             id,
             source.to_string_lossy(),
             destination.to_string_lossy(),
@@ -85,7 +85,7 @@ extern "C" fn dns_response(id: i32) {
 
         let mut s = format!(
             "wasm3: {}, dns_response {} -> source ip: {}, destination ip: {}",
-            clock_ns(),
+            timestamp,
             id,
             source.to_string_lossy(),
             destination.to_string_lossy(),
