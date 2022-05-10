@@ -81,6 +81,15 @@ static int device_release(struct inode *inode, struct file *file)
     if (device_buffer_size)
     {
         M3Result result;
+
+        result = repl_init(STACK_SIZE_BYTES);
+        if (result)
+        {
+            FATAL("repl_init: %s", result);
+            status = -EINVAL;
+            goto cleanup;
+        }
+
         result = repl_load("device", device_buffer, device_buffer_size);
         if (result)
         {
