@@ -157,6 +157,12 @@ void repl_free(void)
         runtime = NULL;
     }
 
+    if (env)
+    {
+        m3_FreeEnvironment(env);
+        env = NULL;
+    }
+
     int i;
     for (i = 0; i < wasm_bins_qty; i++)
     {
@@ -168,11 +174,19 @@ void repl_free(void)
 M3Result repl_init(unsigned stack)
 {
     repl_free();
+
+    env = m3_NewEnvironment();
+    if (env == NULL)
+    {
+        return "m3_NewEnvironment failed";
+    }
+
     runtime = m3_NewRuntime(env, stack, NULL);
     if (runtime == NULL)
     {
         return "m3_NewRuntime failed";
     }
+
     return m3Err_none;
 }
 
@@ -361,13 +375,8 @@ static int __init wasm3_init(void)
     pr_info("%s: module loaded at 0x%p\n", MODULE_NAME, wasm3_init);
 
     M3Result result = m3Err_none;
-    env = m3_NewEnvironment();
-    if (!env)
-        FATAL("m3_NewEnvironment: NULL");
 
-    unsigned argStackSize = 256 * 1024;
-
-    result = repl_init(argStackSize);
+    result = repl_init(STACK_SIZE_BYTES);
     if (result)
         FATAL("repl_init: %s", result);
 
