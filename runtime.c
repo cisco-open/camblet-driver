@@ -351,7 +351,7 @@ m3ApiRawFunction(m3_ext_submit_metric)
 
     memcpy(metric_line, i_ptr, i_size);
 
-    submit_metric(metric_line);
+    submit_metric(metric_line, i_size);
 
     m3ApiReturn(i_size);
 }

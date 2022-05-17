@@ -17,7 +17,7 @@ module_param(sock_path, charp, 0000);
 MODULE_PARM_DESC(sock_path, "communication socket patch");
 
 static void accept_work(struct work_struct *);
-static int send_msg(struct socket *sock, char *);
+static int send_msg(struct socket *, void *, size_t);
 
 static DECLARE_WORK(sock_accept, accept_work);
 
@@ -25,6 +25,7 @@ struct metric_work_struct
 {
     struct work_struct work;
     char *metric_line;
+    size_t metric_line_len;
 };
 
 static int make_server_socket(void)
@@ -78,13 +79,11 @@ static void accept_work(struct work_struct *dummy)
     }
 }
 
-static int send_msg(struct socket *sock, char *msg)
+static int send_msg(struct socket *sock, void *msg, size_t len)
 {
-    int ret = 0, len;
+    int ret = 0;
     struct msghdr hdr;
     struct kvec iov;
-
-    len = strlen(msg);
 
     iov.iov_base = msg;
     iov.iov_len = len;
@@ -100,7 +99,8 @@ void submit_metric_handler(struct work_struct *work)
 {
     struct metric_work_struct *my_work = container_of(work, struct metric_work_struct, work);
 
-    int ret = send_msg(c_sock, my_work->metric_line); // TODO loop here for all sockets
+    // TODO loop here for all sockets
+    int ret = send_msg(c_sock, my_work->metric_line, my_work->metric_line_len); 
     if (ret < 0)
     {
         printk(KERN_INFO "wasm3: message send failed: %d\n", ret);
@@ -117,9 +117,9 @@ void submit_metric_handler(struct work_struct *work)
     kfree(my_work);
 }
 
-void submit_metric(char *metric_line)
+void submit_metric(char *metric_line, size_t metric_line_len)
 {
-    printk("wasm3: submit_metric: %s", metric_line);
+    printk("wasm3: submit_metric: %.*s", (int)metric_line_len, metric_line);
 
     if (!c_connected)
     {
@@ -131,6 +131,7 @@ void submit_metric(char *metric_line)
     struct metric_work_struct *my_work =
         (struct metric_work_struct *)kmalloc(sizeof(struct metric_work_struct), GFP_KERNEL);
     my_work->metric_line = metric_line;
+    my_work->metric_line_len = metric_line_len;
 
     INIT_WORK(&my_work->work, submit_metric_handler);
 
