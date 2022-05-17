@@ -4,8 +4,8 @@
 #include <linux/netfilter_ipv4.h>
 
 #include "dns_header.h"
-#include "wasm_module.h"
 #include "netfilter.h"
+#include "runtime.h"
 
 #define DNS_HEADER_SIZE 12
 
@@ -38,6 +38,9 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
 
             printk("wasm3: dns question (%d bytes) in request id %u questions: %u", udp_length, ntohs(dns_header.id), ntohs(dns_header.qdcount));
 
+            unsigned long flags;
+            spin_lock_irqsave(&hook_spinlock, flags);
+
             // Get the VM memory if there is at least one module loaded,
             // if not, accept the packet regardless.
             uint8_t *mem = repl_get_memory();
@@ -46,44 +49,29 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
                 return NF_ACCEPT;
             }
 
-            uint64_t sourceAddr = repl_global_get("SOURCE");
-            if (!sourceAddr)
-            {
-                return NF_ACCEPT;
-            }
+            i32 mallocPtr = wasm_malloc(udp_length);
 
-            uint64_t destinationAddr = repl_global_get("DESTINATION");
-            if (!destinationAddr)
-            {
-                return NF_ACCEPT;
-            }
-
-            uint64_t dnsPacketAddr = repl_global_get("DNS_PACKET");
-            if (!dnsPacketAddr)
-            {
-                return NF_ACCEPT;
-            }
-
-            // From this part we are writing global memory in the wasm runtime,
-            // needs to be exclusive until we find a better solution.
-            unsigned long flags;
-            spin_lock_irqsave(&hook_spinlock, flags);
-
-            char *source = mem + sourceAddr;
-            snprintf(source, 20, "%pI4", &ip_header->saddr);
-
-            char *destination = mem + destinationAddr;
-            snprintf(destination, 20, "%pI4", &ip_header->daddr);
-
-            char *dnsPacket = mem + dnsPacketAddr;
+            char *dnsPacket = mem + mallocPtr;
             memcpy(dnsPacket, data, udp_length);
 
-            const char *argv[1];
+            const char *argv[5];
             char dnsId[10];
+            char dnsSource[12];
+            char dnsDestination[12];
+            char dnsPacketPtr[12];
+            char dnsPacketLen[10];
             snprintf(dnsId, 10, "%d", ntohs(dns_header.id));
+            snprintf(dnsSource, 12, "%u", ntohl(ip_header->saddr));
+            snprintf(dnsDestination, 12, "%u", ntohl(ip_header->daddr));
+            snprintf(dnsPacketPtr, 12, "%d", mallocPtr);
+            snprintf(dnsPacketLen, 10, "%u", udp_length);
             argv[0] = dnsId;
+            argv[1] = dnsSource;
+            argv[2] = dnsDestination;
+            argv[3] = dnsPacketPtr;
+            argv[4] = dnsPacketLen;
 
-            M3Result result = repl_call("dns_query", 1, argv);
+            M3Result result = repl_call("dns_query", 5, argv);
             if (result)
             {
                 FATAL("netfilter.repl_call dns_query: %s", result);
@@ -91,6 +79,7 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
             }
 
         unlock:
+            wasm_free(mallocPtr, udp_length);
             spin_unlock_irqrestore(&hook_spinlock, flags);
         }
     }
@@ -122,6 +111,9 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
 
             printk("wasm3: dns answer (%d bytes) in request id %u answers: %u", udp_length, ntohs(dns_header.id), ntohs(dns_header.ancount));
 
+            unsigned long flags;
+            spin_lock_irqsave(&hook_spinlock, flags);
+
             // Get the VM memory if there is at least one module loaded,
             // if not, accept the packet regardless.
             uint8_t *mem = repl_get_memory();
@@ -130,42 +122,29 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
                 return NF_ACCEPT;
             }
 
-            uint64_t sourceAddr = repl_global_get("SOURCE");
-            if (!sourceAddr)
-            {
-                return NF_ACCEPT;
-            }
+            i32 mallocPtr = wasm_malloc(udp_length);
 
-            uint64_t destinationAddr = repl_global_get("DESTINATION");
-            if (!destinationAddr)
-            {
-                return NF_ACCEPT;
-            }
-
-            uint64_t dnsPacketAddr = repl_global_get("DNS_PACKET");
-            if (!dnsPacketAddr)
-            {
-                return NF_ACCEPT;
-            }
-
-            unsigned long flags;
-            spin_lock_irqsave(&hook_spinlock, flags);
-
-            char *source = mem + sourceAddr;
-            snprintf(source, 20, "%pI4", &ip_header->saddr);
-
-            char *destination = mem + destinationAddr;
-            snprintf(destination, 20, "%pI4", &ip_header->daddr);
-
-            char *dnsPacket = mem + dnsPacketAddr;
+            char *dnsPacket = mem + mallocPtr;
             memcpy(dnsPacket, data, udp_length);
 
-            const char *argv[1];
+            const char *argv[5];
             char dnsId[10];
+            char dnsSource[12];
+            char dnsDestination[12];
+            char dnsPacketPtr[12];
+            char dnsPacketLen[10];
             snprintf(dnsId, 10, "%d", ntohs(dns_header.id));
+            snprintf(dnsSource, 12, "%u", ntohl(ip_header->saddr));
+            snprintf(dnsDestination, 12, "%u", ntohl(ip_header->daddr));
+            snprintf(dnsPacketPtr, 12, "%d", mallocPtr);
+            snprintf(dnsPacketLen, 10, "%u", udp_length);
             argv[0] = dnsId;
+            argv[1] = dnsSource;
+            argv[2] = dnsDestination;
+            argv[3] = dnsPacketPtr;
+            argv[4] = dnsPacketLen;
 
-            M3Result result = repl_call("dns_response", 1, argv);
+            M3Result result = repl_call("dns_response", 5, argv);
             if (result)
             {
                 FATAL("netfilter.repl_call dns_response: %s", result);
@@ -173,6 +152,7 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
             }
 
         unlock:
+            wasm_free(mallocPtr, udp_length);
             spin_unlock_irqrestore(&hook_spinlock, flags);
         }
     }

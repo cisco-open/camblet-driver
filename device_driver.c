@@ -1,7 +1,7 @@
 #include <linux/uaccess.h>
 
 #include "device_driver.h"
-#include "wasm_module.h"
+#include "runtime.h"
 
 /* Global variables are declared as static, so are global within the file. */
 
