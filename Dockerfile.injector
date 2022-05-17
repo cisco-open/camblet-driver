@@ -1,0 +1,16 @@
+FROM debian:bullseye-slim
+
+# hadolint ignore=DL3008
+RUN apt-get -y update \
+    && apt-get -y install --no-install-recommends build-essential curl ca-certificates musl-dev git kmod \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+COPY .git /workspace/.git
+COPY samples/target/wasm32-unknown-unknown/release/webassembly.wasm /workspace/webassembly.wasm
+COPY injector-entrypoint.sh /workspace/injector-entrypoint.sh
+RUN chmod 755 /workspace/injector-entrypoint.sh
+
+ENTRYPOINT [ "/workspace/injector-entrypoint.sh" ]

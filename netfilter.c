@@ -9,6 +9,8 @@
 
 #define DNS_HEADER_SIZE 12
 
+DEFINE_SPINLOCK(hook_spinlock);
+
 static struct nf_hook_ops nfho_in;  // net filter hook option struct
 static struct nf_hook_ops nfho_out; // net filter hook option struct
 
@@ -30,11 +32,8 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
         if (ntohs(udp_header->dest) == 53)
         {
             unsigned udp_length = ntohs(udp_header->len);
-
             char *data = (char *)udp_header + sizeof(struct udphdr);
-
             struct dns_h dns_header;
-
             memcpy(&dns_header, data, DNS_HEADER_SIZE);
 
             printk("wasm3: dns question (%d bytes) in request id %u questions: %u", udp_length, ntohs(dns_header.id), ntohs(dns_header.qdcount));
@@ -65,6 +64,11 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
                 return NF_ACCEPT;
             }
 
+            // From this part we are writing global memory in the wasm runtime,
+            // needs to be exclusive until we find a better solution.
+            unsigned long flags;
+            spin_lock_irqsave(&hook_spinlock, flags);
+
             char *source = mem + sourceAddr;
             snprintf(source, 20, "%pI4", &ip_header->saddr);
 
@@ -83,7 +87,11 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
             if (result)
             {
                 FATAL("netfilter.repl_call dns_query: %s", result);
+                goto unlock;
             }
+
+        unlock:
+            spin_unlock_irqrestore(&hook_spinlock, flags);
         }
     }
 
@@ -108,11 +116,8 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
         if (ntohs(udp_header->source) == 53)
         {
             unsigned udp_length = ntohs(udp_header->len);
-
             char *data = (char *)udp_header + sizeof(struct udphdr);
-
             struct dns_h dns_header;
-
             memcpy(&dns_header, data, DNS_HEADER_SIZE);
 
             printk("wasm3: dns answer (%d bytes) in request id %u answers: %u", udp_length, ntohs(dns_header.id), ntohs(dns_header.ancount));
@@ -143,6 +148,9 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
                 return NF_ACCEPT;
             }
 
+            unsigned long flags;
+            spin_lock_irqsave(&hook_spinlock, flags);
+
             char *source = mem + sourceAddr;
             snprintf(source, 20, "%pI4", &ip_header->saddr);
 
@@ -161,7 +169,11 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
             if (result)
             {
                 FATAL("netfilter.repl_call dns_response: %s", result);
+                goto unlock;
             }
+
+        unlock:
+            spin_unlock_irqrestore(&hook_spinlock, flags);
         }
     }
 

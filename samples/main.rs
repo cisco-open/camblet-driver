@@ -98,7 +98,9 @@ extern "C" fn dns_response(id: i32) {
                 s = format!("wasm3: {:?}", dns);
                 _debug(&s);
 
-                match DNS_PACKETS.lock().unwrap().get_mut(&id) {
+                let mut packets = DNS_PACKETS.lock().unwrap();
+
+                match packets.get_mut(&id) {
                     Some(t) => {
                         t.records = dns
                             .answers
@@ -107,6 +109,9 @@ extern "C" fn dns_response(id: i32) {
                             .collect();
                         t.latency_ns = timestamp - t.latency_ns;
                         t.response_code = dns.header.response_code.into();
+                        let json = serde_json::to_string(&t).unwrap() + "\n";
+                        submit_metric(&json);                
+                        packets.remove(&id);
                     }
                     None => {
                         _debug("wasm3: can't find entry in hashmap");
@@ -120,14 +125,21 @@ extern "C" fn dns_response(id: i32) {
         }
 
         // print out the answers in JSON
-        for (k, v) in &*DNS_PACKETS.lock().unwrap() {
-            let json = serde_json::to_string(&v).unwrap() + "\n";
-            s = format!("wasm3: entry: {} -> {:?}", k, json);
-            _debug(&s);
-            submit_metric(&json);
+        for (_, v) in DNS_PACKETS.lock().unwrap().iter_mut().next() {
+            let is_timeouted = (timestamp - v.latency_ns) > 1000000000;
+            if is_timeouted {
+                v.response_code = 255; 
+                let json = serde_json::to_string(&v).unwrap() + "\n";
+                submit_metric(&json);        
+            }
         }
+
+        _debug(&format!("wasm3: dns packets in memory: {:?}", DNS_PACKETS.lock().unwrap().len()));
+
+        DNS_PACKETS.lock().unwrap().retain(|_, v: &mut DnsTurnaround| ((timestamp - v.latency_ns) < 1000000000));
     }
 }
+
 
 fn main() {
     // unsafe {

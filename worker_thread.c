@@ -58,7 +58,7 @@ err:
     printk("Socket server setup failed");
 
     if (sock)
-        sock_release(sock);
+        kernel_sock_shutdown(sock, SHUT_RDWR);
     return ret;
 }
 
@@ -104,6 +104,13 @@ void submit_metric_handler(struct work_struct *work)
     if (ret < 0)
     {
         printk(KERN_INFO "wasm3: message send failed: %d\n", ret);
+        if (c_sock != NULL)
+        {
+            kernel_sock_shutdown(c_sock, SHUT_RDWR);
+            c_connected = false;
+            printk(KERN_INFO, "wasm3: socket closed");
+            schedule_work(&sock_accept);
+        }
     }
 
     kfree(my_work->metric_line);
@@ -148,5 +155,5 @@ void worker_thread_exit(void)
 {
     printk(KERN_INFO "Socket workqueue module unload\n");
     if (sock)
-        sock_release(sock);
+        kernel_sock_shutdown(sock, SHUT_RDWR);
 }
