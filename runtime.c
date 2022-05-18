@@ -208,7 +208,22 @@ M3Result repl_call(const char *name, int argc, const char *argv[])
     return result;
 }
 
-i32 repl_call_i32(const char *name, int argc, const char *argv[])
+M3Result repl_call_void(const char *name, ...)
+{
+    IM3Function func;
+    M3Result result = m3_FindFunction(&func, runtime, name);
+    if (result)
+        return result;
+
+    va_list ap;
+    va_start(ap, func);
+    result = m3_CallVL(func, ap);
+    va_end(ap);
+
+    return result;
+}
+
+i32 repl_call_i32(const char *name, ...)
 {
     IM3Function func;
     M3Result result = m3_FindFunction(&func, runtime, name);
@@ -218,26 +233,17 @@ i32 repl_call_i32(const char *name, int argc, const char *argv[])
         return -1;
     }
 
-    int arg_count = m3_GetArgCount(func);
     int ret_count = m3_GetRetCount(func);
-    if (argc < arg_count)
-    {
-        printk("wasm3: repl_call_i32 not enough arguments");
-        return -1;
-    }
-    else if (argc > arg_count)
-    {
-        printk("wasm3: repl_call_i32 too many arguments");
-        return -1;
-    }
-
     if (ret_count != 1)
     {
         printk("wasm3: repl_call_i32 mismatched return count: %d", ret_count);
         return -1;
     }
 
-    result = m3_CallArgv(func, argc, argv);
+    va_list ap;
+    va_start(ap, func);
+    result = m3_CallVL(func, ap);
+    va_end(ap);
 
     if (result)
     {
@@ -308,29 +314,14 @@ uint64_t repl_global_get(const char *name)
 
 i32 wasm_malloc(unsigned size)
 {
-    const char *argv[1];
-    char argvSize[10];
-    snprintf(argvSize, 10, "%d", size);
-    argv[0] = argvSize;
-    i32 mallocPtr = repl_call_i32("malloc", 1, argv);
-    printk("wasm3: malloc result %d", mallocPtr);
-    return mallocPtr;
+    return repl_call_i32("malloc", size);
 }
 
 void wasm_free(i32 ptr, unsigned size)
 {
-    const char *argv[2];
-    char argvPtr[10];
-    char argvSize[10];
-    snprintf(argvPtr, 10, "%d", ptr);
-    snprintf(argvSize, 10, "%d", size);
-    argv[0] = argvPtr;
-    argv[1] = argvSize;
-    M3Result result = repl_call("free", 2, argv);
+    M3Result result = repl_call_void("free", ptr, size);
     if (result)
-    {
-        FATAL("netfilter.free: %s", result);
-    }
+        FATAL("wasm3: free error: %s", result);
 }
 
 m3ApiRawFunction(m3_ext_submit_metric)

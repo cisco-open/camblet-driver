@@ -31,12 +31,12 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
         udp_header = udp_hdr(skb);
         if (ntohs(udp_header->dest) == 53)
         {
-            unsigned udp_length = ntohs(udp_header->len);
+            unsigned dnsPacketLen = ntohs(udp_header->len);
             char *data = (char *)udp_header + sizeof(struct udphdr);
             struct dns_h dns_header;
             memcpy(&dns_header, data, DNS_HEADER_SIZE);
 
-            printk("wasm3: dns question (%d bytes) in request id %u questions: %u", udp_length, ntohs(dns_header.id), ntohs(dns_header.qdcount));
+            printk("wasm3: dns question (%d bytes) in request id %u questions: %u", dnsPacketLen, ntohs(dns_header.id), ntohs(dns_header.qdcount));
 
             unsigned long flags;
             spin_lock_irqsave(&hook_spinlock, flags);
@@ -49,37 +49,29 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
                 return NF_ACCEPT;
             }
 
-            i32 mallocPtr = wasm_malloc(udp_length);
+            i32 dnsPacketPtr = wasm_malloc(dnsPacketLen);
 
-            char *dnsPacket = mem + mallocPtr;
-            memcpy(dnsPacket, data, udp_length);
+            char *dnsPacket = mem + dnsPacketPtr;
+            memcpy(dnsPacket, data, dnsPacketLen);
 
-            const char *argv[5];
-            char dnsId[10];
-            char dnsSource[12];
-            char dnsDestination[12];
-            char dnsPacketPtr[12];
-            char dnsPacketLen[10];
-            snprintf(dnsId, 10, "%d", ntohs(dns_header.id));
-            snprintf(dnsSource, 12, "%u", ntohl(ip_header->saddr));
-            snprintf(dnsDestination, 12, "%u", ntohl(ip_header->daddr));
-            snprintf(dnsPacketPtr, 12, "%d", mallocPtr);
-            snprintf(dnsPacketLen, 10, "%u", udp_length);
-            argv[0] = dnsId;
-            argv[1] = dnsSource;
-            argv[2] = dnsDestination;
-            argv[3] = dnsPacketPtr;
-            argv[4] = dnsPacketLen;
+            unsigned dnsId = ntohs(dns_header.id);
+            unsigned dnsSource = ntohl(ip_header->saddr);
+            unsigned dnsDestination = ntohl(ip_header->daddr);
 
-            M3Result result = repl_call("dns_query", 5, argv);
+            M3Result result = repl_call_void("dns_query",
+                                             dnsId,
+                                             dnsSource,
+                                             dnsDestination,
+                                             dnsPacketPtr,
+                                             dnsPacketLen);
             if (result)
             {
-                FATAL("netfilter.repl_call dns_query: %s", result);
+                FATAL("wasm3: netfilter dns_query error: %s", result);
                 goto unlock;
             }
 
         unlock:
-            wasm_free(mallocPtr, udp_length);
+            wasm_free(dnsPacketPtr, dnsPacketLen);
             spin_unlock_irqrestore(&hook_spinlock, flags);
         }
     }
@@ -104,12 +96,12 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
         udp_header = udp_hdr(skb);
         if (ntohs(udp_header->source) == 53)
         {
-            unsigned udp_length = ntohs(udp_header->len);
+            unsigned dnsPacketLen = ntohs(udp_header->len);
             char *data = (char *)udp_header + sizeof(struct udphdr);
             struct dns_h dns_header;
             memcpy(&dns_header, data, DNS_HEADER_SIZE);
 
-            printk("wasm3: dns answer (%d bytes) in request id %u answers: %u", udp_length, ntohs(dns_header.id), ntohs(dns_header.ancount));
+            printk("wasm3: dns answer (%d bytes) in request id %u answers: %u", dnsPacketLen, ntohs(dns_header.id), ntohs(dns_header.ancount));
 
             unsigned long flags;
             spin_lock_irqsave(&hook_spinlock, flags);
@@ -122,37 +114,29 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
                 return NF_ACCEPT;
             }
 
-            i32 mallocPtr = wasm_malloc(udp_length);
+            i32 dnsPacketPtr = wasm_malloc(dnsPacketLen);
 
-            char *dnsPacket = mem + mallocPtr;
-            memcpy(dnsPacket, data, udp_length);
+            char *dnsPacket = mem + dnsPacketPtr;
+            memcpy(dnsPacket, data, dnsPacketLen);
 
-            const char *argv[5];
-            char dnsId[10];
-            char dnsSource[12];
-            char dnsDestination[12];
-            char dnsPacketPtr[12];
-            char dnsPacketLen[10];
-            snprintf(dnsId, 10, "%d", ntohs(dns_header.id));
-            snprintf(dnsSource, 12, "%u", ntohl(ip_header->saddr));
-            snprintf(dnsDestination, 12, "%u", ntohl(ip_header->daddr));
-            snprintf(dnsPacketPtr, 12, "%d", mallocPtr);
-            snprintf(dnsPacketLen, 10, "%u", udp_length);
-            argv[0] = dnsId;
-            argv[1] = dnsSource;
-            argv[2] = dnsDestination;
-            argv[3] = dnsPacketPtr;
-            argv[4] = dnsPacketLen;
+            unsigned dnsId = ntohs(dns_header.id);
+            unsigned dnsSource = ntohl(ip_header->saddr);
+            unsigned dnsDestination = ntohl(ip_header->daddr);
 
-            M3Result result = repl_call("dns_response", 5, argv);
+            M3Result result = repl_call_void("dns_response",
+                                             dnsId,
+                                             dnsSource,
+                                             dnsDestination,
+                                             dnsPacketPtr,
+                                             dnsPacketLen);
             if (result)
             {
-                FATAL("netfilter.repl_call dns_response: %s", result);
+                FATAL("wasm3: netfilter dns_response error: %s", result);
                 goto unlock;
             }
 
         unlock:
-            wasm_free(mallocPtr, udp_length);
+            wasm_free(dnsPacketPtr, dnsPacketLen);
             spin_unlock_irqrestore(&hook_spinlock, flags);
         }
     }
