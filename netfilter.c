@@ -46,7 +46,7 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
             uint8_t *mem = repl_get_memory();
             if (!mem)
             {
-                return NF_ACCEPT;
+                goto unlock;
             }
 
             i32 dnsPacketPtr = wasm_malloc(dnsPacketLen);
@@ -64,6 +64,9 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
                                              dnsDestination,
                                              dnsPacketPtr,
                                              dnsPacketLen);
+            
+            wasm_free(dnsPacketPtr, dnsPacketLen);
+
             if (result)
             {
                 FATAL("wasm3: netfilter dns_query error: %s", result);
@@ -71,7 +74,6 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
             }
 
         unlock:
-            wasm_free(dnsPacketPtr, dnsPacketLen);
             spin_unlock_irqrestore(&hook_spinlock, flags);
         }
     }
@@ -111,7 +113,7 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
             uint8_t *mem = repl_get_memory();
             if (!mem)
             {
-                return NF_ACCEPT;
+                goto unlock;
             }
 
             i32 dnsPacketPtr = wasm_malloc(dnsPacketLen);
@@ -129,6 +131,9 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
                                              dnsDestination,
                                              dnsPacketPtr,
                                              dnsPacketLen);
+
+            wasm_free(dnsPacketPtr, dnsPacketLen);
+
             if (result)
             {
                 FATAL("wasm3: netfilter dns_response error: %s", result);
@@ -136,7 +141,6 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
             }
 
         unlock:
-            wasm_free(dnsPacketPtr, dnsPacketLen);
             spin_unlock_irqrestore(&hook_spinlock, flags);
         }
     }

@@ -2,7 +2,6 @@ use dns_parser::Packet;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::ffi::CString;
 use std::net::Ipv4Addr;
 use std::sync::Mutex;
 
@@ -60,7 +59,6 @@ extern "C" {
 // #[no_mangle]
 // pub static mut DNS_PACKET: [u8; 512] = [0; 512];
 
-// source: &str, destination: &str
 #[no_mangle]
 extern "C" fn dns_query(id: i32, source: u32, destination: u32, dns_packet: *const [u8]) {
     unsafe {
@@ -104,7 +102,6 @@ extern "C" fn dns_query(id: i32, source: u32, destination: u32, dns_packet: *con
 }
 
 #[no_mangle]
-// source: &str, destination: &str
 extern "C" fn dns_response(id: i32, source: u32, destination: u32, dns_packet: *const [u8]) {
     unsafe {
         let timestamp = clock_ns();
