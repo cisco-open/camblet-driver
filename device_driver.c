@@ -72,38 +72,65 @@ static int device_open(struct inode *inode, struct file *file)
     return SUCCESS;
 }
 
+static M3Result load_module(char *name, char *buffer, unsigned length)
+{
+    M3Result result;
+    result = repl_init(STACK_SIZE_BYTES);
+    if (result)
+    {
+        FATAL("repl_init: %s", result);
+        return -EINVAL;
+    }
+
+    result = repl_load(name, buffer, length);
+    if (result)
+    {
+        FATAL("repl_load: %s", result);
+        return -EINVAL;
+    }
+
+    const char *argv[2] = {"1", "main"};
+    result = repl_call("main", 2, argv);
+    if (result)
+    {
+        FATAL("repl_call: %s", result);
+        return -EINVAL;
+    }
+    return SUCCESS;
+}
+
 /* Called when a process closes the device file. */
 static int device_release(struct inode *inode, struct file *file)
 {
+    printk(KERN_INFO "wasm3: device has been released\n");
+
     int status = SUCCESS;
 
-    /* We're now ready for our next caller */
     if (device_buffer_size)
     {
-        M3Result result;
+        char *buffer = device_buffer;
+        char *command = strsep(&buffer, ";");
 
-        result = repl_init(STACK_SIZE_BYTES);
-        if (result)
+        printk("wasm3: command %s\n", command);
+
+        if (strcmp("load", command) == 0)
         {
-            FATAL("repl_init: %s", result);
-            status = -EINVAL;
-            goto cleanup;
+            char *name = strsep(&buffer, ";");
+            printk("wasm3: loading module: %s\n", name);
+
+            unsigned length = device_buffer_size - (buffer - device_buffer);
+
+            M3Result result = load_module(name, buffer, length);
+            if (result)
+            {
+                FATAL("repl_call: %s", result);
+                status = -EINVAL;
+            }
         }
-
-        result = repl_load("device", device_buffer, device_buffer_size);
-        if (result)
+        else
         {
-            FATAL("repl_load: %s", result);
-            status = -EINVAL;
-            goto cleanup;
-        }
-
-        const char *argv[2] = {"1", "main"};
-        result = repl_call("main", 2, argv);
-        if (result)
-        {
-            FATAL("repl_call: %s", result);
-            status = -EINVAL;
+            printk("wasm3: command not implemented: %s", command);
+            status = -1;
             goto cleanup;
         }
     }
@@ -111,6 +138,7 @@ static int device_release(struct inode *inode, struct file *file)
 cleanup:
     device_buffer_size = 0;
 
+    /* We're now ready for our next caller */
     atomic_set(&already_open, CDEV_NOT_USED);
 
     /* Decrement the usage count, or else once you opened the file, you will
@@ -177,7 +205,6 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
     bytes_writen = bytes_to_write - copy_from_user(device_buffer + *offset, buffer, bytes_to_write);
     printk(KERN_INFO "wasm3: device has been written %d\n", bytes_writen);
     *offset += bytes_writen;
-    printk(KERN_INFO "wasm3: device has been written\n");
     device_buffer_size = *offset;
     return bytes_writen;
 }
