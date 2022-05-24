@@ -47,8 +47,5 @@ build-in-docker:
 insmod-in-docker:
 	insmod /workspace/wasm3.ko sock_path=/run/guest-services/wasm3.socket
 
-# load-dns-wasm:
-# 	sudo sh -c "cat samples/target/wasm32-unknown-unknown/release/webassembly.wasm > /dev/wasm3"
-
 load-dns-wasm:
 	sudo sh -c "(echo -n 'load;dns;' ; cat samples/target/wasm32-unknown-unknown/release/webassembly.wasm) > /dev/wasm3"
