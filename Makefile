@@ -21,7 +21,9 @@ wasm3-objs := wasm3/source/m3_api_libc.o \
 			  wasm3/source/m3_info.o \
 			  wasm3/source/m3_module.o \
 			  wasm3/source/m3_parse.o \
+			  base64.o \
 			  device_driver.o \
+			  json.o \
 			  main.o \
 			  netfilter.o \
 			  runtime.o \
@@ -48,4 +50,4 @@ insmod-in-docker:
 	insmod /workspace/wasm3.ko sock_path=/run/guest-services/wasm3.socket
 
 load-dns-wasm:
-	sudo sh -c "(echo -n 'load;dns;' ; cat samples/target/wasm32-unknown-unknown/release/webassembly.wasm) > /dev/wasm3"
+	sudo ./load-dns-module.sh

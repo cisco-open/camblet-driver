@@ -1,6 +1,8 @@
 #include <linux/uaccess.h>
 
+#include "base64.h"
 #include "device_driver.h"
+#include "json.h"
 #include "runtime.h"
 
 /* Global variables are declared as static, so are global within the file. */
@@ -72,31 +74,42 @@ static int device_open(struct inode *inode, struct file *file)
     return SUCCESS;
 }
 
-static M3Result load_module(char *name, char *buffer, unsigned length)
+static M3Result load_module(char *name, char *buffer, unsigned length, char *entrypoint)
 {
     M3Result result;
     result = repl_init(STACK_SIZE_BYTES);
     if (result)
     {
         FATAL("repl_init: %s", result);
-        return -EINVAL;
+        return result;
     }
 
     result = repl_load(name, buffer, length);
     if (result)
     {
         FATAL("repl_load: %s", result);
-        return -EINVAL;
+        return result;
     }
 
-    const char *argv[2] = {"1", "main"};
-    result = repl_call("main", 2, argv);
-    if (result)
+    if (entrypoint)
     {
-        FATAL("repl_call: %s", result);
-        return -EINVAL;
+        printk("wasm3: load_module: %s", result);
+        int argc = 2;
+        const char *argv[2] = {"1", "main"};
+        if (strcmp(entrypoint, "main") != 0)
+        {
+            argc = 0;
+        }
+
+        result = repl_call(entrypoint, argc, argv);
+        if (result)
+        {
+            FATAL("repl_call: %s", result);
+            return result;
+        }
     }
-    return SUCCESS;
+
+    return result;
 }
 
 /* Called when a process closes the device file. */
@@ -105,26 +118,40 @@ static int device_release(struct inode *inode, struct file *file)
     printk(KERN_INFO "wasm3: device has been released\n");
 
     int status = SUCCESS;
+    JSON_Value *json = NULL;
 
     if (device_buffer_size)
     {
         char *buffer = device_buffer;
-        char *command = strsep(&buffer, ";");
+
+        json = json_parse_string(device_buffer);
+        JSON_Object *root = json_value_get_object(json);
+        char *command = json_object_get_string(root, "command");
 
         printk("wasm3: command %s\n", command);
 
         if (strcmp("load", command) == 0)
         {
-            char *name = strsep(&buffer, ";");
+            char *name = json_object_get_string(root, "module");
             printk("wasm3: loading module: %s\n", name);
 
-            unsigned length = device_buffer_size - (buffer - device_buffer);
+            char *code = json_object_get_string(root, "code");
+            int length = base64_decode(device_buffer, DEVICE_BUFFER_SIZE, code, strlen(code));
+            if (length < 0)
+            {
+                FATAL("base64_decode failed");
+                status = -1;
+                goto cleanup;
+            }
 
-            M3Result result = load_module(name, buffer, length);
+            char *entrypoint = json_object_get_string(root, "entrypoint");
+
+            M3Result result = load_module(name, device_buffer, length, entrypoint);
             if (result)
             {
                 FATAL("repl_call: %s", result);
-                status = -EINVAL;
+                status = -1;
+                goto cleanup;
             }
         }
         else
@@ -136,6 +163,11 @@ static int device_release(struct inode *inode, struct file *file)
     }
 
 cleanup:
+    if (json)
+    {
+        json_value_free(json);
+    }
+
     device_buffer_size = 0;
 
     /* We're now ready for our next caller */

@@ -13,9 +13,11 @@ serde_json = "1.0"
 name = "webassembly"
 path = "main.rs"
 
-
 # [lib]
 # crate-type = ["cdylib"]
 # bench = false
 # name = "webassembly"
 # path = "main.rs"
+
+[profile.release]
+lto = true
