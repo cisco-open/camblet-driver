@@ -93,7 +93,7 @@ static M3Result load_module(char *name, char *buffer, unsigned length, char *ent
 
     if (entrypoint)
     {
-        printk("wasm3: load_module: %s", result);
+        printk("wasm3: calling module entrypoint: %s", entrypoint);
         int argc = 2;
         const char *argv[2] = {"1", "main"};
         if (strcmp(entrypoint, "main") != 0)
