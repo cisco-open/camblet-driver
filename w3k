@@ -1,0 +1,14 @@
+#!/bin/bash
+
+command=$1
+filepath=$2
+filename=$(basename ${filepath})
+module=${filename%.*}
+
+cat <<EOF > /dev/wasm3
+{
+    "command": "${command}",
+    "module": "${module}",
+    "code": "$(base64 -w0 ${filepath})"
+}
+EOF

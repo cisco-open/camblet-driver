@@ -50,4 +50,4 @@ insmod-in-docker:
 	insmod /workspace/wasm3.ko sock_path=/run/guest-services/wasm3.socket
 
 load-dns-wasm:
-	sudo ./load-dns-module.sh
+	sudo ./w3k load samples/dns-go.wasm
