@@ -61,13 +61,13 @@ func easyjsonD480660bDecodeSamplesDns(in *jlexer.Lexer, out *DNSTurnaroud) {
 				}
 				in.Delim(']')
 			}
-		case "latencyNS":
+		case "latency_ns":
 			out.LatencyNS = int64(in.Int64())
 		case "client":
 			out.Client = string(in.String())
 		case "server":
 			out.Server = string(in.String())
-		case "responseCode":
+		case "response_code":
 			out.ResponseCode = uint16(in.Uint16())
 		default:
 			in.SkipRecursive()
@@ -105,7 +105,7 @@ func easyjsonD480660bEncodeSamplesDns(out *jwriter.Writer, in DNSTurnaroud) {
 		}
 	}
 	{
-		const prefix string = ",\"latencyNS\":"
+		const prefix string = ",\"latency_ns\":"
 		out.RawString(prefix)
 		out.Int64(int64(in.LatencyNS))
 	}
@@ -120,7 +120,7 @@ func easyjsonD480660bEncodeSamplesDns(out *jwriter.Writer, in DNSTurnaroud) {
 		out.String(string(in.Server))
 	}
 	{
-		const prefix string = ",\"responseCode\":"
+		const prefix string = ",\"response_code\":"
 		out.RawString(prefix)
 		out.Uint16(uint16(in.ResponseCode))
 	}

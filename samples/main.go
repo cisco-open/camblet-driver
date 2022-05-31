@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"strings"
 
 	"samples/dns"
 
@@ -61,7 +62,7 @@ func dns_query(id int32, source int32, destination int32, dns_packet []byte) {
 	}
 
 	dnsMessages[id] = dns.DNSTurnaroud{
-		Name:         question.Name.String(),
+		Name:         strings.TrimSuffix(question.Name.String(), "."),
 		LatencyNS:    timestamp,
 		Client:       client.String(),
 		Server:       server.String(),
