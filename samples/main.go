@@ -160,6 +160,13 @@ func dns_response(id int32, source int32, destination int32, dns_packet []byte) 
 	submit_metric(string(metric))
 
 	delete(dnsMessages, id)
+
+	// clear out timeouted queries
+	for id, dnsQuery := range dnsMessages {
+		if (timestamp - dnsQuery.LatencyNS) > 1000000000 {
+			delete(dnsMessages, id)
+		}
+	}
 }
 
 func isSectionDone(err error) bool {
