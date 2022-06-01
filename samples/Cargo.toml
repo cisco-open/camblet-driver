@@ -10,13 +10,13 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 [[bin]]
-name = "webassembly"
+name = "dns-rust"
 path = "main.rs"
 
 # [lib]
 # crate-type = ["cdylib"]
 # bench = false
-# name = "webassembly"
+# name = "dns-rust"
 # path = "main.rs"
 
 [profile.release]

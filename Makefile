@@ -53,4 +53,4 @@ load-dns-go-wasm:
 	sudo ./w3k load samples/dns-go.wasm
 
 load-dns-rust-wasm:
-	sudo ./w3k load samples/dns-rust.wasm
+	sudo ./w3k load samples/target/wasm32-unknown-unknown/release/dns-rust.wasm
