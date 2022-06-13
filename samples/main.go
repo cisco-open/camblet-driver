@@ -21,7 +21,7 @@ func _debug(m string) int32
 //export clock_ns
 func clock_ns() int64
 
-var dnsMessages = map[int32]dns.DNSTurnaroud{}
+var dnsMessages = map[uint16]dns.DNSTurnaroud{}
 
 func int2ip(nn int32) net.IP {
 	ip := make(net.IP, 4)
@@ -30,20 +30,12 @@ func int2ip(nn int32) net.IP {
 }
 
 //export dns_query
-func dns_query(id int32, source int32, destination int32, dns_packet []byte) {
+func dns_query(source int32, destination int32, dns_packet []byte) {
 
 	timestamp := clock_ns()
 
 	client := int2ip(source)
 	server := int2ip(destination)
-
-	_debug(fmt.Sprintf("wasm3: (%d bytes) %d: dns_query %d -> source ip: %s, destination ip: %s",
-		len(dns_packet),
-		timestamp,
-		id,
-		client,
-		server,
-	))
 
 	var parser dnsmessage.Parser
 
@@ -52,6 +44,16 @@ func dns_query(id int32, source int32, destination int32, dns_packet []byte) {
 		_debug("failed to parse dns header: " + err.Error())
 		return
 	}
+
+	id := header.ID
+
+	_debug(fmt.Sprintf("wasm3: (%d bytes) %d: dns_query %d -> source ip: %s, destination ip: %s",
+		len(dns_packet),
+		timestamp,
+		id,
+		client,
+		server,
+	))
 
 	_debug("parsed query dns header: " + header.GoString())
 
@@ -71,20 +73,12 @@ func dns_query(id int32, source int32, destination int32, dns_packet []byte) {
 }
 
 //export dns_response
-func dns_response(id int32, source int32, destination int32, dns_packet []byte) {
+func dns_response(source int32, destination int32, dns_packet []byte) {
 
 	timestamp := clock_ns()
 
 	client := int2ip(source)
 	server := int2ip(destination)
-
-	_debug(fmt.Sprintf("wasm3: (%d bytes) %d: dns_response %d -> source ip: %s, destination ip: %s",
-		len(dns_packet),
-		timestamp,
-		id,
-		client,
-		server,
-	))
 
 	var parser dnsmessage.Parser
 
@@ -93,6 +87,16 @@ func dns_response(id int32, source int32, destination int32, dns_packet []byte) 
 		_debug("failed to parse dns header: " + err.Error())
 		return
 	}
+
+	id := header.ID
+
+	_debug(fmt.Sprintf("wasm3: (%d bytes) %d: dns_response %d -> source ip: %s, destination ip: %s",
+		len(dns_packet),
+		timestamp,
+		id,
+		client,
+		server,
+	))
 
 	_debug("parsed answer dns header: " + header.GoString())
 

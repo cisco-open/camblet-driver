@@ -3,7 +3,6 @@
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
 
-#include "dns_header.h"
 #include "netfilter.h"
 #include "runtime.h"
 
@@ -33,10 +32,9 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
         {
             unsigned dnsPacketLen = ntohs(udp_header->len);
             char *data = (char *)udp_header + sizeof(struct udphdr);
-            struct dns_h dns_header;
-            memcpy(&dns_header, data, DNS_HEADER_SIZE);
 
-            printk("wasm3: dns question (%d bytes) in request id %u questions: %u", dnsPacketLen, ntohs(dns_header.id), ntohs(dns_header.qdcount));
+            printk("wasm3: sk_buff out (len: %d bytes, data_len: %d bytes)", skb->len, skb->data_len);
+            printk("wasm3: dns question (%d bytes) in UDP request", dnsPacketLen);
 
             unsigned long flags;
             spin_lock_irqsave(&hook_spinlock, flags);
@@ -54,12 +52,10 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
             char *dnsPacket = mem + dnsPacketPtr;
             memcpy(dnsPacket, data, dnsPacketLen);
 
-            unsigned dnsId = ntohs(dns_header.id);
             unsigned dnsSource = ntohl(ip_header->saddr);
             unsigned dnsDestination = ntohl(ip_header->daddr);
 
             M3Result result = repl_call_void("dns_query",
-                                             dnsId,
                                              dnsSource,
                                              dnsDestination,
                                              dnsPacketPtr,
@@ -100,10 +96,9 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
         {
             unsigned dnsPacketLen = ntohs(udp_header->len);
             char *data = (char *)udp_header + sizeof(struct udphdr);
-            struct dns_h dns_header;
-            memcpy(&dns_header, data, DNS_HEADER_SIZE);
 
-            printk("wasm3: dns answer (%d bytes) in request id %u answers: %u", dnsPacketLen, ntohs(dns_header.id), ntohs(dns_header.ancount));
+            printk("wasm3: sk_buff in (len: %d bytes, data_len: %d bytes)", skb->len, skb->data_len);
+            printk("wasm3: dns answer (%d bytes) in request", dnsPacketLen);
 
             unsigned long flags;
             spin_lock_irqsave(&hook_spinlock, flags);
@@ -121,12 +116,10 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
             char *dnsPacket = mem + dnsPacketPtr;
             memcpy(dnsPacket, data, dnsPacketLen);
 
-            unsigned dnsId = ntohs(dns_header.id);
             unsigned dnsSource = ntohl(ip_header->saddr);
             unsigned dnsDestination = ntohl(ip_header->daddr);
 
             M3Result result = repl_call_void("dns_response",
-                                             dnsId,
                                              dnsSource,
                                              dnsDestination,
                                              dnsPacketPtr,

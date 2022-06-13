@@ -16,7 +16,7 @@ struct DnsTurnaround {
 }
 
 lazy_static! {
-    static ref DNS_PACKETS: Mutex<HashMap<i32, DnsTurnaround>> = Mutex::new(HashMap::new());
+    static ref DNS_PACKETS: Mutex<HashMap<u16, DnsTurnaround>> = Mutex::new(HashMap::new());
 }
 
 /// Allocate memory into the module's linear memory
@@ -60,28 +60,28 @@ extern "C" {
 // pub static mut DNS_PACKET: [u8; 512] = [0; 512];
 
 #[no_mangle]
-extern "C" fn dns_query(id: i32, source: u32, destination: u32, dns_packet: *const [u8]) {
+extern "C" fn dns_query(source: u32, destination: u32, dns_packet: *const [u8]) {
     unsafe {
         let timestamp = clock_ns();
         // let source = CString::from_raw(SOURCE.as_mut_ptr());
         // let destination = CString::from_raw(DESTINATION.as_mut_ptr());
 
-        let mut s = format!(
-            "wasm3: {}: dns_query {} -> source ip: {}, destination ip: {}",
-            timestamp,
-            id,
-            Ipv4Addr::from(source),
-            Ipv4Addr::from(destination),
-            // source.to_string_lossy(),
-            // destination.to_string_lossy(),
-        );
-
-        _debug(&s);
-
         match Packet::parse(&*dns_packet) {
             Ok(dns) => {
-                s = format!("wasm3: {:?}", dns);
+                let id = dns.header.id;
+
+                let s = format!(
+                    "wasm3: {}: dns_query {} -> source ip: {}, destination ip: {}",
+                    timestamp,
+                    id,
+                    Ipv4Addr::from(source),
+                    Ipv4Addr::from(destination),
+                    // source.to_string_lossy(),
+                    // destination.to_string_lossy(),
+                );
+
                 _debug(&s);
+                _debug(&format!("wasm3: {:?}", dns));
 
                 let turnaround = DnsTurnaround {
                     name: dns.questions[0].qname.to_string(),
@@ -94,36 +94,35 @@ extern "C" fn dns_query(id: i32, source: u32, destination: u32, dns_packet: *con
                 DNS_PACKETS.lock().unwrap().insert(id, turnaround);
             }
             Err(e) => {
-                s = format!("wasm3: error: {:?}", e);
-                _debug(&s);
+                _debug(&format!("wasm3: error: {:?}", e));
             }
         }
     }
 }
 
 #[no_mangle]
-extern "C" fn dns_response(id: i32, source: u32, destination: u32, dns_packet: *const [u8]) {
+extern "C" fn dns_response(source: u32, destination: u32, dns_packet: *const [u8]) {
     unsafe {
         let timestamp = clock_ns();
         // let source = CString::from_raw(SOURCE.as_mut_ptr());
         // let destination = CString::from_raw(DESTINATION.as_mut_ptr());
 
-        let mut s = format!(
-            "wasm3: {}, dns_response {} -> source ip: {}, destination ip: {}",
-            timestamp,
-            id,
-            Ipv4Addr::from(source),
-            Ipv4Addr::from(destination),
-            // source.to_string_lossy(),
-            // destination.to_string_lossy(),
-        );
-
-        _debug(&s);
-
         match Packet::parse(&*dns_packet) {
             Ok(dns) => {
-                s = format!("wasm3: {:?}", dns);
+                let id = dns.header.id;
+
+                let s = format!(
+                    "wasm3: {}, dns_response {} -> source ip: {}, destination ip: {}",
+                    timestamp,
+                    id,
+                    Ipv4Addr::from(source),
+                    Ipv4Addr::from(destination),
+                    // source.to_string_lossy(),
+                    // destination.to_string_lossy(),
+                );
+
                 _debug(&s);
+                _debug(&format!("wasm3: {:?}", dns));
 
                 let mut packets = DNS_PACKETS.lock().unwrap();
 
@@ -137,7 +136,7 @@ extern "C" fn dns_response(id: i32, source: u32, destination: u32, dns_packet: *
                         t.latency_ns = timestamp - t.latency_ns;
                         t.response_code = dns.header.response_code.into();
                         let json = serde_json::to_string(&t).unwrap() + "\n";
-                        submit_metric(&json);                
+                        submit_metric(&json);
                         packets.remove(&id);
                     }
                     None => {
@@ -146,8 +145,7 @@ extern "C" fn dns_response(id: i32, source: u32, destination: u32, dns_packet: *
                 }
             }
             Err(e) => {
-                s = format!("wasm3: error: {:?}", e);
-                _debug(&s);
+                _debug(&format!("wasm3: error: {:?}", e));
             }
         }
 
@@ -155,18 +153,23 @@ extern "C" fn dns_response(id: i32, source: u32, destination: u32, dns_packet: *
         for (_, v) in DNS_PACKETS.lock().unwrap().iter_mut().next() {
             let is_timeouted = (timestamp - v.latency_ns) > 1000000000;
             if is_timeouted {
-                v.response_code = 255; 
+                v.response_code = 255;
                 let json = serde_json::to_string(&v).unwrap() + "\n";
-                submit_metric(&json);        
+                submit_metric(&json);
             }
         }
 
-        _debug(&format!("wasm3: dns packets in memory: {:?}", DNS_PACKETS.lock().unwrap().len()));
+        _debug(&format!(
+            "wasm3: dns packets in memory: {:?}",
+            DNS_PACKETS.lock().unwrap().len()
+        ));
 
-        DNS_PACKETS.lock().unwrap().retain(|_, v: &mut DnsTurnaround| ((timestamp - v.latency_ns) < 1000000000));
+        DNS_PACKETS
+            .lock()
+            .unwrap()
+            .retain(|_, v: &mut DnsTurnaround| ((timestamp - v.latency_ns) < 1000000000));
     }
 }
-
 
 fn main() {
     // unsafe {
