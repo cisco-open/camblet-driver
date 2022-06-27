@@ -60,12 +60,12 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
                                              dnsDestination,
                                              dnsPacketPtr,
                                              dnsPacketLen);
-            
+
             wasm_free(dnsPacketPtr, dnsPacketLen);
 
             if (result)
             {
-                FATAL("wasm3: netfilter dns_query error: %s", result);
+                FATAL("netfilter dns_query error: %s", result);
                 goto unlock;
             }
 
@@ -129,7 +129,7 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
 
             if (result)
             {
-                FATAL("wasm3: netfilter dns_response error: %s", result);
+                FATAL("netfilter dns_response error: %s", result);
                 goto unlock;
             }
 

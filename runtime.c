@@ -89,7 +89,9 @@ M3Result repl_load(const char *module_name, unsigned char wasm_code[], unsigned 
     if (result)
         goto on_error;
 
-    m3_SetModuleName(module, module_name);
+    char *moduleName = kmalloc(strlen(module_name), GFP_KERNEL);
+    strcpy(moduleName, module_name);
+    m3_SetModuleName(module, moduleName);
 
     result = link_all(module);
     if (result)
@@ -105,7 +107,10 @@ M3Result repl_load(const char *module_name, unsigned char wasm_code[], unsigned 
 on_error:
     m3_FreeModule(module);
     if (wasm)
+    {
         kfree(wasm);
+        kfree(moduleName);
+    }
 
     return result;
 }
@@ -164,7 +169,10 @@ M3Result repl_call(const char *name, int argc, const char *argv[])
     result = m3_CallArgv(func, argc, argv);
 
     if (result)
+    {
+        print_backtrace();
         return result;
+    }
 
     static uint64_t valbuff[128];
     static const void *valptrs[128];
@@ -220,6 +228,9 @@ M3Result repl_call_void(const char *name, ...)
     result = m3_CallVL(func, ap);
     va_end(ap);
 
+    if (result)
+        print_backtrace();
+
     return result;
 }
 
@@ -248,6 +259,7 @@ i32 repl_call_i32(const char *name, ...)
     if (result)
     {
         printk("wasm3: repl_call_i32 %s", result);
+        print_backtrace();
         return -1;
     }
 
@@ -408,4 +420,33 @@ static M3Result link_all(IM3Module module)
 #endif
 
     return res;
+}
+
+void print_backtrace()
+{
+    IM3BacktraceInfo info = m3_GetBacktrace(runtime);
+    if (!info) {
+        return;
+    }
+
+    printk("wasm3: backtrace:");
+
+    int frameCount = 0;
+    IM3BacktraceFrame curr = info->frames;
+    if (!curr)
+            printk("found no frames");
+    while (curr)
+    {
+        // printk("found frame function is -> %p", curr->function);
+        printk("  %d: 0x%06x - %s!%s",
+                frameCount, curr->moduleOffset,
+                m3_GetModuleName (m3_GetFunctionModule(curr->function)),
+                m3_GetFunctionName (curr->function)
+        );
+        curr = curr->next;
+        frameCount++;
+    }
+    if (info->lastFrame == M3_BACKTRACE_TRUNCATED) {
+        printk("\n  (truncated)");
+    }
 }

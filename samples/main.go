@@ -57,14 +57,20 @@ func dns_query(source int32, destination int32, dns_packet []byte) {
 
 	_debug("parsed query dns header: " + header.GoString())
 
-	question, err := parser.Question()
+	question, err := parser.AllQuestions()
+	_debug("parsed query question")
 	if err != nil {
 		_debug("failed to parse dns question: " + err.Error())
 		return
 	}
 
+	if len(question) == 0 {
+		_debug("no questions in query")
+		return
+	}
+
 	dnsMessages[id] = dns.DNSTurnaroud{
-		Name:         strings.TrimSuffix(question.Name.String(), "."),
+		Name:         strings.TrimSuffix(question[0].Name.String(), "."),
 		LatencyNS:    timestamp,
 		Client:       client.String(),
 		Server:       server.String(),
@@ -102,6 +108,7 @@ func dns_response(source int32, destination int32, dns_packet []byte) {
 
 	t, ok := dnsMessages[id]
 	if !ok {
+		_debug("can't find dns query for answer: " + fmt.Sprint(id))
 		return
 	}
 
@@ -176,3 +183,5 @@ func dns_response(source int32, destination int32, dns_packet []byte) {
 func isSectionDone(err error) bool {
 	return err.Error() == dnsmessage.ErrSectionDone.Error()
 }
+
+func main() {}

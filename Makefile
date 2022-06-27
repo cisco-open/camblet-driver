@@ -1,6 +1,6 @@
 # TODO: Otherwise __popcountdi2 is undefined.
 # https://stackoverflow.com/questions/52161596/why-is-builtin-popcount-slower-than-my-own-bit-counting-function
-EXTRA_CFLAGS := -march=native -foptimize-sibling-calls -msse4
+EXTRA_CFLAGS := -march=native -foptimize-sibling-calls -msse4 -Dd_m3RecordBacktraces=1 -DDEBUG=1
 
 VERBOSE := 1
 

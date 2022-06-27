@@ -21,5 +21,6 @@ uint8_t* repl_get_memory(void);
 uint64_t repl_global_get(const char* name);
 i32 wasm_malloc(unsigned size);
 void wasm_free(i32 ptr, unsigned size);
+void print_backtrace(void);
 
 #endif
