@@ -4,7 +4,7 @@ EXTRA_CFLAGS := -march=native -foptimize-sibling-calls -msse4 -Dd_m3RecordBacktr
 
 VERBOSE := 1
 
-# obj-m specifie we're a kernel module.
+# obj-m specifies we're a kernel module.
 obj-m += wasm3.o
 wasm3-objs := wasm3/source/m3_api_libc.o \
               wasm3/source/m3_compile.o \
@@ -26,6 +26,7 @@ wasm3-objs := wasm3/source/m3_api_libc.o \
 			  json.o \
 			  main.o \
 			  netfilter.o \
+			  hashtable.o \
 			  runtime.o \
 			  worker_thread.o
 

@@ -2,6 +2,7 @@
 
 #include "runtime.h"
 #include "worker_thread.h"
+#include "hashtable.h"
 
 #include "wasm3/source/wasm3.h"
 #include "wasm3/source/m3_env.h"
@@ -336,6 +337,52 @@ void wasm_free(i32 ptr, unsigned size)
         FATAL("wasm3: free error: %s", result);
 }
 
+m3ApiRawFunction(m3_ext_table_add)
+{
+    m3ApiGetArg(i32,   key)
+
+    m3ApiGetArgMem(void*,    i_ptr)
+    m3ApiGetArg(wasm_size_t,  i_size)
+
+    m3ApiCheckMem(i_ptr, i_size);
+
+    add_to_module_hashtable(key, i_ptr, i_size);
+    m3ApiSuccess();
+}
+
+m3ApiRawFunction(m3_ext_table_del)
+{
+    m3ApiGetArg(i32, key)
+
+    delete_from_module_hashtable(key);
+    m3ApiSuccess();
+}
+
+m3ApiRawFunction(m3_ext_table_get)
+{
+    m3ApiReturnType (i64)
+    m3ApiGetArg     (i32,     key)
+
+    void* data_ptr;
+    i32 data_len;
+
+    get_from_module_hashtable(key, &data_ptr, &data_len);
+    i64 res = ((i64)data_ptr << 32) | (i64) data_len;
+    m3ApiReturn(res);
+}
+
+m3ApiRawFunction(m3_ext_table_keys)
+{
+    m3ApiReturnType (i64)
+
+    void* data_ptr;
+    i32 data_len;
+
+    keys_from_module_hashtable(&data_ptr, &data_len);
+    i64 res = ((i64)data_ptr << 32) | (i64) data_len;
+    m3ApiReturn(res);
+}
+
 m3ApiRawFunction(m3_ext_submit_metric)
 {
     m3ApiReturnType (uint32_t)
@@ -349,7 +396,7 @@ m3ApiRawFunction(m3_ext_submit_metric)
     if (!metric_line)
     {
         printk("cannot allocate memory for metric_line");
-        m3ApiReturn(0);
+        m3ApiReturn(-1);
     }
 
     memcpy(metric_line, i_ptr, i_size);
@@ -374,6 +421,10 @@ M3Result m3_LinkRuntimeExtension(IM3Module module)
     const char *env = "env";
 
     _(SuppressLookupFailure(m3_LinkRawFunction(module, env, "submit_metric", "i(*i)", &m3_ext_submit_metric)));
+    _(SuppressLookupFailure(m3_LinkRawFunction(module, env, "table_get", "I(i)", &m3_ext_table_get)));
+    _(SuppressLookupFailure(m3_LinkRawFunction(module, env, "table_keys", "I()", &m3_ext_table_keys)));
+    _(SuppressLookupFailure(m3_LinkRawFunction(module, env, "table_add", "(i*i)", &m3_ext_table_add)));
+    _(SuppressLookupFailure(m3_LinkRawFunction(module, env, "table_del", "(i)", &m3_ext_table_del)));
 
 _catch:
     return result;

@@ -77,7 +77,7 @@ cd samples/
 # check/edit the code if you like
 vim main.rs
 # build the webassembly module from the code
-cargo build --target wasm32-unknown-unknown --release
+cargo build --target wasm32-unknown-unknown --release 
 # load the wasm module to the kernel module
 sudo sh -c "cat ./target/wasm32-unknown-unknown/release/webassembly.wasm > /dev/wasm3"
 # exercise DNS a bit to capture some packages

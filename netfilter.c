@@ -155,7 +155,7 @@ static int init_network(struct net *net)
 
     ret += nf_register_net_hook(net, &nfho_out);
 
-    // register hook for outgoing traffic
+    // register hook for incoming traffic
     nfho_in.hook = hook_func_in;
     nfho_in.hooknum = NF_INET_LOCAL_IN;
     nfho_in.pf = PF_INET;

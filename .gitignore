@@ -3,6 +3,7 @@
 *.mod*
 !go.mod
 *.o
+*.o.d
 *.order
 *.symvers
 .vscode
