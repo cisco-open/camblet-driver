@@ -221,6 +221,9 @@ fn get_packet(id: i32) -> Option<DnsTurnaround> {
         // TODO remove this i64 based return type once the multi value RawFunction 
         // return type gets supported by wasm3 (baluchicken)
         let res = table_get(id);
+        if res == 0 {
+            return None
+        }
 
         let ptr: i32 = (res >> 32) as i32; 
         let len: i32 = res as i32;

@@ -74,11 +74,15 @@ void keys_from_module_hashtable(void** data, i32* data_length) {
 
 // get_from_module_hashtable function is not thread safe
 void get_from_module_hashtable(i32 id, void** data, i32* data_length) {
-    struct h_node *cur;
-    struct h_node *temp;
+    struct h_node *cur = NULL;
+    struct h_node *temp = NULL;
 
     hash_for_each_possible(module_table, cur, node, id) {
         temp = cur;
+    }
+
+    if (!temp) {
+        return;
     }
 
     // Get the Runtime memory

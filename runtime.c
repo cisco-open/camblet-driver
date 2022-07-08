@@ -363,10 +363,16 @@ m3ApiRawFunction(m3_ext_table_get)
     m3ApiReturnType (i64)
     m3ApiGetArg     (i32,     key)
 
-    void* data_ptr;
+    void* data_ptr = NULL;
     i32 data_len;
 
     get_from_module_hashtable(key, &data_ptr, &data_len);
+
+    if (!data_ptr)
+    {
+        m3ApiReturn(0);
+    }
+
     i64 res = ((i64)data_ptr << 32) | (i64) data_len;
     m3ApiReturn(res);
 }
