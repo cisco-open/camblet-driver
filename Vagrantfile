@@ -41,7 +41,10 @@ Vagrant.configure("2") do |config|
         kmod \
         docker.io \
         socat \
-        zsh
+        zsh \
+        clang \
+        libbpf-dev \
+        gcc-multilib
     sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
     sudo usermod -s /bin/zsh ${USER}
     # curl -sfL https://get.k3s.io | sh -
@@ -61,7 +64,9 @@ Vagrant.configure("2") do |config|
                   docker \
                   socat \
                   git \
-                  zsh
+                  zsh \
+                  bpf \
+                  clang
     sudo systemctl enable docker
     sudo systemctl start docker
     sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
