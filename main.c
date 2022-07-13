@@ -19,11 +19,11 @@ MODULE_PARM_DESC(name, "The name to display in /var/log/kern.log");
 
 static int __init wasm3_init(void)
 {
-    pr_info("%s: module loaded at 0x%p\n", MODULE_NAME, wasm3_init);
+    pr_info("%s: module loaded at 0x%p running on %d CPUs\n", MODULE_NAME, wasm3_init, nr_cpu_ids);
 
-    M3Result result = repl_init(STACK_SIZE_BYTES);
-    if (result)
-        FATAL("repl_init: %s", result);
+    wasm_vm_result result = wasm_vm_new_per_cpu();
+    if (result.err)
+        FATAL("wasm_vm_new_per_cpu: %s", result.err);
 
     start_netfilter_submodule();
 
@@ -37,7 +37,7 @@ static void __exit wasm3_exit(void)
     chardev_exit();
     stop_netfilter_submodule();
     worker_thread_exit();
-    repl_free();
+    wasm_vm_destroy_per_cpu();
 
     pr_info("%s: goodbye %s\n", MODULE_NAME, name);
     pr_info("%s: module unloaded from 0x%p\n", MODULE_NAME, wasm3_exit);

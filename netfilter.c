@@ -8,8 +8,6 @@
 
 #define DNS_HEADER_SIZE 12
 
-DEFINE_SPINLOCK(hook_spinlock);
-
 static struct nf_hook_ops nfho_in;  // net filter hook option struct
 static struct nf_hook_ops nfho_out; // net filter hook option struct
 
@@ -20,7 +18,7 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
 
     if (!skb)
     {
-        return NF_ACCEPT;
+        goto accept;
     }
 
     ip_header = ip_hdr(skb); // grab network header using accessor
@@ -33,21 +31,25 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
             unsigned dnsPacketLen = ntohs(udp_header->len);
             char *data = (char *)udp_header + sizeof(struct udphdr);
 
-            printk("wasm3: sk_buff out (len: %d bytes, data_len: %d bytes)", skb->len, skb->data_len);
+            printk("wasm3: sk_buff out (cpu: %d, len: %d bytes, data_len: %d bytes)", smp_processor_id(), skb->len, skb->data_len);
             printk("wasm3: dns question (%d bytes) in UDP request", dnsPacketLen);
-
-            unsigned long flags;
-            spin_lock_irqsave(&hook_spinlock, flags);
 
             // Get the VM memory if there is at least one module loaded,
             // if not, accept the packet regardless.
-            uint8_t *mem = repl_get_memory();
+            uint8_t *mem = wasm_vm_memory(current_wasm_vm());
             if (!mem)
             {
-                goto unlock;
+                goto accept;
             }
 
-            i32 dnsPacketPtr = wasm_malloc(dnsPacketLen);
+            wasm_vm_result result = wasm_vm_malloc(current_wasm_vm(), dnsPacketLen);
+            if (result.err)
+            {
+                FATAL("netfilter wasm_vm_malloc error: %s", result.err);
+                goto accept;
+            }
+
+            i32 dnsPacketPtr = result.i32;
 
             char *dnsPacket = mem + dnsPacketPtr;
             memcpy(dnsPacket, data, dnsPacketLen);
@@ -55,25 +57,24 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
             unsigned dnsSource = ntohl(ip_header->saddr);
             unsigned dnsDestination = ntohl(ip_header->daddr);
 
-            M3Result result = repl_call_void("dns_query",
-                                             dnsSource,
-                                             dnsDestination,
-                                             dnsPacketPtr,
-                                             dnsPacketLen);
+            result = wasm_vm_call(current_wasm_vm(),
+                                  "dns_query",
+                                  dnsSource,
+                                  dnsDestination,
+                                  dnsPacketPtr,
+                                  dnsPacketLen);
 
-            wasm_free(dnsPacketPtr, dnsPacketLen);
+            wasm_vm_free(current_wasm_vm(), dnsPacketPtr, dnsPacketLen);
 
-            if (result)
+            if (result.err)
             {
-                FATAL("netfilter dns_query error: %s", result);
-                goto unlock;
+                FATAL("netfilter dns_query error: %s", result.err);
+                goto accept;
             }
-
-        unlock:
-            spin_unlock_irqrestore(&hook_spinlock, flags);
         }
     }
 
+accept:
     return NF_ACCEPT;
 }
 
@@ -84,7 +85,7 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
 
     if (!skb)
     {
-        return NF_ACCEPT;
+        goto accept;
     }
 
     ip_header = ip_hdr(skb); // grab network header using accessor
@@ -97,21 +98,25 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
             unsigned dnsPacketLen = ntohs(udp_header->len);
             char *data = (char *)udp_header + sizeof(struct udphdr);
 
-            printk("wasm3: sk_buff in (len: %d bytes, data_len: %d bytes)", skb->len, skb->data_len);
+            printk("wasm3: sk_buff in (cpu: %d, len: %d bytes, data_len: %d bytes)", smp_processor_id(), skb->len, skb->data_len);
             printk("wasm3: dns answer (%d bytes) in request", dnsPacketLen);
-
-            unsigned long flags;
-            spin_lock_irqsave(&hook_spinlock, flags);
 
             // Get the VM memory if there is at least one module loaded,
             // if not, accept the packet regardless.
-            uint8_t *mem = repl_get_memory();
+            uint8_t *mem = wasm_vm_memory(current_wasm_vm());
             if (!mem)
             {
-                goto unlock;
+                goto accept;
             }
 
-            i32 dnsPacketPtr = wasm_malloc(dnsPacketLen);
+            wasm_vm_result result = wasm_vm_malloc(current_wasm_vm(), dnsPacketLen);
+            if (result.err)
+            {
+                FATAL("netfilter wasm_vm_malloc error: %s", result.err);
+                goto accept;
+            }
+
+            i32 dnsPacketPtr = result.i32;
 
             char *dnsPacket = mem + dnsPacketPtr;
             memcpy(dnsPacket, data, dnsPacketLen);
@@ -119,25 +124,24 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
             unsigned dnsSource = ntohl(ip_header->saddr);
             unsigned dnsDestination = ntohl(ip_header->daddr);
 
-            M3Result result = repl_call_void("dns_response",
-                                             dnsSource,
-                                             dnsDestination,
-                                             dnsPacketPtr,
-                                             dnsPacketLen);
+            result = wasm_vm_call(current_wasm_vm(),
+                                  "dns_response",
+                                  dnsSource,
+                                  dnsDestination,
+                                  dnsPacketPtr,
+                                  dnsPacketLen);
 
-            wasm_free(dnsPacketPtr, dnsPacketLen);
+            wasm_vm_free(current_wasm_vm(), dnsPacketPtr, dnsPacketLen);
 
-            if (result)
+            if (result.err)
             {
-                FATAL("netfilter dns_response error: %s", result);
-                goto unlock;
+                FATAL("netfilter dns_response error: %s", result.err);
+                goto accept;
             }
-
-        unlock:
-            spin_unlock_irqrestore(&hook_spinlock, flags);
         }
     }
 
+accept:
     return NF_ACCEPT;
 }
 

@@ -74,38 +74,44 @@ static int device_open(struct inode *inode, struct file *file)
     return SUCCESS;
 }
 
-static M3Result load_module(char *name, char *buffer, unsigned length, char *entrypoint)
+static wasm_vm_result load_module(char *name, char *buffer, unsigned length, char *entrypoint)
 {
-    M3Result result;
-    result = repl_init(STACK_SIZE_BYTES);
-    if (result)
+    wasm_vm_result result;
+    result = wasm_vm_destroy_per_cpu();
+    if (result.err)
     {
-        FATAL("repl_init: %s", result);
+        FATAL("wasm_vm_destroy_per_cpu: %s", result.err);
         return result;
     }
 
-    result = repl_load(name, buffer, length);
-    if (result)
+    result = wasm_vm_new_per_cpu();
+    if (result.err)
     {
-        FATAL("repl_load: %s", result);
+        FATAL("wasm_vm_new_per_cpu: %s", result.err);
         return result;
     }
 
-    if (entrypoint)
+    unsigned cpu;
+    for_each_possible_cpu(cpu)
     {
-        printk("wasm3: calling module entrypoint: %s", entrypoint);
-        int argc = 2;
-        const char *argv[2] = {"1", "main"};
-        if (strcmp(entrypoint, "main") != 0)
+        wasm_vm *vm = wasm_vm_for_cpu(cpu);
+        result = wasm_vm_load_module(vm, name, buffer, length);
+        if (result.err)
         {
-            argc = 0;
+            FATAL("wasm_vm_load_module: %s", result.err);
+            return result;
         }
 
-        result = repl_call(entrypoint, argc, argv);
-        if (result)
+        if (entrypoint)
         {
-            FATAL("repl_call: %s", result);
-            return result;
+            printk("wasm3: calling module entrypoint: %s", entrypoint);
+
+            result = wasm_vm_call(vm, entrypoint);
+            if (result.err)
+            {
+                FATAL("wasm_vm_call: %s", result.err);
+                return result;
+            }
         }
     }
 
@@ -146,10 +152,10 @@ static int device_release(struct inode *inode, struct file *file)
 
             char *entrypoint = json_object_get_string(root, "entrypoint");
 
-            M3Result result = load_module(name, device_buffer, length, entrypoint);
-            if (result)
+            wasm_vm_result result = load_module(name, device_buffer, length, entrypoint);
+            if (result.err)
             {
-                FATAL("repl_call: %s", result);
+                FATAL("load_module: %s", result.err);
                 status = -1;
                 goto cleanup;
             }

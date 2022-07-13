@@ -108,7 +108,7 @@ void submit_metric_handler(struct work_struct *work)
         {
             kernel_sock_shutdown(c_sock, SHUT_RDWR);
             c_connected = false;
-            printk(KERN_INFO, "wasm3: socket closed");
+            printk(KERN_INFO "wasm3: socket closed");
             schedule_work(&sock_accept);
         }
     }
