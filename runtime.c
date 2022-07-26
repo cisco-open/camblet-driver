@@ -27,7 +27,7 @@ static M3Result m3_link_all(IM3Module module);
 
 wasm_vm *wasm_vm_new(unsigned stack)
 {
-    wasm_vm *vm = kmalloc(sizeof(wasm_vm), GFP_KERNEL);
+    wasm_vm *vm = kmalloc(sizeof(wasm_vm), GFP_ATOMIC);
 
     vm->_env = m3_NewEnvironment();
     if (vm->_env == NULL)
@@ -140,7 +140,7 @@ wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char 
     M3Result result = m3Err_none;
     IM3Module module = NULL;
 
-    u8 *wasm = kmalloc(code_size, GFP_KERNEL);
+    u8 *wasm = kmalloc(code_size, GFP_ATOMIC);
     if (!wasm)
     {
         result = "cannot allocate memory for wasm binary";
@@ -157,7 +157,7 @@ wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char 
     if (result)
         goto on_error;
 
-    char *module_name = kmalloc(strlen(name), GFP_KERNEL);
+    char *module_name = kmalloc(strlen(name), GFP_ATOMIC);
     strcpy(module_name, name);
     m3_SetModuleName(module, module_name);
 
@@ -348,7 +348,7 @@ m3ApiRawFunction(m3_ext_submit_metric)
 
     m3ApiCheckMem(i_ptr, i_size);
     
-    char *metric_line = (char *)kmalloc(i_size, GFP_KERNEL);
+    char *metric_line = (char *)kmalloc(i_size, GFP_ATOMIC);
     if (!metric_line)
     {
         printk("wasm3: cannot allocate memory for metric_line");

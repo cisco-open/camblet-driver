@@ -42,6 +42,9 @@ clean:
 menuconfig:
 	$(MAKE) -C $(KBUILD) M=$(PWD) menuconfig
 
+logs:
+	sudo dmesg -T --follow
+
 ALPINE_VERSION ?= 3.13
 build-in-docker:
 	docker build -t builder -f Dockerfile.dev --build-arg KERNEL_VERSION=$(shell docker info -f "{{ json .KernelVersion }}" | tr -d '"' | cut -d '-' -f 1) --build-arg ALPINE_VERSION=${ALPINE_VERSION} .

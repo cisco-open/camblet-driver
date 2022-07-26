@@ -2,3 +2,4 @@
 *.wasm
 almafa.wat
 /zig-cache
+.idea

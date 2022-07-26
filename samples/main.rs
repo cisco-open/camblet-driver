@@ -1,11 +1,11 @@
-use dns_parser::Packet;
+use dns_parser::Packet as DnsPacket;
+use etherparse::*;
 use serde::{Deserialize, Serialize};
-use core::slice;
+use std::net::{Ipv4Addr, Ipv6Addr};
+use std::slice;
 use std::str;
-use std::net::Ipv4Addr;
 
-
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 struct DnsTurnaround {
     name: String,
     records: Vec<String>,
@@ -60,193 +60,228 @@ extern "C" {
     fn table_del(key: i32);
 }
 
-// #[no_mangle]
-// pub static mut SOURCE: [i8; 20] = [0; 20];
-// #[no_mangle]
-// pub static mut DESTINATION: [i8; 20] = [0; 20];
-// #[no_mangle]
-// pub static mut DNS_PACKET: [u8; 512] = [0; 512];
+#[macro_export]
+macro_rules! println {
+    () => {
+        _debug("\n")
+    };
+    ($($arg:tt)*) => {{
+        _debug(&format!($($arg)*));
+    }};
+}
 
 #[no_mangle]
-extern "C" fn dns_query(source: u32, destination: u32, dns_packet: *const [u8]) {
+extern "C" fn packet_out(packet: &[u8]) {
     unsafe {
-        let timestamp = clock_ns();
-        // let source = CString::from_raw(SOURCE.as_mut_ptr());
-        // let destination = CString::from_raw(DESTINATION.as_mut_ptr());
+        let mut query = DnsTurnaround::default();
+        query.latency_ns = clock_ns();
 
-        match Packet::parse(&*dns_packet) {
-            Ok(dns) => {
-                let id = dns.header.id;
-
-                let s = format!(
-                    "wasm3: {}: dns_query {} -> source ip: {}, destination ip: {}",
-                    timestamp,
-                    id,
-                    Ipv4Addr::from(source),
-                    Ipv4Addr::from(destination),
-                    // source.to_string_lossy(),
-                    // destination.to_string_lossy(),
-                );
-
-                _debug(&s);
-                _debug(&format!("wasm3: {:?}", dns));
-
-                let turnaround = DnsTurnaround {
-                    name: dns.questions[0].qname.to_string(),
-                    records: Vec::new(),
-                    latency_ns: timestamp,
-                    client: Ipv4Addr::from(source).to_string(),
-                    server: Ipv4Addr::from(destination).to_string(),
-                    response_code: dns.header.response_code.into(),
+        match PacketHeaders::from_ip_slice(packet) {
+            Err(err) => {
+                println!("wasm3: ip packet parser error: {:?}", err);
+                return;
+            }
+            Ok(value) => {
+                match value.ip {
+                    Some(IpHeader::Version4(hdr, _ext)) => {
+                        query.client = Ipv4Addr::from(hdr.source).to_string();
+                        query.server = Ipv4Addr::from(hdr.destination).to_string();
+                    }
+                    Some(IpHeader::Version6(hdr, _ext)) => {
+                        query.client = Ipv6Addr::from(hdr.source).to_string();
+                        query.server = Ipv6Addr::from(hdr.destination).to_string();
+                    }
+                    None => return,
                 };
-                add_packet(id as i32, turnaround);
-                // DNS_PACKETS.lock().unwrap().insert(id, turnaround);
+
+                match value.transport {
+                    Some(TransportHeader::Udp(hdr)) => {
+                        if hdr.destination_port != 53 {
+                            println!(
+                                "wasm3: UDP packet to {} -> {}",
+                                hdr.source_port, hdr.destination_port
+                            );
+                            return;
+                        }
+
+                        // println!("dns ip: {:?}", value.ip);
+                        // println!("dns transport: {:?}", value.transport);
+
+                        match DnsPacket::parse(value.payload) {
+                            Ok(dns) => {
+                                let id = dns.header.id;
+
+                                println!(
+                                    "wasm3: {}: dns_query {} -> source ip: {}, destination ip: {}",
+                                    query.latency_ns, id, query.client, query.server,
+                                );
+                                println!("wasm3: {:?}", dns);
+
+                                query.name = dns.questions[0].qname.to_string();
+                                query.records = Vec::new();
+                                query.response_code = dns.header.response_code.into();
+
+                                add_packet(id as i32, query);
+                            }
+                            Err(e) => {
+                                println!("wasm3: dns packet parser error: {:?}", e);
+                                return;
+                            }
+                        }
+                    }
+                    None => return,
+                    _ => {}
+                };
             }
-            Err(e) => {
-                _debug(&format!("wasm3: error: {:?}", e));
-            }
-        }
+        };
     }
 }
 
 #[no_mangle]
-extern "C" fn dns_response(source: u32, destination: u32, dns_packet: *const [u8]) {
+extern "C" fn packet_in(packet: &[u8]) {
     unsafe {
         let timestamp = clock_ns();
-        // let source = CString::from_raw(SOURCE.as_mut_ptr());
-        // let destination = CString::from_raw(DESTINATION.as_mut_ptr());
+        let mut query = DnsTurnaround::default();
+        query.latency_ns = timestamp;
 
-        match Packet::parse(&*dns_packet) {
-            Ok(dns) => {
-                let id = dns.header.id;
-
-                let s = format!(
-                    "wasm3: {}, dns_response {} -> source ip: {}, destination ip: {}",
-                    timestamp,
-                    id,
-                    Ipv4Addr::from(source),
-                    Ipv4Addr::from(destination),
-                    // source.to_string_lossy(),
-                    // destination.to_string_lossy(),
-                );
-
-                _debug(&s);
-                _debug(&format!("wasm3: {:?}", dns));
-
-                // let mut packets = DNS_PACKETS.lock().unwrap();
-                let packet = get_packet(id as i32);
-
-                // match packets.get_mut(&id) {
-                match packet {
-                    Some(mut t) => {
-                        t.records = dns
-                            .answers
-                            .into_iter()
-                            .map(|a| format!("{:?}", a.data))
-                            .collect();
-                        t.latency_ns = timestamp - t.latency_ns;
-                        t.response_code = dns.header.response_code.into();
-                        let json = serde_json_wasm::to_string(&t).unwrap() + "\n";
-                        submit_metric(&json);                
-                        table_del(id as i32);
-                    }
-                    None => {
-                        _debug("wasm3: can't find entry in hashmap");
-                    }
-                }
+        match PacketHeaders::from_ip_slice(packet) {
+            Err(err) => {
+                println!("wasm3: ip packet parser error: {:?}", err);
+                return;
             }
-            Err(e) => {
-                _debug(&format!("wasm3: error: {:?}", e));
-            }
-        }
-
-        
-        let packet_keys = get_packet_keys();
-        for i in packet_keys {
-            let packet = get_packet(i);
-            match packet {
-                Some(mut v) => {
-                    let is_timeouted = (timestamp - v.latency_ns) > 1000000000;
-                    if is_timeouted {
-                        v.response_code = 255;
-                        let json = serde_json_wasm::to_string(&v).unwrap() + "\n";
-                        submit_metric(&json);
-                        table_del(i);
+            Ok(value) => {
+                match value.ip {
+                    Some(IpHeader::Version4(hdr, _ext)) => {
+                        query.client = Ipv4Addr::from(hdr.source).to_string();
+                        query.server = Ipv4Addr::from(hdr.destination).to_string();
                     }
-                }
-                None => {
-                    _debug(&format!("wasm3: cant find entry in hashmap for key: {:?}", i));
-                }
+                    Some(IpHeader::Version6(hdr, _ext)) => {
+                        query.client = Ipv6Addr::from(hdr.source).to_string();
+                        query.server = Ipv6Addr::from(hdr.destination).to_string();
+                    }
+                    None => return,
+                };
+
+                match value.transport {
+                    Some(TransportHeader::Udp(hdr)) => {
+                        if hdr.source_port != 53 {
+                            println!(
+                                "wasm3: UDP packet to {} -> {}",
+                                hdr.source_port, hdr.destination_port
+                            );
+                            return;
+                        }
+
+                        // println!("dns ip: {:?}", value.ip);
+                        // println!("dns transport: {:?}", value.transport);
+
+                        match DnsPacket::parse(value.payload) {
+                            Ok(dns) => {
+                                let id = dns.header.id;
+
+                                println!(
+                                    "wasm3: {}: dns_answer {} -> source ip: {}, destination ip: {}",
+                                    query.latency_ns, id, query.client, query.server,
+                                );
+
+                                println!("wasm3: {:?}", dns);
+
+                                match get_packet(id as i32) {
+                                    Some(mut t) => {
+                                        t.records = dns
+                                            .answers
+                                            .into_iter()
+                                            .map(|a| format!("{:?}", a.data))
+                                            .collect();
+                                        t.latency_ns = query.latency_ns - t.latency_ns;
+                                        t.response_code = dns.header.response_code.into();
+                                        let json = serde_json_wasm::to_string(&t).unwrap() + "\n";
+                                        submit_metric(&json);
+                                        table_del(id as i32);
+                                    }
+                                    None => {
+                                        println!("wasm3: can't find entry in hashmap");
+                                    }
+                                }
+
+                                let packet_keys = get_packet_keys();
+                                for i in packet_keys {
+                                    let packet = get_packet(i);
+                                    match packet {
+                                        Some(mut v) => {
+                                            let is_timeouted =
+                                                (timestamp - v.latency_ns) > 1000000000;
+                                            if is_timeouted {
+                                                v.response_code = 255;
+                                                let json =
+                                                    serde_json_wasm::to_string(&v).unwrap() + "\n";
+                                                submit_metric(&json);
+                                                table_del(i);
+                                            }
+                                        }
+                                        None => {
+                                            println!(
+                                                "wasm3: cant find entry in hashmap for key: {:?}",
+                                                i
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                println!("wasm3: dns packet parser error: {:?}", e);
+                                return;
+                            }
+                        }
+                    }
+                    None => return,
+                    _ => {}
+                };
             }
-        }
-
-        // for (_, v) in DNS_PACKETS.lock().unwrap().iter_mut().next() {
-        //     let is_timeouted = (timestamp - v.latency_ns) > 1000000000;
-        //     if is_timeouted {
-        //         v.response_code = 255;
-        //         let json = serde_json_wasm::to_string(&v).unwrap() + "\n";
-        //         submit_metric(&json);
-        //     }
-        // }
-
-        // _debug(&format!(
-        //     "wasm3: dns packets in memory: {:?}",
-        //     DNS_PACKETS.lock().unwrap().len()
-        // ));
-
-        // DNS_PACKETS
-        //     .lock()
-        //     .unwrap()
-        //     .retain(|_, v: &mut DnsTurnaround| ((timestamp - v.latency_ns) < 1000000000));
+        };
     }
 }
 
 fn get_packet_keys() -> Vec<i32> {
     unsafe {
-        // TODO remove this i64 based return type once the multi value RawFunction 
+        // TODO remove this i64 based return type once the multi value RawFunction
         // return type gets supported by wasm3 (baluchicken)
         let res = table_keys();
-        
         let ptr: i32 = (res >> 32) as i32;
         let len: i32 = res as i32;
-        
         let rawkeys = slice::from_raw_parts(ptr as *const i32, len as usize);
-        
-        return rawkeys.to_vec()
+
+        return rawkeys.to_vec();
     }
 }
 
 fn get_packet(id: i32) -> Option<DnsTurnaround> {
     unsafe {
-        // TODO remove this i64 based return type once the multi value RawFunction 
+        // TODO remove this i64 based return type once the multi value RawFunction
         // return type gets supported by wasm3 (baluchicken)
         let res = table_get(id);
         if res == 0 {
-            return None
+            return None;
         }
 
-        let ptr: i32 = (res >> 32) as i32; 
+        let ptr: i32 = (res >> 32) as i32;
         let len: i32 = res as i32;
 
         let rawdata = slice::from_raw_parts(ptr as *const u8, len as usize);
 
-        let data: Result<DnsTurnaround, _> = serde_json_wasm::from_str(str::from_utf8(rawdata).unwrap());
+        let data: Result<DnsTurnaround, _> = serde_json_wasm::from_slice(rawdata);
         data.ok()
     }
 }
 
 fn add_packet(id: i32, value: DnsTurnaround) {
-    unsafe{
-    let mut rawdata = serde_json_wasm::to_vec(&value).unwrap();
-    let p = rawdata.as_mut_ptr();
-    let lenght = rawdata.len();
+    unsafe {
+        let mut rawdata = serde_json_wasm::to_vec(&value).unwrap();
+        let p = rawdata.as_mut_ptr();
+        let lenght = rawdata.len();
 
-    table_add(id,p as i32, lenght as i32)
+        table_add(id, p as i32, lenght as i32);
     }
 }
 
-fn main() {
-    // unsafe {
-    //     _debug("wasm3: hello world");
-    // }
-}
+fn main() {}

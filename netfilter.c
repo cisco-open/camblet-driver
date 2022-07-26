@@ -13,65 +13,44 @@ static struct nf_hook_ops nfho_out; // net filter hook option struct
 
 unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
 {
-    struct iphdr *ip_header;   // ip header struct
-    struct udphdr *udp_header; // udp header struct
-
     if (!skb)
     {
         goto accept;
     }
 
-    ip_header = ip_hdr(skb); // grab network header using accessor
+    unsigned packetLen = skb->len;
 
-    if (ip_header->protocol == IPPROTO_UDP)
+    // Get the VM memory if there is at least one module loaded,
+    // if not, accept the packet regardless.
+    uint8_t *mem = wasm_vm_memory(current_wasm_vm());
+    if (!mem)
     {
-        udp_header = udp_hdr(skb);
-        if (ntohs(udp_header->dest) == 53)
-        {
-            unsigned dnsPacketLen = ntohs(udp_header->len);
-            char *data = (char *)udp_header + sizeof(struct udphdr);
+        goto accept;
+    }
 
-            printk("wasm3: sk_buff out (cpu: %d, len: %d bytes, data_len: %d bytes)", smp_processor_id(), skb->len, skb->data_len);
-            printk("wasm3: dns question (%d bytes) in UDP request", dnsPacketLen);
+    wasm_vm_result result = wasm_vm_malloc(current_wasm_vm(), packetLen);
+    if (result.err)
+    {
+        FATAL("netfilter wasm_vm_malloc error: %s", result.err);
+        goto accept;
+    }
 
-            // Get the VM memory if there is at least one module loaded,
-            // if not, accept the packet regardless.
-            uint8_t *mem = wasm_vm_memory(current_wasm_vm());
-            if (!mem)
-            {
-                goto accept;
-            }
+    i32 wasmPacket = result.i32;
 
-            wasm_vm_result result = wasm_vm_malloc(current_wasm_vm(), dnsPacketLen);
-            if (result.err)
-            {
-                FATAL("netfilter wasm_vm_malloc error: %s", result.err);
-                goto accept;
-            }
+    char *wasmPacketPtr = mem + wasmPacket;
+    memcpy(wasmPacketPtr, skb->data, packetLen);
 
-            i32 dnsPacketPtr = result.i32;
+    result = wasm_vm_call(current_wasm_vm(),
+                          "packet_out",
+                          wasmPacket,
+                          packetLen);
 
-            char *dnsPacket = mem + dnsPacketPtr;
-            memcpy(dnsPacket, data, dnsPacketLen);
+    wasm_vm_free(current_wasm_vm(), wasmPacket, packetLen);
 
-            unsigned dnsSource = ntohl(ip_header->saddr);
-            unsigned dnsDestination = ntohl(ip_header->daddr);
-
-            result = wasm_vm_call(current_wasm_vm(),
-                                  "dns_query",
-                                  dnsSource,
-                                  dnsDestination,
-                                  dnsPacketPtr,
-                                  dnsPacketLen);
-
-            wasm_vm_free(current_wasm_vm(), dnsPacketPtr, dnsPacketLen);
-
-            if (result.err)
-            {
-                FATAL("netfilter dns_query error: %s", result.err);
-                goto accept;
-            }
-        }
+    if (result.err)
+    {
+        FATAL("netfilter packet_out error: %s", result.err);
+        goto accept;
     }
 
 accept:
@@ -80,65 +59,44 @@ accept:
 
 unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
 {
-    struct iphdr *ip_header;   // ip header struct
-    struct udphdr *udp_header; // udp header struct
-
     if (!skb)
     {
         goto accept;
     }
 
-    ip_header = ip_hdr(skb); // grab network header using accessor
+    unsigned packetLen = skb->len;
 
-    if (ip_header->protocol == IPPROTO_UDP)
+    // Get the VM memory if there is at least one module loaded,
+    // if not, accept the packet regardless.
+    uint8_t *mem = wasm_vm_memory(current_wasm_vm());
+    if (!mem)
     {
-        udp_header = udp_hdr(skb);
-        if (ntohs(udp_header->source) == 53)
-        {
-            unsigned dnsPacketLen = ntohs(udp_header->len);
-            char *data = (char *)udp_header + sizeof(struct udphdr);
+        goto accept;
+    }
 
-            printk("wasm3: sk_buff in (cpu: %d, len: %d bytes, data_len: %d bytes)", smp_processor_id(), skb->len, skb->data_len);
-            printk("wasm3: dns answer (%d bytes) in request", dnsPacketLen);
+    wasm_vm_result result = wasm_vm_malloc(current_wasm_vm(), packetLen);
+    if (result.err)
+    {
+        FATAL("netfilter wasm_vm_malloc error: %s", result.err);
+        goto accept;
+    }
 
-            // Get the VM memory if there is at least one module loaded,
-            // if not, accept the packet regardless.
-            uint8_t *mem = wasm_vm_memory(current_wasm_vm());
-            if (!mem)
-            {
-                goto accept;
-            }
+    i32 wasmPacket = result.i32;
 
-            wasm_vm_result result = wasm_vm_malloc(current_wasm_vm(), dnsPacketLen);
-            if (result.err)
-            {
-                FATAL("netfilter wasm_vm_malloc error: %s", result.err);
-                goto accept;
-            }
+    char *wasmPacketPtr = mem + wasmPacket;
+    memcpy(wasmPacketPtr, skb->data, packetLen);
 
-            i32 dnsPacketPtr = result.i32;
+    result = wasm_vm_call(current_wasm_vm(),
+                          "packet_in",
+                          wasmPacket,
+                          packetLen);
 
-            char *dnsPacket = mem + dnsPacketPtr;
-            memcpy(dnsPacket, data, dnsPacketLen);
+    wasm_vm_free(current_wasm_vm(), wasmPacket, packetLen);
 
-            unsigned dnsSource = ntohl(ip_header->saddr);
-            unsigned dnsDestination = ntohl(ip_header->daddr);
-
-            result = wasm_vm_call(current_wasm_vm(),
-                                  "dns_response",
-                                  dnsSource,
-                                  dnsDestination,
-                                  dnsPacketPtr,
-                                  dnsPacketLen);
-
-            wasm_vm_free(current_wasm_vm(), dnsPacketPtr, dnsPacketLen);
-
-            if (result.err)
-            {
-                FATAL("netfilter dns_response error: %s", result.err);
-                goto accept;
-            }
-        }
+    if (result.err)
+    {
+        FATAL("netfilter packet_in error: %s", result.err);
+        goto accept;
     }
 
 accept:

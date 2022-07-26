@@ -8,14 +8,15 @@ dns-parser = "0.8"
 lazy_static = "1.4"
 serde = { version = "1.0", features = ["derive"] }
 serde-json-wasm = "0.4"
+etherparse = { git = "https://github.com/JulianSchmid/etherparse" }
 
 [[bin]]
 name = "dns-rust"
 path = "main.rs"
 
 [build]
-target= "wasm32-unknown-unknown"
-rustflags= ["-C target-feature=+multivalue"]
+target = "wasm32-unknown-unknown"
+rustflags = ["-C target-feature=+multivalue"]
 
 # [lib]
 # crate-type = ["cdylib"]
