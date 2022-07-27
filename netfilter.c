@@ -18,7 +18,10 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
         goto accept;
     }
 
+    unsigned char *packetData = skb->data;
     unsigned packetLen = skb->len;
+
+    // printk("wasm3: skb_is_nonlinear %s (len: %d, data_len: %d)", skb_is_nonlinear(skb) ? "true" : "false", skb->len, skb->data_len);
 
     // Get the VM memory if there is at least one module loaded,
     // if not, accept the packet regardless.
@@ -38,7 +41,7 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
     i32 wasmPacket = result.i32;
 
     char *wasmPacketPtr = mem + wasmPacket;
-    memcpy(wasmPacketPtr, skb->data, packetLen);
+    memcpy(wasmPacketPtr, packetData, packetLen);
 
     result = wasm_vm_call(current_wasm_vm(),
                           "packet_out",
@@ -64,6 +67,7 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
         goto accept;
     }
 
+    unsigned char *packetData = skb->data;
     unsigned packetLen = skb->len;
 
     // Get the VM memory if there is at least one module loaded,
@@ -84,7 +88,7 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
     i32 wasmPacket = result.i32;
 
     char *wasmPacketPtr = mem + wasmPacket;
-    memcpy(wasmPacketPtr, skb->data, packetLen);
+    memcpy(wasmPacketPtr, packetData, packetLen);
 
     result = wasm_vm_call(current_wasm_vm(),
                           "packet_in",

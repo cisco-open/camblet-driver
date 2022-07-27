@@ -3,10 +3,10 @@ set +ex
 
 # check whether wasm3 module is already loaded
 if lsmod |grep "wasm3" >/dev/null; then
-    echo "wasm3 module already loaded";
+    echo "wasm module already loaded";
     chmod 777 /run/wasm3.socket
     # load dns wasm module
-    cat webassembly.wasm > /dev/wasm3
+    cat webassembly.wasm > /dev/wasm
     exit
 fi;
 
@@ -22,4 +22,4 @@ insmod wasm3.ko
 chmod 777 /run/wasm3.socket
 
 # load dns wasm module
-cat webassembly.wasm > /dev/wasm3
+cat webassembly.wasm > /dev/wasm

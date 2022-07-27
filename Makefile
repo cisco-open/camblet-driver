@@ -54,7 +54,7 @@ insmod-in-docker:
 	insmod /workspace/wasm3.ko sock_path=/run/guest-services/wasm3.socket
 
 load-dns-go-wasm:
-	sudo ./w3k load samples/dns-go.wasm
+	sudo cli/cli load samples/dns-go.wasm
 
 load-dns-rust-wasm:
-	sudo ./w3k load samples/target/wasm32-unknown-unknown/release/dns-rust.wasm
+	sudo cli/cli load samples/target/wasm32-unknown-unknown/release/dns-rust.wasm

@@ -63,7 +63,6 @@ Send a wasm module (non-WASI) to the runtime through the char device:
 
 ```bash
 wat2wasm hello.wat
-sudo sh -c "cat hello.wasm > /dev/wasm3"
 ```
 
 Check the kernel logs for the `Hello` message.
@@ -77,9 +76,13 @@ cd samples/
 # check/edit the code if you like
 vim main.rs
 # build the webassembly module from the code
-cargo build --target wasm32-unknown-unknown --release 
+make rust-sample
+# Build the CLI
+cd ../cli
+go build
+cd ..
 # load the wasm module to the kernel module
-sudo sh -c "cat ./target/wasm32-unknown-unknown/release/webassembly.wasm > /dev/wasm3"
+sudo cli/cli load samples/dns-rust.wasm
 # exercise DNS a bit to capture some packages
 dig +ttlunits telex.hu
 # check the logs to see the parsed messages

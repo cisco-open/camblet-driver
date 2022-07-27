@@ -74,7 +74,7 @@ static int device_open(struct inode *inode, struct file *file)
     return SUCCESS;
 }
 
-static wasm_vm_result load_module(char *name, char *buffer, unsigned length, char *entrypoint)
+static wasm_vm_result reset_vms(void)
 {
     wasm_vm_result result;
     result = wasm_vm_destroy_per_cpu();
@@ -91,6 +91,12 @@ static wasm_vm_result load_module(char *name, char *buffer, unsigned length, cha
         return result;
     }
 
+    return result;
+}
+
+static wasm_vm_result load_module(char *name, char *buffer, unsigned length, char *entrypoint)
+{
+    wasm_vm_result result;
     unsigned cpu;
     for_each_possible_cpu(cpu)
     {
@@ -138,7 +144,7 @@ static int device_release(struct inode *inode, struct file *file)
 
         if (strcmp("load", command) == 0)
         {
-            char *name = json_object_get_string(root, "module");
+            char *name = json_object_get_string(root, "name");
             printk("wasm3: loading module: %s\n", name);
 
             char *code = json_object_get_string(root, "code");
@@ -156,6 +162,18 @@ static int device_release(struct inode *inode, struct file *file)
             if (result.err)
             {
                 FATAL("load_module: %s", result.err);
+                status = -1;
+                goto cleanup;
+            }
+        }
+        else if (strcmp("reset", command) == 0)
+        {
+            printk("wasm3: reseting vm");
+
+            wasm_vm_result result = reset_vms();
+            if (result.err)
+            {
+                FATAL("reset_vms: %s", result.err);
                 status = -1;
                 goto cleanup;
             }
