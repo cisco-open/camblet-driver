@@ -1,12 +1,15 @@
-#include <linux/ip.h>
-#include <linux/udp.h>
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
 
 #include "netfilter.h"
 #include "runtime.h"
 
-#define DNS_HEADER_SIZE 12
+static DEFINE_SPINLOCK(lock);
+
+#define LOCK                  \
+    unsigned long lock_flags; \
+    spin_lock_irqsave(&lock, lock_flags);
+#define UNLOCK spin_unlock_irqrestore(&lock, lock_flags);
 
 static struct nf_hook_ops nfho_in;  // net filter hook option struct
 static struct nf_hook_ops nfho_out; // net filter hook option struct
@@ -20,6 +23,8 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
 
     unsigned char *packetData = skb->data;
     unsigned packetLen = skb->len;
+
+    LOCK;
 
     // printk("wasm3: skb_is_nonlinear %s (len: %d, data_len: %d)", skb_is_nonlinear(skb) ? "true" : "false", skb->len, skb->data_len);
 
@@ -57,6 +62,7 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
     }
 
 accept:
+    UNLOCK;
     return NF_ACCEPT;
 }
 
@@ -69,6 +75,8 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
 
     unsigned char *packetData = skb->data;
     unsigned packetLen = skb->len;
+
+    LOCK;
 
     // Get the VM memory if there is at least one module loaded,
     // if not, accept the packet regardless.
@@ -104,6 +112,7 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
     }
 
 accept:
+    UNLOCK;
     return NF_ACCEPT;
 }
 
