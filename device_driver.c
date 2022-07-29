@@ -119,6 +119,8 @@ static wasm_vm_result load_module(char *name, char *buffer, unsigned length, cha
                 return result;
             }
         }
+
+        wasm_vm_dump_symbols(vm);
     }
 
     return result;
@@ -134,8 +136,6 @@ static int device_release(struct inode *inode, struct file *file)
 
     if (device_buffer_size)
     {
-        char *buffer = device_buffer;
-
         json = json_parse_string(device_buffer);
         JSON_Object *root = json_value_get_object(json);
         char *command = json_object_get_string(root, "command");

@@ -25,9 +25,11 @@ static wasm_vm *vms[NR_CPUS];
 
 static M3Result m3_link_all(IM3Module module);
 
-wasm_vm *wasm_vm_new(unsigned stack)
+wasm_vm *wasm_vm_new(int cpu)
 {
     wasm_vm *vm = kmalloc(sizeof(wasm_vm), GFP_ATOMIC);
+
+    vm->cpu = cpu;
 
     vm->_env = m3_NewEnvironment();
     if (vm->_env == NULL)
@@ -36,7 +38,7 @@ wasm_vm *wasm_vm_new(unsigned stack)
         return NULL;
     }
 
-    vm->_runtime = m3_NewRuntime(vm->_env, stack, NULL);
+    vm->_runtime = m3_NewRuntime(vm->_env, STACK_SIZE_BYTES, NULL);
     if (vm->_runtime == NULL)
     {
         m3_FreeEnvironment(vm->_env);
@@ -79,7 +81,7 @@ wasm_vm_result wasm_vm_new_per_cpu(void)
     for_each_possible_cpu(cpu)
     {
         printk("wasm3: creating vm for cpu %d", cpu);
-        vms[cpu] = wasm_vm_new(STACK_SIZE_BYTES);
+        vms[cpu] = wasm_vm_new(cpu);
     }
     return (wasm_vm_result){.err = NULL};
 }
@@ -423,4 +425,38 @@ static M3Result m3_link_all(IM3Module module)
 #endif
 
     return res;
+}
+
+static void *print_module_symbols(IM3Module module, void * i_info)
+{
+    printk("wasm3:   module = %s\n", module->name);
+    int i;
+    for (i = 0; i < module->numGlobals; i++)
+    {
+        printk("wasm3:     global -> %s", module->globals[i].name);
+    }
+    for (i = 0; i < module->numFunctions; i++)
+    {
+        IM3Function f = & module->functions [i];
+
+        bool isImported = f->import.moduleUtf8 or f->import.fieldUtf8;
+
+        if (isImported)
+            printk("wasm3:     import -> %s.%s", f->import.moduleUtf8, f->names[0]);
+    }
+    for (i = 0; i < module->numFunctions; i++)
+    {
+        IM3Function f = & module->functions [i];
+
+        if (f->numNames > 1)
+            printk("wasm3:     function -> %s", f->names[0]);
+    }
+    
+    return NULL;
+}
+
+void wasm_vm_dump_symbols(wasm_vm *vm)
+{
+    printk("wasm3: vm for cpu = %d\n", vm->cpu);
+    ForEachModule(vm->_runtime, print_module_symbols, NULL);
 }
