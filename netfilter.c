@@ -4,13 +4,6 @@
 #include "netfilter.h"
 #include "runtime.h"
 
-static DEFINE_SPINLOCK(lock);
-
-#define LOCK                  \
-    unsigned long lock_flags; \
-    spin_lock_irqsave(&lock, lock_flags);
-#define UNLOCK spin_unlock_irqrestore(&lock, lock_flags);
-
 static struct nf_hook_ops nfho_in;  // net filter hook option struct
 static struct nf_hook_ops nfho_out; // net filter hook option struct
 
@@ -24,19 +17,20 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
     unsigned char *packetData = skb->data;
     unsigned packetLen = skb->len;
 
-    LOCK;
+    wasm_vm *vm = current_wasm_vm();
+    wasm_vm_lock(vm);
 
     // printk("wasm3: skb_is_nonlinear %s (len: %d, data_len: %d)", skb_is_nonlinear(skb) ? "true" : "false", skb->len, skb->data_len);
 
     // Get the VM memory if there is at least one module loaded,
     // if not, accept the packet regardless.
-    uint8_t *mem = wasm_vm_memory(current_wasm_vm());
+    uint8_t *mem = wasm_vm_memory(vm);
     if (!mem)
     {
         goto accept;
     }
 
-    wasm_vm_result result = wasm_vm_malloc(current_wasm_vm(), packetLen);
+    wasm_vm_result result = wasm_vm_malloc(vm, packetLen);
     if (result.err)
     {
         FATAL("netfilter wasm_vm_malloc error: %s", result.err);
@@ -48,12 +42,12 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
     char *wasmPacketPtr = mem + wasmPacket;
     memcpy(wasmPacketPtr, packetData, packetLen);
 
-    result = wasm_vm_call(current_wasm_vm(),
+    result = wasm_vm_call(vm,
                           "packet_out",
                           wasmPacket,
                           packetLen);
 
-    wasm_vm_free(current_wasm_vm(), wasmPacket, packetLen);
+    wasm_vm_free(vm, wasmPacket, packetLen);
 
     if (result.err)
     {
@@ -62,7 +56,7 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
     }
 
 accept:
-    UNLOCK;
+    wasm_vm_unlock(vm);
     return NF_ACCEPT;
 }
 
@@ -76,17 +70,18 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
     unsigned char *packetData = skb->data;
     unsigned packetLen = skb->len;
 
-    LOCK;
+    wasm_vm *vm = current_wasm_vm();
+    wasm_vm_lock(vm);
 
     // Get the VM memory if there is at least one module loaded,
     // if not, accept the packet regardless.
-    uint8_t *mem = wasm_vm_memory(current_wasm_vm());
+    uint8_t *mem = wasm_vm_memory(vm);
     if (!mem)
     {
         goto accept;
     }
 
-    wasm_vm_result result = wasm_vm_malloc(current_wasm_vm(), packetLen);
+    wasm_vm_result result = wasm_vm_malloc(vm, packetLen);
     if (result.err)
     {
         FATAL("netfilter wasm_vm_malloc error: %s", result.err);
@@ -98,12 +93,12 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
     char *wasmPacketPtr = mem + wasmPacket;
     memcpy(wasmPacketPtr, packetData, packetLen);
 
-    result = wasm_vm_call(current_wasm_vm(),
+    result = wasm_vm_call(vm,
                           "packet_in",
                           wasmPacket,
                           packetLen);
 
-    wasm_vm_free(current_wasm_vm(), wasmPacket, packetLen);
+    wasm_vm_free(vm, wasmPacket, packetLen);
 
     if (result.err)
     {
@@ -112,7 +107,7 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
     }
 
 accept:
-    UNLOCK;
+    wasm_vm_unlock(vm);
     return NF_ACCEPT;
 }
 

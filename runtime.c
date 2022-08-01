@@ -46,6 +46,8 @@ wasm_vm *wasm_vm_new(int cpu)
         return NULL;
     }
 
+    spin_lock_init(&vm->_lock);
+
     return vm;
 }
 
@@ -459,4 +461,14 @@ void wasm_vm_dump_symbols(wasm_vm *vm)
 {
     printk("wasm3: vm for cpu = %d\n", vm->cpu);
     ForEachModule(vm->_runtime, print_module_symbols, NULL);
+}
+
+void wasm_vm_lock(wasm_vm *vm)
+{
+    spin_lock_irqsave(&vm->_lock, vm->_lock_flags);
+}
+
+void wasm_vm_unlock(wasm_vm *vm)
+{
+    spin_unlock_irqrestore(&vm->_lock, vm->_lock_flags);
 }

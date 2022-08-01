@@ -94,17 +94,20 @@ static wasm_vm_result reset_vms(void)
     return result;
 }
 
-static wasm_vm_result load_module(char *name, char *buffer, unsigned length, char *entrypoint)
+static wasm_vm_result load_module(char *name, char *code, unsigned length, char *entrypoint)
 {
     wasm_vm_result result;
     unsigned cpu;
     for_each_possible_cpu(cpu)
     {
         wasm_vm *vm = wasm_vm_for_cpu(cpu);
-        result = wasm_vm_load_module(vm, name, buffer, length);
+        wasm_vm_lock(vm);
+
+        result = wasm_vm_load_module(vm, name, code, length);
         if (result.err)
         {
             FATAL("wasm_vm_load_module: %s", result.err);
+            wasm_vm_unlock(vm);
             return result;
         }
 
@@ -116,10 +119,12 @@ static wasm_vm_result load_module(char *name, char *buffer, unsigned length, cha
             if (result.err)
             {
                 FATAL("wasm_vm_call: %s", result.err);
+                wasm_vm_unlock(vm);
                 return result;
             }
         }
 
+        wasm_vm_unlock(vm);
         wasm_vm_dump_symbols(vm);
     }
 

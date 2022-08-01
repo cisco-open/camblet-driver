@@ -11,7 +11,10 @@
 
 typedef struct wasm_vm
 {
+    spinlock_t _lock;
+    unsigned long _lock_flags;
     int cpu;
+
     IM3Environment _env;
     IM3Runtime _runtime;
 } wasm_vm;
@@ -43,5 +46,7 @@ wasm_vm_result wasm_vm_malloc(wasm_vm *vm, unsigned size);
 wasm_vm_result wasm_vm_free(wasm_vm *vm, i32 ptr, unsigned size);
 void wasm_vm_set_userdata(wasm_vm *vm, void *userdata);
 void wasm_vm_dump_symbols(wasm_vm *vm);
+void wasm_vm_lock(wasm_vm *vm);
+void wasm_vm_unlock(wasm_vm *vm);
 
 #endif
