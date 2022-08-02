@@ -57,4 +57,4 @@ load-dns-go-wasm:
 	sudo cli/cli load samples/dns-go.wasm
 
 load-dns-rust-wasm:
-	sudo cli/cli load samples/target/wasm32-unknown-unknown/release/dns-rust.wasm
+	sudo cli/cli load -name dns samples/target/wasm32-unknown-unknown/release/dns-rust.wasm

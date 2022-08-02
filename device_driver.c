@@ -115,7 +115,7 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
         {
             printk("wasm3: calling module entrypoint: %s", entrypoint);
 
-            result = wasm_vm_call(vm, entrypoint);
+            result = wasm_vm_call(vm, name, entrypoint);
             if (result.err)
             {
                 FATAL("wasm_vm_call: %s", result.err);

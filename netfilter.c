@@ -30,7 +30,7 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
         goto accept;
     }
 
-    wasm_vm_result result = wasm_vm_malloc(vm, packetLen);
+    wasm_vm_result result = wasm_vm_malloc(vm, "dns", packetLen);
     if (result.err)
     {
         FATAL("netfilter wasm_vm_malloc error: %s", result.err);
@@ -43,11 +43,12 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
     memcpy(wasmPacketPtr, packetData, packetLen);
 
     result = wasm_vm_call(vm,
+                          "dns",
                           "packet_out",
                           wasmPacket,
                           packetLen);
 
-    wasm_vm_free(vm, wasmPacket, packetLen);
+    wasm_vm_free(vm, "dns", wasmPacket, packetLen);
 
     if (result.err)
     {
@@ -81,7 +82,7 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
         goto accept;
     }
 
-    wasm_vm_result result = wasm_vm_malloc(vm, packetLen);
+    wasm_vm_result result = wasm_vm_malloc(vm, "dns", packetLen);
     if (result.err)
     {
         FATAL("netfilter wasm_vm_malloc error: %s", result.err);
@@ -94,11 +95,12 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
     memcpy(wasmPacketPtr, packetData, packetLen);
 
     result = wasm_vm_call(vm,
+                          "dns",
                           "packet_in",
                           wasmPacket,
                           packetLen);
 
-    wasm_vm_free(vm, wasmPacket, packetLen);
+    wasm_vm_free(vm, "dns", wasmPacket, packetLen);
 
     if (result.err)
     {

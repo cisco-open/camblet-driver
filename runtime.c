@@ -90,7 +90,7 @@ wasm_vm_result wasm_vm_new_per_cpu(void)
 
 wasm_vm_result wasm_vm_destroy_per_cpu(void)
 {
-    if (vms)
+    if (vms[0])
     {
         int cpu = 0;
         for_each_possible_cpu(cpu)
@@ -187,12 +187,12 @@ on_error:
     return (wasm_vm_result){.err = result};
 }
 
-wasm_vm_result wasm_vm_call(wasm_vm *vm, const char *name, ...)
+wasm_vm_result wasm_vm_call(wasm_vm *vm, const char *module, const char *name, ...)
 {
     M3Result result = m3Err_none;
     IM3Function func = NULL;
 
-    result = m3_FindFunction(&func, vm->_runtime, name);
+    result = m3_FindFunctionInModule(&func, vm->_runtime, module, name);
     if (result)
         return (wasm_vm_result){.err = result};
 
@@ -281,14 +281,14 @@ wasm_vm_result wasm_vm_global(wasm_vm *vm, const char *name)
     }
 }
 
-wasm_vm_result wasm_vm_malloc(wasm_vm *vm, unsigned size)
+wasm_vm_result wasm_vm_malloc(wasm_vm *vm, const char *module, unsigned size)
 {
-    return wasm_vm_call(vm, "malloc", size);
+    return wasm_vm_call(vm, module, "malloc", size);
 }
 
-wasm_vm_result wasm_vm_free(wasm_vm *vm, i32 ptr, unsigned size)
+wasm_vm_result wasm_vm_free(wasm_vm *vm, const char *module, i32 ptr, unsigned size)
 {
-    return wasm_vm_call(vm, "free", ptr, size);
+    return wasm_vm_call(vm, module, "free", ptr, size);
 }
 
 m3ApiRawFunction(m3_ext_table_add)
@@ -320,7 +320,7 @@ m3ApiRawFunction(m3_ext_table_get)
     void* data_ptr = NULL;
     i32 data_len = 0;
 
-    get_from_module_hashtable(key, &data_ptr, &data_len);
+    get_from_module_hashtable(_ctx->function->module->name, key, &data_ptr, &data_len);
 
     if (!data_ptr)
     {
@@ -338,7 +338,7 @@ m3ApiRawFunction(m3_ext_table_keys)
     void* data_ptr;
     i32 data_len;
 
-    keys_from_module_hashtable(&data_ptr, &data_len);
+    keys_from_module_hashtable(_ctx->function->module->name, &data_ptr, &data_len);
     i64 res = ((i64)data_ptr << 32) | (i64) data_len;
     m3ApiReturn(res);
 }
