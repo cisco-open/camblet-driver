@@ -472,3 +472,8 @@ void wasm_vm_unlock(wasm_vm *vm)
 {
     spin_unlock_irqrestore(&vm->_lock, vm->_lock_flags);
 }
+
+wasm_vm_module *wasm_vm_get_module(wasm_vm *vm, const char *name)
+{
+    return (wasm_vm_module*) ForEachModule (vm->_runtime, (ModuleVisitor) v_FindModule, (void *) name);
+}

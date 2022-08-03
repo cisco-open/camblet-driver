@@ -2,6 +2,7 @@
 #define wasm_module_h
 
 #include "wasm3/source/m3_core.h"
+#include "wasm3/source/m3_env.h"
 #include "wasm3/source/wasm3.h"
 
 #define FATAL(msg, ...)                                    \
@@ -31,6 +32,7 @@ typedef struct wasm_vm_result
     char *err;
 } wasm_vm_result;
 
+typedef M3Module wasm_vm_module;
 
 wasm_vm *wasm_vm_for_cpu(unsigned cpu);
 wasm_vm *current_wasm_vm(void);
@@ -48,5 +50,6 @@ void wasm_vm_set_userdata(wasm_vm *vm, void *userdata);
 void wasm_vm_dump_symbols(wasm_vm *vm);
 void wasm_vm_lock(wasm_vm *vm);
 void wasm_vm_unlock(wasm_vm *vm);
+wasm_vm_module *wasm_vm_get_module(wasm_vm *vm, const char *name);
 
 #endif

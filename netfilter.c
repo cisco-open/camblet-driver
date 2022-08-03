@@ -4,6 +4,8 @@
 #include "netfilter.h"
 #include "runtime.h"
 
+#define DNS_MODULE "dns"
+
 static struct nf_hook_ops nfho_in;  // net filter hook option struct
 static struct nf_hook_ops nfho_out; // net filter hook option struct
 
@@ -30,7 +32,13 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
         goto accept;
     }
 
-    wasm_vm_result result = wasm_vm_malloc(vm, "dns", packetLen);
+    wasm_vm_module *module = wasm_vm_get_module(vm, DNS_MODULE);
+    if (!module)
+    {
+        goto accept;
+    }
+
+    wasm_vm_result result = wasm_vm_malloc(vm, DNS_MODULE, packetLen);
     if (result.err)
     {
         FATAL("netfilter wasm_vm_malloc error: %s", result.err);
@@ -43,12 +51,12 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
     memcpy(wasmPacketPtr, packetData, packetLen);
 
     result = wasm_vm_call(vm,
-                          "dns",
+                          DNS_MODULE,
                           "packet_out",
                           wasmPacket,
                           packetLen);
 
-    wasm_vm_free(vm, "dns", wasmPacket, packetLen);
+    wasm_vm_free(vm, DNS_MODULE, wasmPacket, packetLen);
 
     if (result.err)
     {
@@ -82,7 +90,13 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
         goto accept;
     }
 
-    wasm_vm_result result = wasm_vm_malloc(vm, "dns", packetLen);
+    wasm_vm_module *module = wasm_vm_get_module(vm, DNS_MODULE);
+    if (!module)
+    {
+        goto accept;
+    }
+
+    wasm_vm_result result = wasm_vm_malloc(vm, DNS_MODULE, packetLen);
     if (result.err)
     {
         FATAL("netfilter wasm_vm_malloc error: %s", result.err);
@@ -95,12 +109,12 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
     memcpy(wasmPacketPtr, packetData, packetLen);
 
     result = wasm_vm_call(vm,
-                          "dns",
+                          DNS_MODULE,
                           "packet_in",
                           wasmPacket,
                           packetLen);
 
-    wasm_vm_free(vm, "dns", wasmPacket, packetLen);
+    wasm_vm_free(vm, DNS_MODULE, wasmPacket, packetLen);
 
     if (result.err)
     {
