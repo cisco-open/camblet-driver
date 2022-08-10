@@ -72,17 +72,19 @@ Check the kernel logs for the `Hello` message.
 The `samples/` directory contains webassembly targeted example applications, the main one is a DNS packet capturer/parser application, which gets called back by the kernel module through netfilter.
 
 ```bash
+# On your local machine
 cd samples/
 # check/edit the code if you like
 vim main.rs
 # build the webassembly module from the code
 make rust-sample
 # Build the CLI
-cd ../cli
-go build
 cd ..
+make build-cli
+# SSH inside the vagrant machine using vagrant ssh
+# and cd into the /vagrant directory
 # load the wasm module to the kernel module
-sudo cli/cli load samples/dns-rust.wasm
+make load-dns-rust-wasm
 # exercise DNS a bit to capture some packages
 dig +ttlunits telex.hu
 # check the logs to see the parsed messages

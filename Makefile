@@ -58,3 +58,7 @@ load-dns-go-wasm:
 
 load-dns-rust-wasm:
 	sudo cli/cli load -name dns samples/target/wasm32-unknown-unknown/release/dns-rust.wasm
+
+# Build the CLI
+build-cli:
+	export GOOS=linux; cd cli; go build
