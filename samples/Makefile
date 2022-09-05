@@ -5,5 +5,5 @@ go-sample:
 	-opt=z main.go
 
 rust-sample:
-	cargo build --target wasm32-unknown-unknown --release
+	cargo build --release
 	cp target/wasm32-unknown-unknown/release/dns-rust.wasm .

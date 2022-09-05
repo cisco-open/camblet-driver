@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::slice;
 use std::str;
+use serde_json as serde_json;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct DnsTurnaround {
@@ -195,7 +196,7 @@ extern "C" fn packet_in(packet: &[u8]) {
                                             .collect();
                                         t.latency_ns = query.latency_ns - t.latency_ns;
                                         t.response_code = dns.header.response_code.into();
-                                        let json = serde_json_wasm::to_string(&t).unwrap() + "\n";
+                                        let json = serde_json::to_string(&t).unwrap() + "\n";
                                         submit_metric(&json);
                                         table_del(id as i32);
                                     }
@@ -214,7 +215,7 @@ extern "C" fn packet_in(packet: &[u8]) {
                                             if is_timeouted {
                                                 v.response_code = 255;
                                                 let json =
-                                                    serde_json_wasm::to_string(&v).unwrap() + "\n";
+                                                    serde_json::to_string(&v).unwrap() + "\n";
                                                 submit_metric(&json);
                                                 table_del(i);
                                             }
@@ -269,14 +270,14 @@ fn get_packet(id: i32) -> Option<DnsTurnaround> {
 
         let rawdata = slice::from_raw_parts(ptr as *const u8, len as usize);
 
-        let data: Result<DnsTurnaround, _> = serde_json_wasm::from_slice(rawdata);
+        let data: Result<DnsTurnaround, _> = serde_json::from_slice(rawdata);
         data.ok()
     }
 }
 
 fn add_packet(id: i32, value: DnsTurnaround) {
     unsafe {
-        let mut rawdata = serde_json_wasm::to_vec(&value).unwrap();
+        let mut rawdata = serde_json::to_vec(&value).unwrap();
         let p = rawdata.as_mut_ptr();
         let lenght = rawdata.len();
 
