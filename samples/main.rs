@@ -51,12 +51,8 @@ extern "C" {
     fn submit_metric(metric: &str) -> i32;
     fn _debug(s: &str) -> i32;
     fn clock_ns() -> i64;
-    // TODO uncomment this function if the RawFunction multi value return gets supported on wasm3(baluchicken)
-    // fn table_get(id: i32) -> (i32, i32);
-    fn table_get(id: i32) -> i64;
-    // TODO uncomment this function if the RawFunction multi value return gets supported on wasm3(baluchicken)
-    // fn table_keys() -> (i32, i32);
-    fn table_keys() -> i64;
+    fn table_get(id: i32) -> (i32, i32);
+    fn table_keys() -> (i32, i32);
     fn table_add(key: i32, value_ptr: i32, value_lenght: i32);
     fn table_del(key: i32);
 }
@@ -245,11 +241,7 @@ extern "C" fn packet_in(packet: &[u8]) {
 
 fn get_packet_keys() -> Vec<i32> {
     unsafe {
-        // TODO remove this i64 based return type once the multi value RawFunction
-        // return type gets supported by wasm3 (baluchicken)
-        let res = table_keys();
-        let ptr: i32 = (res >> 32) as i32;
-        let len: i32 = res as i32;
+        let (ptr, len) = table_keys();
         let rawkeys = slice::from_raw_parts(ptr as *const i32, len as usize);
 
         return rawkeys.to_vec();
@@ -258,15 +250,10 @@ fn get_packet_keys() -> Vec<i32> {
 
 fn get_packet(id: i32) -> Option<DnsTurnaround> {
     unsafe {
-        // TODO remove this i64 based return type once the multi value RawFunction
-        // return type gets supported by wasm3 (baluchicken)
-        let res = table_get(id);
-        if res == 0 {
+        let (ptr, len) = table_get(id);
+        if ptr == 0 {
             return None;
         }
-
-        let ptr: i32 = (res >> 32) as i32;
-        let len: i32 = res as i32;
 
         let rawdata = slice::from_raw_parts(ptr as *const u8, len as usize);
 

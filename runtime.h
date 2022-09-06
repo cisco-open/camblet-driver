@@ -10,6 +10,10 @@
         printk("wasm3: Error: [Fatal] " msg "\n", ##__VA_ARGS__); \
     }
 
+// MAX_RETURN_VALUES defines the amount of return values.
+// currently only 5 return value supported per function.
+#define MAX_RETURN_VALUES 5
+
 typedef struct wasm_vm
 {
     spinlock_t _lock;
@@ -28,7 +32,7 @@ typedef struct wasm_vm_result
         i64 i64;
         f32 f32;
         f64 f64;
-    };
+    } data[MAX_RETURN_VALUES];
     char *err;
 } wasm_vm_result;
 

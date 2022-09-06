@@ -214,9 +214,8 @@ wasm_vm_result wasm_vm_call(wasm_vm *vm, const char *module, const char *name, .
         return (wasm_vm_result){.err = NULL};
     }
 
-    static uint64_t valbuff[1];
-    static const void *valptrs[1];
-    memset(valbuff, 0, sizeof(valbuff));
+    static uint64_t valbuff[MAX_RETURN_VALUES] = {0};
+    static const void *valptrs[MAX_RETURN_VALUES];
     int i;
     for (i = 0; i < ret_count; i++)
     {
@@ -227,22 +226,31 @@ wasm_vm_result wasm_vm_call(wasm_vm *vm, const char *module, const char *name, .
     {
         return (wasm_vm_result){.err = "failed to get results for call"};
     }
-
-    switch (m3_GetRetType(func, 0))
+    wasm_vm_result vm_result;
+    for(i = 0; i < ret_count; i++)
     {
-    case c_m3Type_i32:
-        return (wasm_vm_result){.i32 = *(i32 *)valptrs[0], .err = NULL};
-    case c_m3Type_i64:
-        return (wasm_vm_result){.i64 = *(i64 *)valptrs[0], .err = NULL};
+        switch (m3_GetRetType(func, i))
+        {
+        case c_m3Type_i32:
+            vm_result.data[i].i32 = *(i32 *)valptrs[i];
+            break;
+        case c_m3Type_i64:
+            vm_result.data[i].i64 = *(i64 *)valptrs[i];
+            break;
 # if d_m3HasFloat
-    case c_m3Type_f32:
-        return (wasm_vm_result){.f32 = *(f32 *)valptrs[0], .err = NULL};
-    case c_m3Type_f64:
-        return (wasm_vm_result){.f64 = *(f64 *)valptrs[0], .err = NULL};
+        case c_m3Type_f32:
+            vm_result.data[i].f32 = *(f32 *)valptrs[i];
+            break;
+        case c_m3Type_f64:
+            vm_result.data[i].f64 = *(f64 *)valptrs[i];
+            break;
 # endif
-    default:
-        return (wasm_vm_result){.err = "unknown return type"};
+        default:
+            return (wasm_vm_result){.err = "unknown return type"};
+        }
     }
+    vm_result.err = NULL;
+    return vm_result;
 }
 
 uint8_t *wasm_vm_memory(wasm_vm *vm)
@@ -267,14 +275,14 @@ wasm_vm_result wasm_vm_global(wasm_vm *vm, const char *name)
     switch (tagged.type)
     {
     case c_m3Type_i32:
-        return (wasm_vm_result){.i32 = tagged.value.i32};
+        return (wasm_vm_result){.data[0].i32 = tagged.value.i32};
     case c_m3Type_i64:
-        return (wasm_vm_result){.i64 = tagged.value.i64};
+        return (wasm_vm_result){.data[0].i64 = tagged.value.i64};
 # if d_m3HasFloat
     case c_m3Type_f32:
-        return (wasm_vm_result){.f32 = tagged.value.f32};
+        return (wasm_vm_result){.data[0].f32 = tagged.value.f32};
     case c_m3Type_f64:
-        return (wasm_vm_result){.f64 = tagged.value.f64};
+        return (wasm_vm_result){.data[0].f64 = tagged.value.f64};
 #endif
     default:
         return (wasm_vm_result){};
@@ -293,10 +301,10 @@ wasm_vm_result wasm_vm_free(wasm_vm *vm, const char *module, i32 ptr, unsigned s
 
 m3ApiRawFunction(m3_ext_table_add)
 {
-    m3ApiGetArg(i32,   key)
+    m3ApiGetArg(i32,   key);
 
-    m3ApiGetArgMem(void*,    i_ptr)
-    m3ApiGetArg(wasm_size_t,  i_size)
+    m3ApiGetArgMem(void*,    i_ptr);
+    m3ApiGetArg(wasm_size_t,  i_size);
 
     m3ApiCheckMem(i_ptr, i_size);
 
@@ -306,7 +314,7 @@ m3ApiRawFunction(m3_ext_table_add)
 
 m3ApiRawFunction(m3_ext_table_del)
 {
-    m3ApiGetArg(i32, key)
+    m3ApiGetArg(i32, key);
 
     delete_from_module_hashtable(key);
     m3ApiSuccess();
@@ -314,8 +322,9 @@ m3ApiRawFunction(m3_ext_table_del)
 
 m3ApiRawFunction(m3_ext_table_get)
 {
-    m3ApiReturnType (i64)
-    m3ApiGetArg     (i32,     key)
+    m3ApiMultiValueReturnType (i32, ptr);
+    m3ApiMultiValueReturnType (i32, len);
+    m3ApiGetArg     (i32,     key);
 
     void* data_ptr = NULL;
     i32 data_len = 0;
@@ -324,31 +333,37 @@ m3ApiRawFunction(m3_ext_table_get)
 
     if (!data_ptr)
     {
-        m3ApiReturn(0);
+        m3ApiMultiValueReturn(len, 0);
+        m3ApiMultiValueReturn(ptr, 0);
+        m3ApiSuccess();
     }
 
-    i64 res = ((i64)data_ptr << 32) | (i64) data_len;
-    m3ApiReturn(res);
+    m3ApiMultiValueReturn(len, (i32)data_len);
+    m3ApiMultiValueReturn(ptr, (i32)data_ptr);
+    m3ApiSuccess();
 }
 
 m3ApiRawFunction(m3_ext_table_keys)
 {
-    m3ApiReturnType (i64)
+    m3ApiMultiValueReturnType (i32, ptr);
+    m3ApiMultiValueReturnType (i32, len);
 
     void* data_ptr;
     i32 data_len;
 
     keys_from_module_hashtable(_ctx->function->module->name, &data_ptr, &data_len);
-    i64 res = ((i64)data_ptr << 32) | (i64) data_len;
-    m3ApiReturn(res);
+
+    m3ApiMultiValueReturn(len, (i32)data_len);
+    m3ApiMultiValueReturn(ptr, (i32)data_ptr);
+    m3ApiSuccess();
 }
 
 m3ApiRawFunction(m3_ext_submit_metric)
 {
-    m3ApiReturnType (uint32_t)
+    m3ApiReturnType (uint32_t);
     
-    m3ApiGetArgMem  (void*,           i_ptr)
-    m3ApiGetArg     (wasm_size_t,     i_size)
+    m3ApiGetArgMem  (void*,           i_ptr);
+    m3ApiGetArg     (wasm_size_t,     i_size);
 
     m3ApiCheckMem(i_ptr, i_size);
     
@@ -381,8 +396,8 @@ static M3Result m3_LinkRuntimeExtension(IM3Module module)
     const char *env = "env";
 
     _(SuppressLookupFailure(m3_LinkRawFunction(module, env, "submit_metric", "i(*i)", &m3_ext_submit_metric)));
-    _(SuppressLookupFailure(m3_LinkRawFunction(module, env, "table_get", "I(i)", &m3_ext_table_get)));
-    _(SuppressLookupFailure(m3_LinkRawFunction(module, env, "table_keys", "I()", &m3_ext_table_keys)));
+    _(SuppressLookupFailure(m3_LinkRawFunction(module, env, "table_get", "ii(i)", &m3_ext_table_get)));
+    _(SuppressLookupFailure(m3_LinkRawFunction(module, env, "table_keys", "ii()", &m3_ext_table_keys)));
     _(SuppressLookupFailure(m3_LinkRawFunction(module, env, "table_add", "(i*i)", &m3_ext_table_add)));
     _(SuppressLookupFailure(m3_LinkRawFunction(module, env, "table_del", "(i)", &m3_ext_table_del)));
 
@@ -450,8 +465,9 @@ static void *print_module_symbols(IM3Module module, void * i_info)
     {
         IM3Function f = & module->functions [i];
 
-        if (f->numNames > 1)
-            printk("wasm3:     function -> %s", f->names[0]);
+        if (f->numNames > 1) {
+            printk("wasm3:     function -> %s(%d) -> %d", f->names[0], f->funcType->numArgs, f->funcType->numRets);
+        }
     }
     
     return NULL;

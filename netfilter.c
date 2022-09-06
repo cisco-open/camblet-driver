@@ -45,7 +45,7 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
         goto accept;
     }
 
-    i32 wasmPacket = result.i32;
+    i32 wasmPacket = result.data[0].i32;
 
     char *wasmPacketPtr = mem + wasmPacket;
     memcpy(wasmPacketPtr, packetData, packetLen);
@@ -103,7 +103,7 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
         goto accept;
     }
 
-    i32 wasmPacket = result.i32;
+    i32 wasmPacket = result.data[0].i32;
 
     char *wasmPacketPtr = mem + wasmPacket;
     memcpy(wasmPacketPtr, packetData, packetLen);

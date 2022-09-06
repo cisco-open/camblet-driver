@@ -76,7 +76,7 @@ void keys_from_module_hashtable(const char *module, void **data, i32 *data_lengt
         return;
     }
 
-    i32 wasm_mem_ptr = result.i32;
+    i32 wasm_mem_ptr = result.data[0].i32;
     void *hashmapKeys = mem + wasm_mem_ptr;
     memcpy(hashmapKeys, keys, sizeof(int) * HASH_TABLE_ELEMENTS);
 
@@ -109,7 +109,7 @@ void get_from_module_hashtable(const char *module, i32 id, void **data, i32 *dat
         return;
     }
 
-    i32 wasm_mem_ptr = result.i32;
+    i32 wasm_mem_ptr = result.data[0].i32;
 
     void *lookedUpData = mem + wasm_mem_ptr;
     memcpy(lookedUpData, temp->data, temp->data_length);
