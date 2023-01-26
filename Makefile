@@ -1,6 +1,17 @@
+EXTRA_CFLAGS := -foptimize-sibling-calls -Dd_m3RecordBacktraces=1 -DDEBUG=1 #-Dd_m3LogCompile=1
+
+# Enable floating point arithmetic
+ARCH := $(shell uname -m)
+ifeq ($(ARCH),x86_64)
+	EXTRA_CFLAGS += -msse4
 # TODO: Otherwise __popcountdi2 is undefined.
 # https://stackoverflow.com/questions/52161596/why-is-builtin-popcount-slower-than-my-own-bit-counting-function
-EXTRA_CFLAGS := -march=native -foptimize-sibling-calls -msse4 -Dd_m3RecordBacktraces=1 -DDEBUG=1 #-Dd_m3LogCompile=1
+	EXTRA_CFLAGS += -march=native
+endif
+ifeq ($(ARCH),aarch64)
+	# https://www.kernel.org/doc/Documentation/kbuild/makefiles.rst
+	ccflags-remove-y := -mgeneral-regs-only
+endif
 
 VERBOSE := 1
 

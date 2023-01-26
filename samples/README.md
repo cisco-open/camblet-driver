@@ -1,5 +1,15 @@
 # WebAssembly samples in various languages
 
+## Setup Rust
+
+```bash
+brew install rustup
+rustup-init
+rustup target add wasm32-unknown-unknown
+```
+
+## Build the examples
+
 ```bash
 # Rust
 cargo build --target wasm32-unknown-unknown --release

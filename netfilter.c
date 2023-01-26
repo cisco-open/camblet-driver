@@ -13,7 +13,7 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
 {
     if (!skb)
     {
-        goto accept;
+        return NF_ACCEPT;
     }
 
     unsigned char *packetData = skb->data;
@@ -73,7 +73,7 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
 {
     if (!skb)
     {
-        goto accept;
+        return NF_ACCEPT;
     }
 
     unsigned char *packetData = skb->data;

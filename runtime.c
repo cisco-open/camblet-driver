@@ -27,7 +27,7 @@ static M3Result m3_link_all(IM3Module module);
 
 wasm_vm *wasm_vm_new(int cpu)
 {
-    wasm_vm *vm = kmalloc(sizeof(wasm_vm), GFP_ATOMIC);
+    wasm_vm *vm = kmalloc(sizeof(wasm_vm), GFP_KERNEL);
 
     vm->cpu = cpu;
 
@@ -456,7 +456,7 @@ static void *print_module_symbols(IM3Module module, void * i_info)
     {
         IM3Function f = & module->functions [i];
 
-        bool isImported = f->import.moduleUtf8 or f->import.fieldUtf8;
+        bool isImported = f->import.moduleUtf8 || f->import.fieldUtf8;
 
         if (isImported)
             printk("wasm3:     import -> %s.%s", f->import.moduleUtf8, f->names[0]);
