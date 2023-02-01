@@ -28,17 +28,17 @@ make
 
 Install the module:
 ```
-sudo insmod wasm3.ko
+make insmod
 ```
 
 Remove the module:
 ```
-sudo rmmod wasm3
+make rmmod
 ```
 
 Follow logs:
 ```
-sudo dmesg -T --follow
+make logs
 ```
 
 ## Load a wasm module to the kernel module runtime:
@@ -92,9 +92,9 @@ sudo dmesg -T --follow
 
 
 # use exported metrics through UNIX socket
-sudo socat - UNIX-CONNECT:/run/wasm3.socket
+sudo socat - UNIX-CONNECT:/run/wasm.socket
 # always delete the socket file before loading the kernel module again
-sudo rm -f /run/wasm3.socket
+sudo rm -f /run/wasm.socket
 ```
 
 ## Development environment

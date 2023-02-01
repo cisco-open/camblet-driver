@@ -16,8 +16,8 @@ endif
 VERBOSE := 1
 
 # obj-m specifies we're a kernel module.
-obj-m += wasm3.o
-wasm3-objs := wasm3/source/m3_api_libc.o \
+obj-m += wasm.o
+wasm-objs :=  wasm3/source/m3_api_libc.o \
               wasm3/source/m3_compile.o \
 			  wasm3/source/m3_api_meta_wasi.o \
 			  wasm3/source/m3_api_tracer.o \
@@ -62,7 +62,14 @@ build-in-docker:
 	docker run -ti --rm -v $(shell pwd):/workspace -v /dev:/dev -v /run/guest-services:/run/guest-services -v /lib/modules:/lib/modules --privileged builder
 
 insmod-in-docker:
-	insmod /workspace/wasm3.ko sock_path=/run/guest-services/wasm3.socket
+	insmod /workspace/wasm.ko sock_path=/run/guest-services/wasm.socket
+
+insmod:
+	sudo insmod wasm.ko
+
+rmmod:
+	sudo rmmod wasm
+	sudo rm -f /run/wasm.socket
 
 load-dns-go-wasm:
 	sudo cli/cli load samples/dns-go.wasm

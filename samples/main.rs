@@ -1,18 +1,20 @@
-use dns_parser::Packet as DnsPacket;
-use etherparse::*;
+use domain::base::Message;
+use pdu::{Ip, Ipv4, Udp};
+use postcard;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::slice;
 use std::str;
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct DnsTurnaround {
-    name: String,
-    records: Vec<String>,
+    // name: String,
+    questions: u16,
+    answers: u16,
     latency_ns: i64,
-    client: String,
-    server: String,
+    client: IpAddr,
+    server: IpAddr,
     response_code: u8,
 }
 
@@ -53,7 +55,7 @@ extern "C" {
     fn clock_ns() -> i64;
     fn table_get(id: i32) -> (i32, i32);
     fn table_keys() -> (i32, i32);
-    fn table_add(key: i32, value_ptr: i32, value_lenght: i32);
+    fn table_add(key: i32, value_ptr: i32, value_length: i32);
     fn table_del(key: i32);
 }
 
@@ -69,168 +71,231 @@ macro_rules! println {
 
 #[no_mangle]
 unsafe extern "C" fn packet_out(packet: &[u8]) {
-    let mut query = DnsTurnaround::default();
-    query.latency_ns = clock_ns();
+    let now = clock_ns();
+    match Ip::new(&packet) {
+        Ok(Ip::Ipv4(ipv4_pdu)) => {
+            match ipv4_pdu.inner() {
+                Ok(Ipv4::Udp(udp_pdu)) => {
+                    if udp_pdu.destination_port() == 53 {
+                        println!("[ipv4] possible DNS question");
+                        match udp_pdu.into_inner() {
+                            Ok(Udp::Raw(data)) => {
+                                println!("[ipv4] parsing DNS question: {:?}", data);
+                                match Message::from_octets(data) {
+                                    Ok(dns) => {
+                                        println!(
+                                            "[ipv4] parsed DNS header: {:?}",
+                                            dns.header_section()
+                                        );
+                                        println!(
+                                            "[ipv4] parsed DNS opcode: {:?}",
+                                            dns.header().opcode()
+                                        );
+                                        println!(
+                                            "[ipv4] parsed DNS rcode: {:?}",
+                                            dns.header().rcode()
+                                        );
+                                        println!("[ipv4] parsed DNS id: {:?}", dns.header().id());
+                                        println!(
+                                            "[ipv4] parsed DNS questions: {:?}",
+                                            dns.header_counts().qdcount()
+                                        );
 
-    match PacketHeaders::from_ip_slice(packet) {
-        Err(err) => {
-            println!("wasm3: ip packet parser error: {:?}", err);
-            return;
-        }
-        Ok(value) => {
-            match value.ip {
-                Some(IpHeader::Version4(hdr, _ext)) => {
-                    query.client = Ipv4Addr::from(hdr.source).to_string();
-                    query.server = Ipv4Addr::from(hdr.destination).to_string();
-                }
-                Some(IpHeader::Version6(hdr, _ext)) => {
-                    query.client = Ipv6Addr::from(hdr.source).to_string();
-                    query.server = Ipv6Addr::from(hdr.destination).to_string();
-                }
-                None => return,
-            };
+                                        let turnaround = DnsTurnaround {
+                                            latency_ns: now,
+                                            questions: dns.header_counts().qdcount(),
+                                            answers: 0,
+                                            client: IpAddr::V4(Ipv4Addr::from(
+                                                ipv4_pdu.source_address(),
+                                            )),
+                                            server: IpAddr::V4(Ipv4Addr::from(
+                                                ipv4_pdu.destination_address(),
+                                            )),
+                                            response_code: 0,
+                                        };
 
-            match value.transport {
-                Some(TransportHeader::Udp(hdr)) => {
-                    if hdr.destination_port != 53 {
-                        println!(
-                            "wasm3: UDP packet to {} -> {}",
-                            hdr.source_port, hdr.destination_port
-                        );
-                        return;
-                    }
+                                        // match dns.sole_question() {
+                                        //     Ok(question) => {
+                                        //         match question.qname().to_dname::<heapless::Vec<u8, 256>>() {
+                                        //             Ok(dname) => println!("dname: {}", dname),
+                                        //             Err(e) => println!("error: {}", e)
+                                        //         }
+                                        //     }
+                                        //     Err(e) => panic!("fatal error {}", e),
+                                        // }
 
-                    // println!("dns ip: {:?}", value.ip);
-                    // println!("dns transport: {:?}", value.transport);
-
-                    match DnsPacket::parse(value.payload) {
-                        Ok(dns) => {
-                            let id = dns.header.id;
-
-                            println!(
-                                "wasm3: {}: dns_query {} -> source ip: {}, destination ip: {}",
-                                query.latency_ns, id, query.client, query.server,
-                            );
-                            println!("wasm3: {:?}", dns);
-
-                            query.name = dns.questions[0].qname.to_string();
-                            query.records = Vec::new();
-                            query.response_code = dns.header.response_code.into();
-
-                            add_packet(id as i32, query);
+                                        add_packet(dns.header().id(), &turnaround);
+                                    }
+                                    Err(e) => {
+                                        panic!("Ipv4Pdu::inner() DNS parser failure: {:?}", e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                panic!("UdpPdu::inner() DNS parser failure: {:?}", e);
+                            }
                         }
-                        Err(e) => {
-                            println!("wasm3: dns packet parser error: {:?}", e);
-                            return;
-                        }
                     }
                 }
-                None => return,
-                _ => {}
-            };
+                Ok(_) => {
+                    // println!(
+                    //     "[ipv4] protocol: 0x{:02x} not supported",
+                    //     ipv4_pdu.protocol()
+                    // );
+                    return;
+                }
+                Err(e) => {
+                    panic!("Ipv4Pdu::inner() parser failure: {:?}", e);
+                }
+            }
+            println!(
+                "[ipv4] source_address: {:?}",
+                Ipv4Addr::from(ipv4_pdu.source_address())
+            );
+            println!(
+                "[ipv4] destination_address: {:?}",
+                Ipv4Addr::from(ipv4_pdu.destination_address())
+            );
+            println!("[ipv4] protocol: 0x{:02x}", ipv4_pdu.protocol());
+            // upper-layer protocols can be accessed via the inner() method (not shown)
         }
-    };
+        Ok(Ip::Ipv6(ipv6_pdu)) => {
+            println!(
+                "[ipv6] source_address: {:?}",
+                Ipv6Addr::from(ipv6_pdu.source_address())
+            );
+            println!(
+                "[ipv6] destination_address: {:?}",
+                Ipv6Addr::from(ipv6_pdu.destination_address())
+            );
+            println!("[ipv6] protocol: 0x{:02x}", ipv6_pdu.computed_protocol());
+            // upper-layer protocols can be accessed via the inner() method (not shown)
+        }
+        Err(e) => {
+            panic!("EthernetPdu::inner() parser failure: {:?}", e);
+        }
+    }
 }
 
 #[no_mangle]
 unsafe extern "C" fn packet_in(packet: &[u8]) {
-    let timestamp = clock_ns();
-    let mut query = DnsTurnaround::default();
-    query.latency_ns = timestamp;
+    let now = clock_ns();
+    match Ip::new(&packet) {
+        Ok(Ip::Ipv4(ipv4_pdu)) => {
+            match ipv4_pdu.inner() {
+                Ok(Ipv4::Udp(udp_pdu)) => {
+                    if udp_pdu.source_port() == 53 {
+                        println!("[ipv4] possible DNS answer");
+                        match udp_pdu.into_inner() {
+                            Ok(Udp::Raw(data)) => {
+                                println!("[ipv4] parsing DNS answer: {:?}", data);
+                                match Message::from_octets(data) {
+                                    Ok(dns) => {
+                                        println!(
+                                            "[ipv4] parsed DNS header: {:?}",
+                                            dns.header_section()
+                                        );
+                                        println!(
+                                            "[ipv4] parsed DNS opcode: {:?}",
+                                            dns.header().opcode()
+                                        );
+                                        println!(
+                                            "[ipv4] parsed DNS rcode: {:?}",
+                                            dns.header().rcode()
+                                        );
+                                        println!("[ipv4] parsed DNS id: {:?}", dns.header().id());
+                                        println!(
+                                            "[ipv4] parsed DNS answers: {:?}",
+                                            dns.header_counts().ancount()
+                                        );
 
-    match PacketHeaders::from_ip_slice(packet) {
-        Err(err) => {
-            println!("wasm3: ip packet parser error: {:?}", err);
-            return;
-        }
-        Ok(value) => {
-            match value.ip {
-                Some(IpHeader::Version4(hdr, _ext)) => {
-                    query.client = Ipv4Addr::from(hdr.source).to_string();
-                    query.server = Ipv4Addr::from(hdr.destination).to_string();
-                }
-                Some(IpHeader::Version6(hdr, _ext)) => {
-                    query.client = Ipv6Addr::from(hdr.source).to_string();
-                    query.server = Ipv6Addr::from(hdr.destination).to_string();
-                }
-                None => return,
-            };
-
-            match value.transport {
-                Some(TransportHeader::Udp(hdr)) => {
-                    if hdr.source_port != 53 {
-                        println!(
-                            "wasm3: UDP packet to {} -> {}",
-                            hdr.source_port, hdr.destination_port
-                        );
-                        return;
-                    }
-
-                    // println!("dns ip: {:?}", value.ip);
-                    // println!("dns transport: {:?}", value.transport);
-
-                    match DnsPacket::parse(value.payload) {
-                        Ok(dns) => {
-                            let id = dns.header.id;
-
-                            println!(
-                                "wasm3: {}: dns_answer {} -> source ip: {}, destination ip: {}",
-                                query.latency_ns, id, query.client, query.server,
-                            );
-
-                            println!("wasm3: {:?}", dns);
-
-                            match get_packet(id as i32) {
-                                Some(mut t) => {
-                                    t.records = dns
-                                        .answers
-                                        .into_iter()
-                                        .map(|a| format!("{:?}", a.data))
-                                        .collect();
-                                    t.latency_ns = query.latency_ns - t.latency_ns;
-                                    t.response_code = dns.header.response_code.into();
-                                    let json = serde_json::to_string(&t).unwrap() + "\n";
-                                    submit_metric(&json);
-                                    table_del(id as i32);
-                                }
-                                None => {
-                                    println!("wasm3: can't find entry in hashmap");
-                                }
-                            }
-
-                            let packet_keys = get_packet_keys();
-                            for i in packet_keys {
-                                let packet = get_packet(i);
-                                match packet {
-                                    Some(mut v) => {
-                                        let is_timeouted = (timestamp - v.latency_ns) > 1000000000;
-                                        if is_timeouted {
-                                            v.response_code = 255;
-                                            let json = serde_json::to_string(&v).unwrap() + "\n";
-                                            submit_metric(&json);
-                                            table_del(i);
+                                        match get_packet(dns.header().id() as i32) {
+                                            Some(mut t) => {
+                                                t.latency_ns = now - t.latency_ns;
+                                                t.response_code = dns.header().rcode().to_int();
+                                                let json =
+                                                    serde_json::to_string(&t).unwrap() + "\n";
+                                                submit_metric(&json);
+                                                table_del(dns.header().id() as i32);
+                                            }
+                                            None => {
+                                                println!("wasm dns: can't find entry in hashmap");
+                                            }
                                         }
                                     }
-                                    None => {
-                                        println!(
-                                            "wasm3: cant find entry in hashmap for key: {:?}",
-                                            i
-                                        );
+                                    Err(e) => {
+                                        panic!("Ipv4Pdu::inner() DNS parser failure: {:?}", e);
                                     }
                                 }
                             }
-                        }
-                        Err(e) => {
-                            println!("wasm3: dns packet parser error: {:?}", e);
-                            return;
+                            Err(e) => {
+                                panic!("UdpPdu::inner() DNS parser failure: {:?}", e);
+                            }
                         }
                     }
                 }
-                None => return,
-                _ => {}
-            };
+                Ok(_) => {
+                    // println!(
+                    //     "[ipv4] protocol: 0x{:02x} not supported",
+                    //     ipv4_pdu.protocol()
+                    // );
+                    return;
+                }
+                Err(e) => {
+                    panic!("Ipv4Pdu::inner() parser failure: {:?}", e);
+                }
+            }
+            println!(
+                "[ipv4] source_address: {:?}",
+                Ipv4Addr::from(ipv4_pdu.source_address())
+            );
+            println!(
+                "[ipv4] destination_address: {:?}",
+                Ipv4Addr::from(ipv4_pdu.destination_address())
+            );
+            println!("[ipv4] protocol: 0x{:02x}", ipv4_pdu.protocol());
+            // upper-layer protocols can be accessed via the inner() method (not shown)
         }
-    };
+        Ok(Ip::Ipv6(ipv6_pdu)) => {
+            println!(
+                "[ipv6] source_address: {:?}",
+                Ipv6Addr::from(ipv6_pdu.source_address())
+            );
+            println!(
+                "[ipv6] destination_address: {:?}",
+                Ipv6Addr::from(ipv6_pdu.destination_address())
+            );
+            println!("[ipv6] protocol: 0x{:02x}", ipv6_pdu.computed_protocol());
+            // upper-layer protocols can be accessed via the inner() method (not shown)
+        }
+        Err(e) => {
+            panic!("EthernetPdu::inner() parser failure: {:?}", e);
+        }
+    }
+
+    gc_timeouted_packets(now);
+}
+
+fn gc_timeouted_packets(now: i64) {
+    let packet_keys = get_packet_keys();
+    for id in packet_keys {
+        let packet = get_packet(id);
+        match packet {
+            Some(mut v) => {
+                let is_timeouted = (now - v.latency_ns) > 1000000000;
+                if is_timeouted {
+                    v.response_code = 255;
+                    let json = serde_json::to_string(&v).unwrap() + "\n";
+                    unsafe {
+                        println!("dns: deleting timeouted question for request id: {}", id);
+                        table_del(id);
+                        submit_metric(&json);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 fn get_packet_keys() -> Vec<i32> {
@@ -242,27 +307,35 @@ fn get_packet_keys() -> Vec<i32> {
     }
 }
 
+#[no_mangle]
 fn get_packet(id: i32) -> Option<DnsTurnaround> {
+    let rawdata: &[u8];
+
     unsafe {
         let (ptr, len) = table_get(id);
         if ptr == 0 {
             return None;
         }
 
-        let rawdata = slice::from_raw_parts(ptr as *const u8, len as usize);
+        rawdata = slice::from_raw_parts(ptr as *const u8, len as usize);
+    }
 
-        let data: Result<DnsTurnaround, _> = serde_json::from_slice(rawdata);
-        data.ok()
+    // let data: Result<DnsTurnaround, _> = serde_json::from_slice(rawdata);
+    let data = postcard::from_bytes(rawdata);
+    match data {
+        Ok(dns) => Some(dns),
+        Err(e) => {
+            panic!("there was an error parsing a value from the table: {}", e);
+        }
     }
 }
 
-fn add_packet(id: i32, value: DnsTurnaround) {
-    unsafe {
-        let mut rawdata = serde_json::to_vec(&value).unwrap();
-        let p = rawdata.as_mut_ptr();
-        let lenght = rawdata.len();
+fn add_packet(id: u16, value: &DnsTurnaround) {
+    // let rawdata = serde_json::to_vec(value).unwrap();
+    let rawdata = postcard::to_vec::<DnsTurnaround, 128>(value).unwrap();
 
-        table_add(id, p as i32, lenght as i32);
+    unsafe {
+        table_add(id as i32, rawdata.as_ptr() as i32, rawdata.len() as i32);
     }
 }
 

@@ -162,6 +162,9 @@ static int device_release(struct inode *inode, struct file *file)
             }
 
             char *entrypoint = json_object_get_string(root, "entrypoint");
+            if (entrypoint == NULL) {
+                entrypoint = "main";
+            }
 
             wasm_vm_result result = load_module(name, device_buffer, length, entrypoint);
             if (result.err)

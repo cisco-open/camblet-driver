@@ -11,7 +11,7 @@ static struct socket *sock;
 static struct socket *c_sock;
 static bool c_connected = false;
 
-static char *sock_path = "/run/wasm3.socket";
+static char *sock_path = "/run/wasm.socket";
 
 module_param(sock_path, charp, 0000);
 MODULE_PARM_DESC(sock_path, "communication socket patch");
