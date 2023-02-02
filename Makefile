@@ -1,15 +1,25 @@
-EXTRA_CFLAGS := -foptimize-sibling-calls -Dd_m3RecordBacktraces=1 -DDEBUG=1 #-Dd_m3LogCompile=1
+EMULATE_FLOATS := 0
+EXTRA_CFLAGS := -foptimize-sibling-calls \
+				-Dd_m3RecordBacktraces=1 \
+				-DDEBUG=1 \
+				-Dd_m3HasFloat=$(EMULATE_FLOATS) \
+				#-Dd_m3LogCompile=1
 
 # Enable floating point arithmetic
 ARCH := $(shell uname -m)
-ifeq ($(ARCH),x86_64)
-	EXTRA_CFLAGS += -msse4
+ifeq ($(ARCH), x86_64)
+	ifeq ($(EMULATE_FLOATS), 1)
+		EXTRA_CFLAGS += -msse4
+		EXTRA_CFLAGS += 
+	endif
 # TODO: Otherwise __popcountdi2 is undefined.
 # https://stackoverflow.com/questions/52161596/why-is-builtin-popcount-slower-than-my-own-bit-counting-function
 	EXTRA_CFLAGS += -march=native
 endif
-ifeq ($(ARCH),aarch64)
-	# https://www.kernel.org/doc/Documentation/kbuild/makefiles.rst
+ifeq ($(ARCH), aarch64)
+# TODO: Otherwise __popcountdi2 is undefined.
+# https://www.kernel.org/doc/Documentation/kbuild/makefiles.rst
+# Anyhow, float emulation works only with this flag removed.
 	ccflags-remove-y := -mgeneral-regs-only
 endif
 
@@ -49,9 +59,6 @@ default:
 
 clean:
 	$(MAKE) -C $(KBUILD) M=$(PWD) clean
-
-menuconfig:
-	$(MAKE) -C $(KBUILD) M=$(PWD) menuconfig
 
 logs:
 	sudo dmesg -T --follow
