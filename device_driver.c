@@ -3,6 +3,7 @@
 #include "base64.h"
 #include "device_driver.h"
 #include "json.h"
+#include "opa.h"
 #include "runtime.h"
 
 /* Global variables are declared as static, so are global within the file. */
@@ -116,9 +117,22 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
             printk("wasm3: calling module entrypoint: %s", entrypoint);
 
             result = wasm_vm_call(vm, name, entrypoint);
-            if (result.err)
+            if (result.err && result.err != m3Err_functionLookupFailed)
             {
                 FATAL("wasm_vm_call: %s", result.err);
+                wasm_vm_unlock(vm);
+                return result;
+            }
+
+            result.err = NULL;
+        }
+
+        if (strcmp(name, OPA_MODULE) == 0)
+        {
+            result = init_opa_for(vm);
+            if (result.err)
+            {
+                FATAL("init_opa_for: %s", result.err);
                 wasm_vm_unlock(vm);
                 return result;
             }
@@ -162,7 +176,8 @@ static int device_release(struct inode *inode, struct file *file)
             }
 
             char *entrypoint = json_object_get_string(root, "entrypoint");
-            if (entrypoint == NULL) {
+            if (entrypoint == NULL)
+            {
                 entrypoint = "main";
             }
 

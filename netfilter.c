@@ -19,7 +19,7 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
     unsigned char *packetData = skb->data;
     unsigned packetLen = skb->len;
 
-    wasm_vm *vm = current_wasm_vm();
+    wasm_vm *vm = this_cpu_wasm_vm();
     wasm_vm_lock(vm);
 
     // printk("wasm3: skb_is_nonlinear %s (len: %d, data_len: %d)", skb_is_nonlinear(skb) ? "true" : "false", skb->len, skb->data_len);
@@ -79,7 +79,7 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
     unsigned char *packetData = skb->data;
     unsigned packetLen = skb->len;
 
-    wasm_vm *vm = current_wasm_vm();
+    wasm_vm *vm = this_cpu_wasm_vm();
     wasm_vm_lock(vm);
 
     // Get the VM memory if there is at least one module loaded,
@@ -170,11 +170,7 @@ int start_netfilter_submodule(void)
 {
     pr_info("---- netfilter submodule init() ---");
 
-    register_pernet_device(&net_operations);
-
-    pr_info("---- netfilter submodule started ----");
-
-    return 0;
+    return register_pernet_device(&net_operations);
 }
 
 int stop_netfilter_submodule(void)
@@ -182,8 +178,6 @@ int stop_netfilter_submodule(void)
     pr_info("---- netfilter submodule exit() ---");
 
     unregister_pernet_device(&net_operations);
-
-    pr_info("---- netfilter submodule exited ---");
 
     return 0;
 }

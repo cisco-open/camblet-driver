@@ -1,4 +1,5 @@
-EMULATE_FLOATS := 0
+# OPA requires floats
+EMULATE_FLOATS := 1
 EXTRA_CFLAGS := -foptimize-sibling-calls \
 				-Dd_m3RecordBacktraces=1 \
 				-DDEBUG=1 \
@@ -49,7 +50,8 @@ wasm-objs :=  wasm3/source/m3_api_libc.o \
 			  netfilter.o \
 			  hashtable.o \
 			  runtime.o \
-			  worker_thread.o
+			  worker_thread.o \
+			  opa.o
 
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
@@ -84,6 +86,19 @@ load-dns-go-wasm:
 load-dns-rust-wasm:
 	sudo cli/cli load -name dns samples/target/wasm32-unknown-unknown/release/dns-rust.wasm
 
-# Build the CLI
+load-opa-policy-wasm:
+	sudo cli/cli load -name opa opa/policy.wasm
+
 build-cli:
 	export GOOS=linux; cd cli; go build
+
+setup-vm:
+	sudo apt update
+	sudo apt install clang libbpf-dev dwarves build-essential linux-tools-generic golang default-jdk
+	sudo cp /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
+	grep -qxF 'export PATH=$$PATH:$$HOME/go/bin' ~/.bashrc || echo 'export PATH=$$PATH:$$HOME/go/bin' >> ~/.bashrc
+
+opa-bundle:
+	opa build -t wasm -e "xdp/allow" opa/xdp.rego -o opa/bundle.tar.gz
+	tar zxvf opa/bundle.tar.gz /policy.wasm
+	mv policy.wasm opa/

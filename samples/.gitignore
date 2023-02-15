@@ -1,5 +1,4 @@
 /target
-*.wasm
 almafa.wat
 /zig-cache
 .idea

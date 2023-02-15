@@ -1038,16 +1038,22 @@ static JSON_Value * parse_boolean_value(const char **string) {
 }
 
 static JSON_Value * parse_number_value(const char **string) {
-    char *end;
+    char num_buf[PARSON_NUM_BUF_SIZE] = {0};
+    int i;
+    for (i = 0;; i++) {
+        if (isdigit(**string))
+            num_buf[i] = *(*string)++;
+        else
+            break;
+    }
     int64_t number = 0;
-    int retval = kstrtos64(*string, 10, &number);
+    int retval = kstrtos64(num_buf, 10, &number);
     if (retval == ERANGE) {
         return NULL;
     }
-    if ((retval && retval != ERANGE) || !is_decimal(*string, end - *string)) {
+    if ((retval && retval != ERANGE) || !is_decimal(num_buf, i)) {
         return NULL;
     }
-    *string = end;
     return json_value_init_number(number);
 }
 

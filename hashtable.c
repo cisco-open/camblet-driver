@@ -67,9 +67,9 @@ void keys_from_module_hashtable(const char *module, void **data, i32 *data_lengt
         keys[j++] = cur->key;
     }
 
-    uint8_t *mem = wasm_vm_memory(current_wasm_vm()); // TODO don't call current_wasm_vm here again, it might be different
+    uint8_t *mem = wasm_vm_memory(this_cpu_wasm_vm()); // TODO don't call current_wasm_vm here again, it might be different
 
-    wasm_vm_result result = wasm_vm_malloc(current_wasm_vm(), module, HASH_TABLE_ELEMENTS);
+    wasm_vm_result result = wasm_vm_malloc(this_cpu_wasm_vm(), module, HASH_TABLE_ELEMENTS);
     if (result.err)
     {
         printk("wasm3: hashtable keys allocation failed");
@@ -100,9 +100,9 @@ void get_from_module_hashtable(const char *module, i32 id, void **data, i32 *dat
         return;
     }
 
-    uint8_t *mem = wasm_vm_memory(current_wasm_vm()); // TODO don't call current_wasm_vm here again, it might be different
+    uint8_t *mem = wasm_vm_memory(this_cpu_wasm_vm()); // TODO don't call current_wasm_vm here again, it might be different
 
-    wasm_vm_result result = wasm_vm_malloc(current_wasm_vm(), module, temp->data_length);
+    wasm_vm_result result = wasm_vm_malloc(this_cpu_wasm_vm(), module, temp->data_length);
     if (result.err)
     {
         printk("wasm3: hashtable get allocation failed");

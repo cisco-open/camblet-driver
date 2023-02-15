@@ -4,6 +4,8 @@
 #include <linux/if_ether.h>
 #include <linux/sched.h>
 
+extern int bpf_opa_eval(int type) __ksym;
+
 struct
 {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
@@ -26,6 +28,14 @@ int xdp_prog_simple(struct xdp_md *ctx)
 
     struct ethhdr *eth = data;
     __be16 h_proto = bpf_ntohs(eth->h_proto);
+
+    int res = bpf_opa_eval(h_proto);
+    bpf_printk("bpf_opa_eval(proto=0x%04x) -> %d", h_proto, res);
+
+    if (!res)
+    {
+        return XDP_PASS;
+    }
 
     __u64 *cnt = bpf_map_lookup_elem(&xdp_stats_map, &h_proto);
     if (cnt == NULL)

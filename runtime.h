@@ -37,15 +37,17 @@ typedef struct wasm_vm_result
 } wasm_vm_result;
 
 typedef M3Module wasm_vm_module;
+typedef M3Function wasm_vm_function;
 
 wasm_vm *wasm_vm_for_cpu(unsigned cpu);
-wasm_vm *current_wasm_vm(void);
+wasm_vm *this_cpu_wasm_vm(void);
 wasm_vm_result wasm_vm_new_per_cpu(void);
 wasm_vm_result wasm_vm_destroy_per_cpu(void);
 wasm_vm *wasm_vm_new(int cpu);
 void wasm_vm_destroy(wasm_vm *vm);
 wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char code[], unsigned code_size);
 wasm_vm_result wasm_vm_call(wasm_vm *vm, const char *module, const char *name, ...);
+wasm_vm_result wasm_vm_call_direct(wasm_vm *vm, wasm_vm_function *func, ...);
 uint8_t *wasm_vm_memory(wasm_vm *vm);
 wasm_vm_result wasm_vm_global(wasm_vm *vm, const char *name);
 wasm_vm_result wasm_vm_malloc(wasm_vm *vm, const char *module, unsigned size);
@@ -54,6 +56,7 @@ void wasm_vm_set_userdata(wasm_vm *vm, void *userdata);
 void wasm_vm_dump_symbols(wasm_vm *vm);
 void wasm_vm_lock(wasm_vm *vm);
 void wasm_vm_unlock(wasm_vm *vm);
-wasm_vm_module *wasm_vm_get_module(wasm_vm *vm, const char *name);
+wasm_vm_module *wasm_vm_get_module(wasm_vm *vm, const char *module);
+wasm_vm_function *wasm_vm_get_function(wasm_vm *vm, const char *module, const char *function);
 
 #endif
