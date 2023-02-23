@@ -94,9 +94,8 @@ build-cli:
 
 setup-vm:
 	sudo apt update
-	sudo apt install clang libbpf-dev dwarves build-essential linux-tools-generic golang default-jdk
+	sudo apt install clang libbpf-dev dwarves build-essential linux-tools-generic
 	sudo cp /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
-	grep -qxF 'export PATH=$$PATH:$$HOME/go/bin' ~/.bashrc || echo 'export PATH=$$PATH:$$HOME/go/bin' >> ~/.bashrc
 
 opa-bundle:
 	opa build -t wasm -e "xdp/allow" opa/xdp.rego -o opa/bundle.tar.gz
