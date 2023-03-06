@@ -21,8 +21,10 @@ ifeq ($(ARCH), aarch64)
 # TODO: Otherwise __popcountdi2 is undefined.
 # https://www.kernel.org/doc/Documentation/kbuild/makefiles.rst
 # Anyhow, float emulation works only with this flag removed.
-	ccflags-remove-y := -mgeneral-regs-only
+	ccflags-remove-y += -mgeneral-regs-only
 endif
+
+ccflags-remove-y += -Wdeclaration-after-statement
 
 VERBOSE := 1
 
@@ -51,7 +53,8 @@ wasm-objs :=  wasm3/source/m3_api_libc.o \
 			  hashtable.o \
 			  runtime.o \
 			  worker_thread.o \
-			  opa.o
+			  opa.o \
+			  tlse.o
 
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
