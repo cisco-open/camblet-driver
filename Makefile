@@ -63,6 +63,9 @@ default:
 clean:
 	$(MAKE) -C $(KBUILD) M=$(PWD) clean
 
+help:
+	$(MAKE) -C $(KBUILD) M=$(PWD) help
+
 logs:
 	sudo dmesg -T --follow
 

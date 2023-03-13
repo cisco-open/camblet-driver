@@ -21,6 +21,7 @@
 #include <linux/btf_ids.h>
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/version.h>
 
 #include "device_driver.h"
 #include "netfilter.h"
@@ -42,13 +43,23 @@ int bpf_opa_eval(int protocol)
     return res;
 }
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0)
+BTF_SET8_START(opa_kfunc_ids)
+BTF_ID(func, bpf_opa_eval)
+BTF_SET8_END(opa_kfunc_ids)
+#else
 BTF_SET_START(opa_kfunc_ids)
 BTF_ID(func, bpf_opa_eval)
 BTF_SET_END(opa_kfunc_ids)
+#endif
 
 static const struct btf_kfunc_id_set bpf_opa_kfunc_set = {
     .owner = THIS_MODULE,
+#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0)
+    .set = &opa_kfunc_ids,
+#else
     .check_set = &opa_kfunc_ids,
+#endif
 };
 
 static int __init wasm_init(void)
@@ -64,7 +75,7 @@ static int __init wasm_init(void)
 
     int ret = 0;
 
-    ret += start_netfilter_submodule();
+    // ret += start_netfilter_submodule();
     ret += worker_thread_init();
     ret += chardev_init();
     ret += register_btf_kfunc_id_set(BPF_PROG_TYPE_XDP, &bpf_opa_kfunc_set);
@@ -75,7 +86,7 @@ static int __init wasm_init(void)
 static void __exit wasm_exit(void)
 {
     chardev_exit();
-    stop_netfilter_submodule();
+    // stop_netfilter_submodule();
     worker_thread_exit();
     wasm_vm_destroy_per_cpu();
 
