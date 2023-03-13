@@ -7,7 +7,7 @@
 
 #define FATAL(msg, ...)                                    \
     {                                                      \
-        printk("wasm3: Error: [Fatal] " msg "\n", ##__VA_ARGS__); \
+        printk(KERN_CRIT "wasm: Error: [Fatal] " msg "\n", ##__VA_ARGS__); \
     }
 
 // MAX_RETURN_VALUES defines the amount of return values.

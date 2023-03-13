@@ -22,7 +22,7 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
     wasm_vm *vm = this_cpu_wasm_vm();
     wasm_vm_lock(vm);
 
-    // printk("wasm3: skb_is_nonlinear %s (len: %d, data_len: %d)", skb_is_nonlinear(skb) ? "true" : "false", skb->len, skb->data_len);
+    // printk("wasm: skb_is_nonlinear %s (len: %d, data_len: %d)", skb_is_nonlinear(skb) ? "true" : "false", skb->len, skb->data_len);
 
     // Get the VM memory if there is at least one module loaded,
     // if not, accept the packet regardless.
@@ -131,7 +131,7 @@ static int init_network(struct net *net)
 {
     int ret = 0;
 
-    printk("wasm3: init_network: %u\n", net->ns.inum);
+    printk("wasm: init_network: %u\n", net->ns.inum);
 
     // register hook for outgoing traffic
     nfho_out.hook = hook_func_out;
@@ -149,14 +149,14 @@ static int init_network(struct net *net)
 
     ret += nf_register_net_hook(net, &nfho_in);
 
-    printk("wasm3: init_network: %u returned: %d\n", net->ns.inum, ret);
+    printk("wasm: init_network: %u returned: %d\n", net->ns.inum, ret);
 
     return 0;
 }
 
 static void exit_network(struct net *net)
 {
-    printk("wasm3: exit_network: %u\n", net->ns.inum);
+    printk("wasm: exit_network: %u\n", net->ns.inum);
     nf_unregister_net_hook(net, &nfho_in);
     nf_unregister_net_hook(net, &nfho_out);
 }
@@ -168,14 +168,14 @@ static struct pernet_operations net_operations = {
 
 int start_netfilter_submodule(void)
 {
-    pr_info("---- netfilter submodule init() ---");
+    printk("wasm: netfilter submodule init()");
 
     return register_pernet_device(&net_operations);
 }
 
 int stop_netfilter_submodule(void)
 {
-    pr_info("---- netfilter submodule exit() ---");
+    printk("wasm: netfilter submodule exit()");
 
     unregister_pernet_device(&net_operations);
 

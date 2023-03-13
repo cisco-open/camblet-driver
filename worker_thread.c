@@ -14,7 +14,7 @@ static bool c_connected = false;
 static char *sock_path = "/run/wasm.socket";
 
 module_param(sock_path, charp, 0000);
-MODULE_PARM_DESC(sock_path, "communication socket patch");
+MODULE_PARM_DESC(sock_path, "communication socket path");
 
 static void accept_work(struct work_struct *);
 static int send_msg(struct socket *, void *, size_t);
@@ -56,7 +56,7 @@ static int make_server_socket(void)
     return 0;
 
 err:
-    printk("Socket server setup failed");
+    printk(KERN_ERR "socket server setup failed");
 
     if (sock)
         kernel_sock_shutdown(sock, SHUT_RDWR);
@@ -65,23 +65,24 @@ err:
 
 static void accept_work(struct work_struct *dummy)
 {
+    printk("wasm: waiting for client connection...");
+
     int ret;
 
     ret = kernel_accept(sock, &c_sock, 0);
     if (ret)
     {
-        printk(KERN_INFO "kernel_accept failed: %d\n", ret);
+        pr_err("wasm: kernel_accept failed: %d", ret);
     }
     else
     {
-        printk(KERN_INFO "Accepted connection from on domain socket");
+        printk("wasm: accepted connection from socket");
         c_connected = true;
     }
 }
 
 static int send_msg(struct socket *sock, void *msg, size_t len)
 {
-    int ret = 0;
     struct msghdr hdr;
     struct kvec iov;
 
@@ -90,9 +91,7 @@ static int send_msg(struct socket *sock, void *msg, size_t len)
 
     memset(&hdr, 0, sizeof(hdr));
 
-    ret = kernel_sendmsg(sock, &hdr, &iov, 1, iov.iov_len);
-
-    return ret;
+    return kernel_sendmsg(sock, &hdr, &iov, 1, iov.iov_len);
 }
 
 void submit_metric_handler(struct work_struct *work)
@@ -100,15 +99,15 @@ void submit_metric_handler(struct work_struct *work)
     struct metric_work_struct *my_work = container_of(work, struct metric_work_struct, work);
 
     // TODO loop here for all sockets
-    int ret = send_msg(c_sock, my_work->metric_line, my_work->metric_line_len); 
+    int ret = send_msg(c_sock, my_work->metric_line, my_work->metric_line_len);
     if (ret < 0)
     {
-        printk(KERN_INFO "wasm3: message send failed: %d\n", ret);
+        pr_err("wasm: message send failed: %d\n", ret);
         if (c_sock != NULL)
         {
             kernel_sock_shutdown(c_sock, SHUT_RDWR);
             c_connected = false;
-            printk(KERN_INFO "wasm3: socket closed");
+            pr_err("wasm: socket closed");
             schedule_work(&sock_accept);
         }
     }
@@ -119,11 +118,11 @@ void submit_metric_handler(struct work_struct *work)
 
 void submit_metric(char *metric_line, size_t metric_line_len)
 {
-    printk("wasm3: submit_metric: %.*s", (int)metric_line_len, metric_line);
+    printk("wasm: submit_metric: %.*s", (int)metric_line_len, metric_line);
 
     if (!c_connected)
     {
-        printk("wasm3: submit_metric: no clients, dropping metric");
+        printk("wasm: submit_metric: no clients, dropping metric");
         kfree(metric_line);
         return;
     }
@@ -140,12 +139,12 @@ void submit_metric(char *metric_line, size_t metric_line_len)
 
 int worker_thread_init(void)
 {
-    printk("Initializing socket workqueue module\n");
+    printk("wasm: initializing socket workqueue module");
 
     int ret = make_server_socket();
     if (ret)
     {
-        printk(KERN_INFO "Server socket creation failed: %d\n", ret);
+        pr_err("wasm: server socket creation failed: %d", ret);
         return ret;
     }
 
@@ -154,7 +153,7 @@ int worker_thread_init(void)
 
 void worker_thread_exit(void)
 {
-    printk(KERN_INFO "Socket workqueue module unload\n");
+    printk("wasm: socket workqueue module unload");
     if (sock)
         kernel_sock_shutdown(sock, SHUT_RDWR);
 }

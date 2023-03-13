@@ -12,14 +12,9 @@
 //  Define the module metadata.
 #define MODULE_NAME "wasm"
 MODULE_AUTHOR("Nandor Kracser");
-MODULE_LICENSE("GPL v2");
+MODULE_LICENSE("Dual MIT/GPL");
 MODULE_DESCRIPTION("A kernel module that exposes a wasm VM");
 MODULE_VERSION("0.1");
-
-// Define the name parameter.
-static char *name = "Bilbo";
-module_param(name, charp, S_IRUGO);
-MODULE_PARM_DESC(name, "The name to display in /var/log/kern.log");
 
 int bpf_opa_eval(int protocol)
 {
@@ -65,7 +60,6 @@ static void __exit wasm_exit(void)
     worker_thread_exit();
     wasm_vm_destroy_per_cpu();
 
-    pr_info("%s: goodbye %s\n", MODULE_NAME, name);
     pr_info("%s: module unloaded from 0x%p\n", MODULE_NAME, wasm_exit);
 }
 

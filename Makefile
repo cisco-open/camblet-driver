@@ -11,7 +11,6 @@ ARCH := $(shell uname -m)
 ifeq ($(ARCH), x86_64)
 	ifeq ($(EMULATE_FLOATS), 1)
 		EXTRA_CFLAGS += -msse4
-		EXTRA_CFLAGS += 
 	endif
 # TODO: Otherwise __popcountdi2 is undefined.
 # https://stackoverflow.com/questions/52161596/why-is-builtin-popcount-slower-than-my-own-bit-counting-function
@@ -53,8 +52,7 @@ wasm-objs :=  wasm3/source/m3_api_libc.o \
 			  hashtable.o \
 			  runtime.o \
 			  worker_thread.o \
-			  opa.o \
-			  tlse.o
+			  opa.o
 
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/

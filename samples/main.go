@@ -47,7 +47,7 @@ func dns_query(source int32, destination int32, dns_packet []byte) {
 
 	id := header.ID
 
-	_debug(fmt.Sprintf("wasm3: (%d bytes) %d: dns_query %d -> source ip: %s, destination ip: %s",
+	_debug(fmt.Sprintf("wasm: (%d bytes) %d: dns_query %d -> source ip: %s, destination ip: %s",
 		len(dns_packet),
 		timestamp,
 		id,
@@ -96,7 +96,7 @@ func dns_response(source int32, destination int32, dns_packet []byte) {
 
 	id := header.ID
 
-	_debug(fmt.Sprintf("wasm3: (%d bytes) %d: dns_response %d -> source ip: %s, destination ip: %s",
+	_debug(fmt.Sprintf("wasm: (%d bytes) %d: dns_response %d -> source ip: %s, destination ip: %s",
 		len(dns_packet),
 		timestamp,
 		id,

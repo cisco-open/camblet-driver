@@ -37,16 +37,16 @@ int chardev_init(void)
 
     if (major < 0)
     {
-        pr_alert("wasm3: Registering char device failed with %d\n", major);
+        pr_alert("wasm: Registering char device failed with %d\n", major);
         return major;
     }
 
-    pr_info("wasm3: I was assigned major number %d.\n", major);
+    pr_info("wasm: I was assigned major number %d.\n", major);
 
     cls = class_create(THIS_MODULE, DEVICE_NAME);
     device_create(cls, NULL, MKDEV(major, 0), NULL, DEVICE_NAME);
 
-    pr_info("wasm3: Device created on /dev/%s\n", DEVICE_NAME);
+    pr_info("wasm: Device created on /dev/%s\n", DEVICE_NAME);
 
     return SUCCESS;
 }
@@ -114,7 +114,7 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
 
         if (entrypoint)
         {
-            printk("wasm3: calling module entrypoint: %s", entrypoint);
+            printk("wasm: calling module entrypoint: %s", entrypoint);
 
             result = wasm_vm_call(vm, name, entrypoint);
             if (result.err && result.err != m3Err_functionLookupFailed)
@@ -148,7 +148,7 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
 /* Called when a process closes the device file. */
 static int device_release(struct inode *inode, struct file *file)
 {
-    printk(KERN_INFO "wasm3: device has been released\n");
+    printk(KERN_INFO "wasm: device has been released\n");
 
     int status = SUCCESS;
     JSON_Value *json = NULL;
@@ -159,12 +159,12 @@ static int device_release(struct inode *inode, struct file *file)
         JSON_Object *root = json_value_get_object(json);
         char *command = json_object_get_string(root, "command");
 
-        printk("wasm3: command %s\n", command);
+        printk("wasm: command %s\n", command);
 
         if (strcmp("load", command) == 0)
         {
             char *name = json_object_get_string(root, "name");
-            printk("wasm3: loading module: %s\n", name);
+            printk("wasm: loading module: %s\n", name);
 
             char *code = json_object_get_string(root, "code");
             int length = base64_decode(device_buffer, DEVICE_BUFFER_SIZE, code, strlen(code));
@@ -191,7 +191,7 @@ static int device_release(struct inode *inode, struct file *file)
         }
         else if (strcmp("reset", command) == 0)
         {
-            printk("wasm3: reseting vm");
+            printk("wasm: reseting vm");
 
             wasm_vm_result result = reset_vms();
             if (result.err)
@@ -203,7 +203,7 @@ static int device_release(struct inode *inode, struct file *file)
         }
         else
         {
-            printk("wasm3: command not implemented: %s", command);
+            printk(KERN_ERR "wasm: command not implemented: %s", command);
             status = -1;
             goto cleanup;
         }
@@ -240,7 +240,7 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
     int bytes_read = 0;
     const char *msg_ptr = device_buffer;
 
-    printk("wasm3: device_read: length: %lu offset: %llu", length, *offset);
+    printk("wasm: device_read: length: %lu offset: %llu", length, *offset);
 
     if (!*(msg_ptr + *offset))
     {                /* we are at the end of message */
@@ -282,7 +282,7 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
         bytes_to_write = maxbytes;
 
     bytes_writen = bytes_to_write - copy_from_user(device_buffer + *offset, buffer, bytes_to_write);
-    printk(KERN_INFO "wasm3: device has been written %d\n", bytes_writen);
+    printk(KERN_INFO "wasm: device has been written %d\n", bytes_writen);
     *offset += bytes_writen;
     device_buffer_size = *offset;
     return bytes_writen;

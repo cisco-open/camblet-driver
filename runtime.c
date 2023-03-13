@@ -82,7 +82,7 @@ wasm_vm_result wasm_vm_new_per_cpu(void)
     int cpu = 0;
     for_each_possible_cpu(cpu)
     {
-        printk("wasm3: creating vm for cpu %d", cpu);
+        printk("wasm: creating vm for cpu %d", cpu);
         vms[cpu] = wasm_vm_new(cpu);
     }
     return (wasm_vm_result){.err = NULL};
@@ -95,7 +95,7 @@ wasm_vm_result wasm_vm_destroy_per_cpu(void)
         int cpu = 0;
         for_each_possible_cpu(cpu)
         {
-            printk("wasm3: destroying vm for cpu %d", cpu);
+            printk("wasm: destroying vm for cpu %d", cpu);
             wasm_vm_destroy(vms[cpu]);
         }
 
@@ -117,7 +117,7 @@ static void wasm_vm_print_backtrace(wasm_vm *vm)
         return;
     }
 
-    printk("wasm3: backtrace:");
+    printk("wasm: backtrace:");
 
     int frameCount = 0;
     IM3BacktraceFrame curr = info->frames;
@@ -378,7 +378,7 @@ m3ApiRawFunction(m3_ext_submit_metric)
     char *metric_line = (char *)kmalloc(i_size, GFP_ATOMIC);
     if (!metric_line)
     {
-        printk("wasm3: cannot allocate memory for metric_line");
+        pr_err("wasm: cannot allocate memory for metric_line");
         m3ApiReturn(-1);
     }
 
@@ -454,11 +454,11 @@ static M3Result m3_link_all(IM3Module module)
 
 static void *print_module_symbols(IM3Module module, void * i_info)
 {
-    printk("wasm3:   module = %s\n", module->name);
+    printk("wasm:   module = %s\n", module->name);
     int i;
     for (i = 0; i < module->numGlobals; i++)
     {
-        printk("wasm3:     global -> %s", module->globals[i].name);
+        printk("wasm:     global -> %s", module->globals[i].name);
     }
     for (i = 0; i < module->numFunctions; i++)
     {
@@ -467,14 +467,14 @@ static void *print_module_symbols(IM3Module module, void * i_info)
         bool isImported = f->import.moduleUtf8 || f->import.fieldUtf8;
 
         if (isImported)
-            printk("wasm3:     import -> %s.%s", f->import.moduleUtf8, f->names[0]);
+            printk("wasm:     import -> %s.%s", f->import.moduleUtf8, f->names[0]);
     }
     for (i = 0; i < module->numFunctions; i++)
     {
         IM3Function f = & module->functions [i];
 
         if (f->numNames > 1) {
-            printk("wasm3:     function -> %s(%d) -> %d", f->names[0], f->funcType->numArgs, f->funcType->numRets);
+            printk("wasm:     function -> %s(%d) -> %d", f->names[0], f->funcType->numArgs, f->funcType->numRets);
         }
     }
     
@@ -483,7 +483,7 @@ static void *print_module_symbols(IM3Module module, void * i_info)
 
 void wasm_vm_dump_symbols(wasm_vm *vm)
 {
-    printk("wasm3: vm for cpu = %d\n", vm->cpu);
+    printk("wasm: vm for cpu = %d\n", vm->cpu);
     ForEachModule(vm->_runtime, print_module_symbols, NULL);
 }
 

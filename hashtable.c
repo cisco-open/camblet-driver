@@ -32,7 +32,7 @@ void add_to_module_hashtable(i32 id, void *data, i32 data_length)
 
     if (bucket)
     {
-        printk("wasm3: duplicate key (%d) found in hashmap, overwriting", id);
+        printk("wasm: duplicate key (%d) found in hashmap, overwriting", id);
         kfree(bucket->data);
         update = true;
     }
@@ -72,7 +72,7 @@ void keys_from_module_hashtable(const char *module, void **data, i32 *data_lengt
     wasm_vm_result result = wasm_vm_malloc(this_cpu_wasm_vm(), module, HASH_TABLE_ELEMENTS);
     if (result.err)
     {
-        printk("wasm3: hashtable keys allocation failed");
+        pr_err("wasm: hashtable keys allocation failed");
         return;
     }
 
@@ -105,7 +105,7 @@ void get_from_module_hashtable(const char *module, i32 id, void **data, i32 *dat
     wasm_vm_result result = wasm_vm_malloc(this_cpu_wasm_vm(), module, temp->data_length);
     if (result.err)
     {
-        printk("wasm3: hashtable get allocation failed");
+        pr_err("wasm: hashtable get allocation failed");
         return;
     }
 
