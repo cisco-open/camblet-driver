@@ -14,7 +14,7 @@ ifeq ($(ARCH), x86_64)
 	endif
 # TODO: Otherwise __popcountdi2 is undefined.
 # https://stackoverflow.com/questions/52161596/why-is-builtin-popcount-slower-than-my-own-bit-counting-function
-	EXTRA_CFLAGS += -march=native
+	# EXTRA_CFLAGS += -march=native
 endif
 ifeq ($(ARCH), aarch64)
 # TODO: Otherwise __popcountdi2 is undefined.
@@ -100,6 +100,9 @@ setup-vm:
 	sudo apt update
 	sudo apt install clang libbpf-dev dwarves build-essential linux-tools-generic
 	sudo cp /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
+
+setup-archlinux-vm:
+	sudo pacman -Syu linux-headers base-devel clang go
 
 opa-bundle:
 	opa build -t wasm -e "xdp/allow" opa/xdp.rego -o opa/bundle.tar.gz

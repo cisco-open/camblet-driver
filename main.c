@@ -29,7 +29,6 @@
 #include "worker_thread.h"
 #include "opa.h"
 
-//  Define the module metadata.
 #define MODULE_NAME "wasm"
 MODULE_AUTHOR("Nandor Kracser");
 MODULE_LICENSE("Dual MIT/GPL");
@@ -45,7 +44,7 @@ int bpf_opa_eval(int protocol)
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0)
 BTF_SET8_START(opa_kfunc_ids)
-BTF_ID(func, bpf_opa_eval)
+BTF_ID_FLAGS(func, bpf_opa_eval)
 BTF_SET8_END(opa_kfunc_ids)
 #else
 BTF_SET_START(opa_kfunc_ids)
