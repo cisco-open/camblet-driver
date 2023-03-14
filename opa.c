@@ -20,6 +20,8 @@
 #include "opa.h"
 #include "json.h"
 
+#define JSON_MAX_LEN 32
+
 typedef struct opa_wrapper
 {
     wasm_vm *vm;
@@ -30,7 +32,7 @@ typedef struct opa_wrapper
     IM3Function json_dump;
 } opa_wrapper;
 
-static opa_wrapper *opas[NR_CPUS];
+static opa_wrapper *opas[NR_CPUS] = {};
 
 wasm_vm_result opa_malloc(opa_wrapper *opa, unsigned size)
 {
@@ -44,7 +46,9 @@ wasm_vm_result opa_free(opa_wrapper *opa, i32 ptr)
 
 opa_wrapper *this_cpu_opa(void)
 {
-    return opas[smp_processor_id()];
+    int cpu = get_cpu();
+    put_cpu();
+    return opas[cpu];
 }
 
 int parse_opa_builtins(char *json)
@@ -124,8 +128,6 @@ wasm_vm_result opa_eval(opa_wrapper *opa, i32 inputAddr, i32 inputLen)
     return wasm_vm_call_direct(opa->vm, opa->eval, 0, entrypoint, dataAddr, inputAddr, inputLen, heapAddr, format);
 }
 
-#define JSON_MAX_LEN 32
-
 int this_cpu_opa_eval(int protocol)
 {
     int ret = false;
@@ -137,15 +139,10 @@ int this_cpu_opa_eval(int protocol)
     wasm_vm_lock(vm);
 
     opa_wrapper *opa = this_cpu_opa();
-
-    if (!opa->vm)
+    if (!opa)
     {
-        goto cleanup;
-    }
-
-    uint8_t *mem = wasm_vm_memory(vm);
-    if (!mem)
-    {
+        ret = 1;
+        pr_warn("wasm: opa policy module not loaded, eval always evalautes to true");
         goto cleanup;
     }
 
@@ -155,6 +152,8 @@ int this_cpu_opa_eval(int protocol)
         FATAL("opa wasm_vm_opa_malloc error: %s", result.err);
         goto cleanup;
     }
+
+    uint8_t *mem = wasm_vm_memory(vm);
 
     jsonAddr = result.data->i32;
     jsonLen = sprintf(mem + jsonAddr, "{\"protocol\":%d}", protocol);

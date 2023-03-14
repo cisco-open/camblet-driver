@@ -37,7 +37,7 @@ MODULE_VERSION("0.1");
 int bpf_opa_eval(int protocol)
 {
     int res = this_cpu_opa_eval(protocol);
-    printk("bpf_opa_eval(protocol=0x%04x) -> %d", protocol, res);
+    printk("%s: bpf_opa_eval(protocol=0x%04x) -> %d", THIS_MODULE->name, protocol, res);
     return res;
 }
 
@@ -73,7 +73,7 @@ static int __init wasm_init(void)
 
     int ret = 0;
 
-    // ret += start_netfilter_submodule();
+    ret += start_netfilter_submodule();
     ret += worker_thread_init();
     ret += chardev_init();
     ret += register_btf_kfunc_id_set(BPF_PROG_TYPE_XDP, &bpf_opa_kfunc_set);
@@ -84,7 +84,7 @@ static int __init wasm_init(void)
 static void __exit wasm_exit(void)
 {
     chardev_exit();
-    // stop_netfilter_submodule();
+    stop_netfilter_submodule();
     worker_thread_exit();
     wasm_vm_destroy_per_cpu();
 

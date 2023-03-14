@@ -87,6 +87,8 @@ void wasm_vm_destroy(wasm_vm *vm)
 
 wasm_vm *this_cpu_wasm_vm(void)
 {
+    int cpu = get_cpu();
+    put_cpu();
     return vms[smp_processor_id()];
 }
 
