@@ -29,7 +29,6 @@
 #include "worker_thread.h"
 #include "opa.h"
 
-#define MODULE_NAME "wasm"
 MODULE_AUTHOR("Nandor Kracser");
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_DESCRIPTION("A kernel module that exposes a wasm VM");
@@ -63,7 +62,7 @@ static const struct btf_kfunc_id_set bpf_opa_kfunc_set = {
 
 static int __init wasm_init(void)
 {
-    pr_info("%s: module loaded at 0x%p running on %d CPUs\n", MODULE_NAME, wasm_init, nr_cpu_ids);
+    pr_info("%s: module loaded at 0x%p running on %d CPUs\n", THIS_MODULE->name, wasm_init, nr_cpu_ids);
 
     wasm_vm_result result = wasm_vm_new_per_cpu();
     if (result.err)
@@ -89,7 +88,7 @@ static void __exit wasm_exit(void)
     worker_thread_exit();
     wasm_vm_destroy_per_cpu();
 
-    pr_info("%s: module unloaded from 0x%p\n", MODULE_NAME, wasm_exit);
+    pr_info("%s: module unloaded from 0x%p\n", THIS_MODULE->name, wasm_exit);
 }
 
 module_init(wasm_init);
