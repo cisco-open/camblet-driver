@@ -108,7 +108,7 @@ wasm_vm_result init_opa_for(wasm_vm *vm)
     char *builtins = memory + result.data->i32;
     if (parse_opa_builtins(builtins) > 0)
     {
-        printk("WARNING: this opa module has builtins, but they are not supported yet: %s", builtins);
+        printk(KERN_WARNING "wasm: this opa module has builtins, but they are not supported yet: %s", builtins);
     }
 
     opa_free(opa, result.data->i32);
@@ -167,11 +167,11 @@ int this_cpu_opa_eval(int protocol)
 
     char *res = (char *)(mem + result.data->i32);
 
-    printk("opa result: %s", res);
+    printk("wasm: opa result: %s", res);
 
     ret = parse_opa_eval_result(res);
 
-    printk("opa result parsed: %d", ret);
+    printk("wasm: opa result parsed: %d", ret);
 
 cleanup:
     if (jsonAddr != 0)
