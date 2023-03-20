@@ -127,7 +127,7 @@ m3ApiRawFunction(opa_builtin0)
 
     opa_wrapper *opa = (opa_wrapper *)_ctx->userdata;
 
-    printk("wasm3: calling opa_builtin0 %d", builtin_id);
+    printk("wasm: calling opa_builtin0 %d", builtin_id);
 
     i32 (*builtin)(opa_wrapper *) = opa->builtins[builtin_id];
 
