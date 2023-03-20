@@ -66,7 +66,7 @@ i32 time_now_ns(opa_wrapper *opa)
     uint8_t *mem = wasm_vm_memory(opa->vm);
     i32 addr = result.data->i32;
 
-    memcpy(mem + addr, now, sizeof(now));
+    memcpy(mem + addr, &now, sizeof(now));
 
     return addr;
 }
@@ -81,7 +81,7 @@ int parse_opa_builtins(opa_wrapper *opa, char *json)
         printk("wasm: opa module builtins = %s", json);
 
         // indexing starts from 1 for some reason, so we need one bigger array
-        opa->builtins = kmalloc(builtins + 1 * sizeof(int(void)), GFP_KERNEL);
+        opa->builtins = kmalloc(builtins + 1 * sizeof(void*), GFP_KERNEL);
 
         int i;
         for (i = 0; i < builtins; i++)
@@ -131,7 +131,7 @@ m3ApiRawFunction(opa_builtin0)
 
     i32 (*builtin)(opa_wrapper *) = opa->builtins[builtin_id];
 
-    return builtin(opa);
+    m3ApiReturn(builtin(opa));
 }
 
 static wasm_vm_result link_opa_builtins(opa_wrapper *opa, wasm_vm_module *module)
