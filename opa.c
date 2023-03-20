@@ -19,6 +19,7 @@
 
 #include "opa.h"
 #include "json.h"
+#include "runtime.h"
 
 #define JSON_MAX_LEN 32
 
@@ -27,7 +28,7 @@ typedef struct opa_wrapper
     wasm_vm *vm;
     IM3Function malloc;
     IM3Function free;
-    IM3Function builtins;
+    void **builtins;
     IM3Function eval;
     IM3Function json_dump;
 } opa_wrapper;
@@ -51,15 +52,54 @@ opa_wrapper *this_cpu_opa(void)
     return opas[cpu];
 }
 
-int parse_opa_builtins(char *json)
+i32 time_now_ns(opa_wrapper *opa)
+{
+    u64 now = ktime_get_real_ns();
+
+    wasm_vm_result result = opa_malloc(opa, sizeof(now));
+    if (result.err)
+    {
+        FATAL("opa wasm_vm_opa_malloc error: %s", result.err);
+        return 0;
+    }
+
+    uint8_t *mem = wasm_vm_memory(opa->vm);
+    i32 addr = result.data->i32;
+
+    memcpy(mem + addr, now, sizeof(now));
+
+    return addr;
+}
+
+int parse_opa_builtins(opa_wrapper *opa, char *json)
 {
     JSON_Value *root_value = json_parse_string(json);
     if (root_value)
     {
-        JSON_Object *builtins = json_object(root_value);
-        int ret = json_object_get_count(builtins);
+        JSON_Object *object = json_object(root_value);
+        int builtins = json_object_get_count(object);
+        printk("wasm: opa module builtins = %s", json);
+
+        // indexing starts from 1 for some reason, so we need one bigger array
+        opa->builtins = kmalloc(builtins + 1 * sizeof(int(void)), GFP_KERNEL);
+
+        int i;
+        for (i = 0; i < builtins; i++)
+        {
+            const char *name = json_object_get_name(object, i);
+            const int64_t builtin_id = json_object_get_number(object, name);
+            if (strcmp(name, "time.now_ns") == 0)
+            {
+                opa->builtins[builtin_id] = time_now_ns;
+            }
+            else
+            {
+                printk(KERN_WARNING "wasm: this opa module uses an unsupported builtin function: %s", name);
+            }
+        }
+
         json_value_free(root_value);
-        return ret;
+        return builtins;
     }
     return 0;
 }
@@ -78,17 +118,45 @@ int parse_opa_eval_result(char *json)
     return false;
 }
 
+m3ApiRawFunction(opa_builtin0)
+{
+    m3ApiReturnType(i32);
+
+    m3ApiGetArg(i32, builtin_id);
+    m3ApiGetArg(i32, ctx);
+
+    opa_wrapper *opa = (opa_wrapper *)_ctx->userdata;
+
+    printk("wasm3: calling opa_builtin0 %d", builtin_id);
+
+    i32 (*builtin)(opa_wrapper *) = opa->builtins[builtin_id];
+
+    return builtin(opa);
+}
+
+static wasm_vm_result link_opa_builtins(opa_wrapper *opa, wasm_vm_module *module)
+{
+    M3Result result = m3Err_none;
+
+    const char *env = "env";
+
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_builtin0", "i(ii)", &opa_builtin0, opa)));
+
+_catch:
+    return (wasm_vm_result){.err = result};
+}
+
 wasm_vm_result init_opa_for(wasm_vm *vm)
 {
     opa_wrapper *opa = kmalloc(sizeof(opa_wrapper), GFP_KERNEL);
-    opa->builtins = wasm_vm_get_function(vm, OPA_MODULE, "builtins");
     opa->malloc = wasm_vm_get_function(vm, OPA_MODULE, "opa_malloc");
     opa->free = wasm_vm_get_function(vm, OPA_MODULE, "opa_free");
     opa->eval = wasm_vm_get_function(vm, OPA_MODULE, "opa_eval");
     opa->json_dump = wasm_vm_get_function(vm, OPA_MODULE, "opa_json_dump");
     opa->vm = vm;
 
-    wasm_vm_result result = wasm_vm_call_direct(vm, opa->builtins);
+    wasm_vm_function *builtinsFunc = wasm_vm_get_function(vm, OPA_MODULE, "builtins");
+    wasm_vm_result result = wasm_vm_call_direct(vm, builtinsFunc);
     if (result.err)
     {
         kfree(opa);
@@ -104,14 +172,20 @@ wasm_vm_result init_opa_for(wasm_vm *vm)
 
     uint8_t *memory = wasm_vm_memory(vm);
 
-    // warn for builtins
+    // parse and link
     char *builtins = memory + result.data->i32;
-    if (parse_opa_builtins(builtins) > 0)
+    if (parse_opa_builtins(opa, builtins) > 0)
     {
-        printk(KERN_WARNING "wasm: this opa module has builtins, but they are not supported yet: %s", builtins);
+        result = link_opa_builtins(opa, wasm_vm_get_module(vm, OPA_MODULE));
+        if (result.err)
+        {
+            kfree(opa->builtins);
+            kfree(opa);
+            return result;
+        }
     }
 
-    opa_free(opa, result.data->i32);
+    // opa_free(opa, result.data->i32);
 
     opas[vm->cpu] = opa;
 

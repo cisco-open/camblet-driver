@@ -22,6 +22,7 @@
 
 #include "wasm3/source/m3_core.h"
 #include "wasm3/source/m3_env.h"
+#include "wasm3/source/m3_exception.h"
 #include "wasm3/source/wasm3.h"
 
 #define FATAL(msg, ...)                                    \
@@ -77,5 +78,7 @@ void wasm_vm_lock(wasm_vm *vm);
 void wasm_vm_unlock(wasm_vm *vm);
 wasm_vm_module *wasm_vm_get_module(wasm_vm *vm, const char *module);
 wasm_vm_function *wasm_vm_get_function(wasm_vm *vm, const char *module, const char *function);
+
+M3Result SuppressLookupFailure(M3Result i_result);
 
 #endif

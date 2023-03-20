@@ -26,7 +26,6 @@
 #include "wasm3/source/wasm3.h"
 #include "wasm3/source/m3_env.h"
 #include "wasm3/source/m3_api_libc.h"
-#include "wasm3/source/m3_exception.h"
 
 #define PRIi32 "i"
 #define PRIi64 "lli"
@@ -410,7 +409,7 @@ m3ApiRawFunction(m3_ext_submit_metric)
     m3ApiReturn(i_size);
 }
 
-static M3Result SuppressLookupFailure(M3Result i_result)
+M3Result SuppressLookupFailure(M3Result i_result)
 {
     if (i_result == m3Err_functionLookupFailed)
         return m3Err_none;
