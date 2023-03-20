@@ -118,6 +118,17 @@ int parse_opa_eval_result(char *json)
     return false;
 }
 
+m3ApiRawFunction(opa_abort)
+{
+    m3ApiGetArgMem(char*, addr);
+
+    opa_wrapper *opa = (opa_wrapper *)_ctx->userdata;
+
+    printk("wasm: calling opa_abort %s", addr);
+
+    m3ApiSuccess();
+}
+
 m3ApiRawFunction(opa_builtin0)
 {
     m3ApiReturnType(i32);
@@ -140,6 +151,7 @@ static wasm_vm_result link_opa_builtins(opa_wrapper *opa, wasm_vm_module *module
 
     const char *env = "env";
 
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_abort", "(i)", &opa_abort, opa)));
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_builtin0", "i(ii)", &opa_builtin0, opa)));
 
 _catch:
