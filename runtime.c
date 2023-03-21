@@ -137,16 +137,16 @@ static void wasm_vm_print_backtrace(wasm_vm *vm)
         return;
     }
 
-    printk("wasm: backtrace:");
+    pr_err("wasm: backtrace:");
 
     int frameCount = 0;
     IM3BacktraceFrame curr = info->frames;
     if (!curr)
-        printk("found no frames");
+        pr_err("found no frames");
     while (curr)
     {
         // printk("found frame function is -> %p", curr->function);
-        printk("  %d: 0x%06x - %s!%s",
+        pr_err("  %d: 0x%06x - %s!%s",
                frameCount, curr->moduleOffset,
                m3_GetModuleName(m3_GetFunctionModule(curr->function)),
                m3_GetFunctionName(curr->function));
@@ -155,7 +155,7 @@ static void wasm_vm_print_backtrace(wasm_vm *vm)
     }
     if (info->lastFrame == M3_BACKTRACE_TRUNCATED)
     {
-        printk("\n  (truncated)");
+        pr_err("\n  (truncated)");
     }
 }
 

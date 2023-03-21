@@ -81,7 +81,7 @@ int parse_opa_builtins(opa_wrapper *opa, char *json)
         printk("wasm: opa module builtins = %s", json);
 
         // indexing starts from 1 for some reason, so we need one bigger array
-        opa->builtins = kmalloc(builtins + 1 * sizeof(void*), GFP_KERNEL);
+        opa->builtins = kmalloc(builtins + 1 * sizeof(void *), GFP_KERNEL);
 
         int i;
         for (i = 0; i < builtins; i++)
@@ -120,12 +120,15 @@ int parse_opa_eval_result(char *json)
 
 m3ApiRawFunction(opa_abort)
 {
-    m3ApiGetArgMem(char*, addr);
+    m3ApiGetArgMem(char *, addr);
+    pr_err("wasm: opa_abort: %s", addr);
+    m3ApiTrap(m3Err_trapAbort);
+}
 
-    opa_wrapper *opa = (opa_wrapper *)_ctx->userdata;
-
-    printk("wasm: calling opa_abort %s", addr);
-
+m3ApiRawFunction(opa_println)
+{
+    m3ApiGetArgMem(char *, addr);
+    printk(addr);
     m3ApiSuccess();
 }
 
@@ -152,6 +155,7 @@ static wasm_vm_result link_opa_builtins(opa_wrapper *opa, wasm_vm_module *module
     const char *env = "env";
 
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_abort", "(i)", &opa_abort, opa)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_println", "(i)", &opa_println, opa)));
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_builtin0", "i(ii)", &opa_builtin0, opa)));
 
 _catch:
@@ -183,9 +187,10 @@ wasm_vm_result init_opa_for(wasm_vm *vm)
     }
 
     uint8_t *memory = wasm_vm_memory(vm);
+    i32 builtinsJson = result.data->i32;
 
     // parse and link
-    char *builtins = memory + result.data->i32;
+    char *builtins = memory + builtinsJson;
     if (parse_opa_builtins(opa, builtins) > 0)
     {
         result = link_opa_builtins(opa, wasm_vm_get_module(vm, OPA_MODULE));
@@ -197,7 +202,7 @@ wasm_vm_result init_opa_for(wasm_vm *vm)
         }
     }
 
-    // opa_free(opa, result.data->i32);
+    opa_free(opa, builtinsJson);
 
     opas[vm->cpu] = opa;
 
