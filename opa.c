@@ -33,7 +33,7 @@ typedef struct opa_wrapper
     IM3Function json_dump;
 } opa_wrapper;
 
-static opa_wrapper *opas[NR_CPUS] = {};
+static opa_wrapper *opas[NR_CPUS] = {0};
 
 wasm_vm_result opa_malloc(opa_wrapper *opa, unsigned size)
 {
