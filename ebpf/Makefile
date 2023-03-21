@@ -2,10 +2,10 @@ CC = clang
 DEVICE = $(shell ls /sys/class/net | head -1)
 
 buildxdp: xdp_pass_kern.o
-	$(CC) -O2 -g -Wall -target bpf -c xdp_pass_kern.c -o xdp_pass_kern.o -I/usr/include/aarch64-linux-gnu/
+	$(CC) -O2 -g -Wall -target bpf -c xdp_pass_kern.bpf.c -o xdp_pass_kern.bpf.o -I/usr/include/aarch64-linux-gnu/
 
 loadxdp: unloadxdp
-	sudo ip link set dev $(DEVICE) xdpgeneric obj xdp_pass_kern.o sec xdp
+	sudo ip link set dev $(DEVICE) xdpgeneric obj xdp_pass_kern.bpf.o sec xdp
 
 unloadxdp:
 	sudo ip link set $(DEVICE) xdpgeneric off
