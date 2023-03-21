@@ -81,7 +81,7 @@ int parse_opa_builtins(opa_wrapper *opa, char *json)
         printk("wasm: opa module builtins = %s", json);
 
         // indexing starts from 1 for some reason, so we need one bigger array
-        opa->builtins = kmalloc(builtins + 1 * sizeof(void *), GFP_KERNEL);
+        opa->builtins = kzalloc(builtins + 1 * sizeof(void *), GFP_KERNEL);
 
         int i;
         for (i = 0; i < builtins; i++)
@@ -144,6 +144,12 @@ m3ApiRawFunction(opa_builtin0)
     printk("wasm: calling opa_builtin0 %d", builtin_id);
 
     i32 (*builtin)(opa_wrapper *) = opa->builtins[builtin_id];
+
+    if (!builtin)
+    {
+        pr_err("wasm: opa_builtin0 %d not found", builtin_id);
+        m3ApiTrap(m3Err_trapAbort);
+    }
 
     m3ApiReturn(builtin(opa));
 }
