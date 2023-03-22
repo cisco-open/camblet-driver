@@ -108,3 +108,6 @@ opa-bundle:
 	opa build -t wasm -e "xdp/allow" opa/xdp.rego -o opa/bundle.tar.gz
 	tar zxvf opa/bundle.tar.gz /policy.wasm
 	mv policy.wasm opa/
+
+opa-test:
+	opa test opa/*.rego -v

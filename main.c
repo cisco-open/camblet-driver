@@ -34,10 +34,10 @@ MODULE_LICENSE("Dual MIT/GPL");
 MODULE_DESCRIPTION("A kernel module that exposes a wasm VM");
 MODULE_VERSION("0.1");
 
-int bpf_opa_eval(int protocol)
+int bpf_opa_eval(const char *input)
 {
-    int res = this_cpu_opa_eval(protocol);
-    printk("%s: bpf_opa_eval(protocol=0x%04x) -> %d", THIS_MODULE->name, protocol, res);
+    int res = this_cpu_opa_eval(input);
+    printk("%s: bpf_opa_eval(input=%s) -> %d", THIS_MODULE->name, input, res);
     return res;
 }
 

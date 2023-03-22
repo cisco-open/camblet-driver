@@ -12,6 +12,11 @@ unloadxdp:
 
 createmap:
 	sudo bpftool map create /sys/fs/bpf/xdp_stats_map type percpu_hash key 2 value 64 entries 64 name xdp_stats_map
+	sudo bpftool map create /sys/fs/bpf/xdp_opa_input_map type percpu_array key 4 value 256 entries 1 name xdp_opa_input_map
+
+deletemap:
+	sudo rm /sys/fs/bpf/xdp_stats_map
+	sudo rm /sys/fs/bpf/xdp_opa_input_map
 
 dumpmap:
 	sudo bpftool map dump name xdp_stats_map

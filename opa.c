@@ -21,8 +21,6 @@
 #include "json.h"
 #include "runtime.h"
 
-#define JSON_MAX_LEN 32
-
 typedef struct opa_wrapper
 {
     wasm_vm *vm;
@@ -225,11 +223,11 @@ wasm_vm_result opa_eval(opa_wrapper *opa, i32 inputAddr, i32 inputLen)
     return wasm_vm_call_direct(opa->vm, opa->eval, 0, entrypoint, dataAddr, inputAddr, inputLen, heapAddr, format);
 }
 
-int this_cpu_opa_eval(int protocol)
+int this_cpu_opa_eval(const char *input)
 {
     int ret = false;
-    i32 jsonAddr = 0;
-    i32 jsonLen = 0;
+    i32 inputAddr = 0;
+    i32 inputLen = strlen(input) + 1;
     wasm_vm_result result;
 
     wasm_vm *vm = this_cpu_wasm_vm();
@@ -243,7 +241,7 @@ int this_cpu_opa_eval(int protocol)
         goto cleanup;
     }
 
-    result = opa_malloc(opa, JSON_MAX_LEN);
+    result = opa_malloc(opa, inputLen);
     if (result.err)
     {
         FATAL("opa wasm_vm_opa_malloc error: %s", result.err);
@@ -252,10 +250,10 @@ int this_cpu_opa_eval(int protocol)
 
     uint8_t *mem = wasm_vm_memory(vm);
 
-    jsonAddr = result.data->i32;
-    jsonLen = sprintf(mem + jsonAddr, "{\"protocol\":%d}", protocol);
+    inputAddr = result.data->i32;
+    memcpy(mem + inputAddr, input, inputLen);
 
-    result = opa_eval(opa, jsonAddr, jsonLen);
+    result = opa_eval(opa, inputAddr, inputLen);
     if (result.err)
     {
         FATAL("opa_eval error: %s", result.err);
@@ -271,9 +269,9 @@ int this_cpu_opa_eval(int protocol)
     printk("wasm: opa result parsed: %d", ret);
 
 cleanup:
-    if (jsonAddr != 0)
+    if (inputAddr != 0)
     {
-        result = opa_free(opa, jsonAddr);
+        result = opa_free(opa, inputAddr);
         if (result.err)
             FATAL("opa wasm_vm_opa_free json error: %s", result.err);
     }

@@ -23,15 +23,23 @@
 #include <linux/if_ether.h>
 #include <linux/sched.h>
 
-extern int bpf_opa_eval(int type) __ksym;
+extern int bpf_opa_eval(char *input) __ksym;
 
 struct
 {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
-    __uint(max_entries, 32 * 32);
-    __type(key, __be16);
+    __type(key, __u16);
     __type(value, __u64);
+    __uint(max_entries, 64);
 } xdp_stats_map SEC(".maps");
+
+struct
+{
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __type(key, __u32);
+    __type(value, char[256]);
+    __uint(max_entries, 1);
+} xdp_opa_input_map SEC(".maps");
 
 SEC("xdp")
 int xdp_prog_simple(struct xdp_md *ctx)
@@ -48,8 +56,12 @@ int xdp_prog_simple(struct xdp_md *ctx)
     struct ethhdr *eth = data;
     __be16 h_proto = bpf_ntohs(eth->h_proto);
 
-    int res = bpf_opa_eval(h_proto);
-    bpf_printk("bpf_opa_eval(proto=0x%04x) -> %d", h_proto, res);
+    __u32 key = 0;
+    char *json = bpf_map_lookup_elem(&xdp_opa_input_map, &key);
+    BPF_SNPRINTF(json, 256, "{\"proto\":%d}", h_proto);
+
+    int res = bpf_opa_eval(json);
+    bpf_printk("bpf_opa_eval(input=%s) -> %d", json, res);
 
     if (!res)
     {

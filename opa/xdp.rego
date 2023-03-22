@@ -8,7 +8,7 @@ allowed_protocols := {ETH_P_IPV4, ETH_P_IPV6}
 now := time.now_ns()
 
 allow {
-    input.protocol < now # just to test builtins
+    input.proto < now # just to test builtins
 
-    allowed_protocols[input.protocol]
+    allowed_protocols[input.proto]
 }
