@@ -20,15 +20,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"flag"
 	"io/fs"
 	"io/ioutil"
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/urfave/cli/v2"
+	cli "github.com/cristalhq/acmd"
 )
 
 type ModuleCommand struct {
@@ -37,30 +38,41 @@ type ModuleCommand struct {
 	Code    []byte `json:"code"`
 }
 
-var _commands = []*cli.Command{
+type loadFlags struct {
+	File string
+	Name string
+}
+
+func (c *loadFlags) Flags() *flag.FlagSet {
+	fs := flag.NewFlagSet("", flag.ContinueOnError)
+	fs.StringVar(&c.File, "file", "my-module.wasm", "the file path of the loaded Wasm module")
+	fs.StringVar(&c.Name, "name", "my-module", "how to name the loaded Wasm module")
+	return fs
+}
+
+var cmds = []cli.Command{
 	{
-		Name:    "load",
-		Usage:   "Loads a wasm module to the kernel",
-		Aliases: []string{"l"},
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:  "name",
-				Usage: "name of the loaded module",
-			},
-		},
-		ArgsUsage: "load wasm from `FILE`",
-		Action: func(ctx *cli.Context) error {
-			if ctx.Args().Len() < 1 {
+		Name:        "load",
+		Description: "loads a Wasm module to the kernel",
+		Alias:       "l",
+		FlagSet:     &loadFlags{},
+		ExecFunc: func(ctx context.Context, args []string) error {
+			if len(args) < 1 {
 				log.Fatal("filename required")
 			}
 
-			filename := ctx.Args().First()
+			var cfg loadFlags
+			if err := cfg.Flags().Parse(args); err != nil {
+				return err
+			}
+
+			filename := cfg.File
 			code, err := ioutil.ReadFile(filename)
 			if err != nil {
 				return err
 			}
 
-			name := ctx.String("name")
+			name := cfg.Name
 			if name == "" {
 				basename := filepath.Base(filename)
 				name = strings.TrimSuffix(basename, filepath.Ext(basename))
@@ -76,10 +88,10 @@ var _commands = []*cli.Command{
 		},
 	},
 	{
-		Name:    "reset",
-		Usage:   "reset the wasm vm in the kernel",
-		Aliases: []string{"r"},
-		Action: func(ctx *cli.Context) error {
+		Name:        "reset",
+		Description: "reset the wasm vm in the kernel",
+		Alias:       "r",
+		ExecFunc: func(ctx context.Context, args []string) error {
 			c := ModuleCommand{
 				Command: "reset",
 			}
@@ -104,12 +116,11 @@ func sendCommand(c ModuleCommand) error {
 }
 
 func main() {
-	app := &cli.App{
-		Name:     "w3k",
-		Usage:    "cli to control the wasm kernel module",
-		Commands: _commands,
-	}
-	if err := app.Run(os.Args); err != nil {
+	r := cli.RunnerOf(cmds, cli.Config{
+		AppName:        "w3k",
+		AppDescription: "cli to control the wasm kernel module",
+	})
+	if err := r.Run(); err != nil {
 		log.Fatal(err)
 	}
 }

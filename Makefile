@@ -89,13 +89,13 @@ rmmod:
 	sudo rm -f /run/wasm.socket
 
 load-dns-go-wasm:
-	sudo cli/cli load samples/dns-go.wasm
+	sudo cli/cli load -file samples/dns-go.wasm
 
 load-dns-rust-wasm:
-	sudo cli/cli load -name dns samples/target/wasm32-unknown-unknown/release/dns-rust.wasm
+	sudo cli/cli load -name dns -file samples/target/wasm32-unknown-unknown/release/dns-rust.wasm
 
 load-opa-policy-wasm:
-	sudo cli/cli load -name opa opa/policy.wasm
+	sudo cli/cli load -name opa -file opa/policy.wasm
 
 build-cli:
 	export GOOS=linux; cd cli; go build
