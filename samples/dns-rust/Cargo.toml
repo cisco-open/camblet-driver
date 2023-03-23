@@ -1,5 +1,5 @@
 [package]
-name = "webassembly"
+name = "dns-rust"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,7 +12,6 @@ domain = { version = "0.7.1", default-features = false }
 
 [[bin]]
 name = "dns-rust"
-path = "main.rs"
 
 # [lib]
 # crate-type = ["cdylib"]

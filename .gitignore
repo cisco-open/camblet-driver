@@ -13,3 +13,4 @@
 *.wasm
 *.tar.gz
 cli/cli
+target/

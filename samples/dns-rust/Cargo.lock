@@ -36,6 +36,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6548a0ad5d2549e111e1f6a11a6c2e2d00ce6a3dafe22948d67c2b443f775e52"
 
 [[package]]
+name = "dns-rust"
+version = "0.1.0"
+dependencies = [
+ "domain",
+ "pdu",
+ "postcard",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "domain"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -204,14 +215,3 @@ name = "unicode-ident"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "84a22b9f218b40614adcb3f4ff08b703773ad44fa9423e4e0d346d5db86e4ebc"
-
-[[package]]
-name = "webassembly"
-version = "0.1.0"
-dependencies = [
- "domain",
- "pdu",
- "postcard",
- "serde",
- "serde_json",
-]

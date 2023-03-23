@@ -73,14 +73,6 @@ help:
 logs:
 	sudo dmesg -T --follow
 
-ALPINE_VERSION ?= 3.13
-build-in-docker:
-	docker build -t builder -f Dockerfile.dev --build-arg KERNEL_VERSION=$(shell docker info -f "{{ json .KernelVersion }}" | tr -d '"' | cut -d '-' -f 1) --build-arg ALPINE_VERSION=${ALPINE_VERSION} .
-	docker run -ti --rm -v $(shell pwd):/workspace -v /dev:/dev -v /run/guest-services:/run/guest-services -v /lib/modules:/lib/modules --privileged builder
-
-insmod-in-docker:
-	insmod /workspace/wasm.ko sock_path=/run/guest-services/wasm.socket
-
 insmod:
 	sudo insmod wasm.ko
 
@@ -88,17 +80,29 @@ rmmod:
 	sudo rmmod wasm
 	sudo rm -f /run/wasm.socket
 
+build-dns-hello-world-wasm:
+	cd samples/hello-world-rust; make
+
+build-dns-go-wasm:
+	cd samples/dns-go; make
+
+build-dns-rust-wasm:
+	cd samples/dns-rust; make
+
+load-hello-rust-wasm:
+	sudo cli/cli load -file samples/hello-world-rust/target/wasm32-unknown-unknown/release/hello-world.wasm
+
 load-dns-go-wasm:
-	sudo cli/cli load -file samples/dns-go.wasm
+	sudo cli/cli load -file samples/dns-go/dns-go.wasm
 
 load-dns-rust-wasm:
-	sudo cli/cli load -name dns -file samples/target/wasm32-unknown-unknown/release/dns-rust.wasm
+	sudo cli/cli load -name dns -file samples/dns-rust/target/wasm32-unknown-unknown/release/dns-rust.wasm
 
 load-opa-policy-wasm:
 	sudo cli/cli load -name opa -file opa/policy.wasm
 
 build-cli:
-	export GOOS=linux; cd cli; go build
+	cd cli; go build
 
 setup-vm:
 	sudo apt update
