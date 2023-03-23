@@ -24,25 +24,19 @@ tinygo build -o dns-go.wasm -target wasm -wasm-abi=generic -gc=leaking main.go
 
 ### DNS Parser module
 
-This directory contains webassembly targeted example applications, the main one is a DNS packet capturer/parser application, which gets called back by the kernel module through netfilter.
+This directory contains WebAssembly targeted example applications, the main one is a DNS packet capturer/parser application written in Rust, compiled to Wasm, which gets called back by the kernel module through netfilter:
 
 ```bash
-# On your local machine
-cd samples/
-# build the webassembly module from the code
-make rust-sample
+# Build the WebAssembly module from the code on your local machine
+make build-dns-rust-wasm
 # Build the CLI
-cd ..
-make build-cli
-# SSH inside the vagrant machine using vagrant ssh
-# and cd into the /vagrant directory
+lima make build-cli
 # load the wasm module to the kernel module
-make load-dns-rust-wasm
+lima make load-dns-rust-wasm
 # exercise DNS a bit to capture some packages
-dig +ttlunits telex.hu
+lima dig +ttlunits telex.hu
 # check the logs to see the parsed messages
-make logs
-
-# use exported metrics through UNIX socket
+lima make logs
+# The DNS Wasm module exposes DNS latency metrics through UNIX socket in JSON format:
 sudo socat - UNIX-CONNECT:/run/wasm.socket
 ```
