@@ -1,0 +1,1 @@
+A base64 encoding and decoding library in C, taken from https://github.com/rustyrussell/ccan/tree/master/ccan/base64 and modified to be able to run in Linux kernel space.

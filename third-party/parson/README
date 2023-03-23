@@ -1,0 +1,1 @@
+Parson is a lightweight json library written in C, taken from https://github.com/kgabis/parson and modified to be able to run in Linux kernel space.

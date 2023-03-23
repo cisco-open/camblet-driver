@@ -1,4 +1,4 @@
 [submodule "wasm3"]
-	path = wasm3
+	path = third-party/wasm3
 	url = git@wwwin-github.cisco.com:eti/wasm3.git
 	branch = linux-kernel

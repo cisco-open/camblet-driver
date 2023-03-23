@@ -20,10 +20,10 @@
 #ifndef wasm_module_h
 #define wasm_module_h
 
-#include "wasm3/source/m3_core.h"
-#include "wasm3/source/m3_env.h"
-#include "wasm3/source/m3_exception.h"
-#include "wasm3/source/wasm3.h"
+#include "m3_core.h"
+#include "m3_env.h"
+#include "m3_exception.h"
+#include "wasm3.h"
 
 #define FATAL(msg, ...)                                    \
     {                                                      \

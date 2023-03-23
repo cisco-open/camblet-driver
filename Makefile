@@ -4,6 +4,10 @@ EXTRA_CFLAGS := -foptimize-sibling-calls \
 				-Dd_m3RecordBacktraces=1 \
 				-DDEBUG=1 \
 				-Dd_m3HasFloat=$(EMULATE_FLOATS) \
+				-I$(PWD) \
+				-I$(PWD)/third-party/wasm3/source/ \
+				-I$(PWD)/third-party/base64 \
+				-I$(PWD)/third-party/parson \
 				#-Dd_m3LogCompile=1
 
 # Enable floating point arithmetic
@@ -29,24 +33,24 @@ VERBOSE := 1
 
 # obj-m specifies we're a kernel module.
 obj-m += wasm.o
-wasm-objs :=  wasm3/source/m3_api_libc.o \
-              wasm3/source/m3_compile.o \
-			  wasm3/source/m3_api_meta_wasi.o \
-			  wasm3/source/m3_api_tracer.o \
-			  wasm3/source/m3_api_uvwasi.o \
-			  wasm3/source/m3_api_wasi.o \
-			  wasm3/source/m3_bind.o \
-			  wasm3/source/m3_code.o \
-			  wasm3/source/m3_core.o \
-			  wasm3/source/m3_env.o \
-			  wasm3/source/m3_exec.o \
-			  wasm3/source/m3_function.o \
-			  wasm3/source/m3_info.o \
-			  wasm3/source/m3_module.o \
-			  wasm3/source/m3_parse.o \
-			  base64.o \
+wasm-objs :=  third-party/wasm3/source/m3_api_libc.o \
+              third-party/wasm3/source/m3_compile.o \
+			  third-party/wasm3/source/m3_api_meta_wasi.o \
+			  third-party/wasm3/source/m3_api_tracer.o \
+			  third-party/wasm3/source/m3_api_uvwasi.o \
+			  third-party/wasm3/source/m3_api_wasi.o \
+			  third-party/wasm3/source/m3_bind.o \
+			  third-party/wasm3/source/m3_code.o \
+			  third-party/wasm3/source/m3_core.o \
+			  third-party/wasm3/source/m3_env.o \
+			  third-party/wasm3/source/m3_exec.o \
+			  third-party/wasm3/source/m3_function.o \
+			  third-party/wasm3/source/m3_info.o \
+			  third-party/wasm3/source/m3_module.o \
+			  third-party/wasm3/source/m3_parse.o \
+			  third-party/base64/base64.o \
+			  third-party/parson/json.o \
 			  device_driver.o \
-			  json.o \
 			  main.o \
 			  netfilter.o \
 			  hashtable.o \

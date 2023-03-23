@@ -23,9 +23,9 @@
 #include "worker_thread.h"
 #include "hashtable.h"
 
-#include "wasm3/source/wasm3.h"
-#include "wasm3/source/m3_env.h"
-#include "wasm3/source/m3_api_libc.h"
+#include "wasm3.h"
+#include "m3_env.h"
+#include "m3_api_libc.h"
 
 #define PRIi32 "i"
 #define PRIi64 "lli"
