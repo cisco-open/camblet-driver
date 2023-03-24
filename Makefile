@@ -89,6 +89,12 @@ build-dns-go-wasm:
 build-dns-rust-wasm:
 	cd samples/dns-rust; make
 
+build-opa-policy-wasm:
+	cd samples/opa; make
+
+build-ebpf-xdp-prog:
+	cd samples/ebpf; make
+
 load-hello-rust-wasm:
 	sudo cli/cli load -file samples/hello-world-rust/target/wasm32-unknown-unknown/release/hello-world.wasm
 
@@ -99,7 +105,10 @@ load-dns-rust-wasm:
 	sudo cli/cli load -name dns -file samples/dns-rust/target/wasm32-unknown-unknown/release/dns-rust.wasm
 
 load-opa-policy-wasm:
-	sudo cli/cli load -name opa -file opa/policy.wasm
+	sudo cli/cli load -name opa -file samples/opa/policy.wasm
+
+load-ebpf-xdp-prog:
+	cd samples/ebpf; make loadxdp
 
 build-cli:
 	cd cli; go build
@@ -111,11 +120,3 @@ setup-vm:
 
 setup-archlinux-vm:
 	sudo pacman -Syu linux-headers base-devel clang go
-
-opa-bundle:
-	opa build -t wasm -e "xdp/allow" opa/xdp.rego -o opa/bundle.tar.gz
-	tar zxvf opa/bundle.tar.gz /policy.wasm
-	mv policy.wasm opa/
-
-opa-test:
-	opa test opa/*.rego -v

@@ -13,11 +13,5 @@ domain = { version = "0.7.1", default-features = false }
 [[bin]]
 name = "dns-rust"
 
-# [lib]
-# crate-type = ["cdylib"]
-# bench = false
-# name = "dns-rust"
-# path = "main.rs"
-
 [profile.release]
 lto = true

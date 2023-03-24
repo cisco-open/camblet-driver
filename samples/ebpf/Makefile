@@ -1,7 +1,7 @@
 CC = clang
 DEVICE = $(shell ls /sys/class/net | head -1)
 
-buildxdp: xdp_pass_kern.o
+buildxdp:
 	$(CC) -O2 -g -Wall -target bpf -c xdp_pass_kern.bpf.c -o xdp_pass_kern.bpf.o -I/usr/include/aarch64-linux-gnu/
 
 loadxdp: unloadxdp

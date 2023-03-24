@@ -107,7 +107,7 @@ lima make build-cli
 
 ## Examples
 
-All examples use the CLI underneath, inside the Make targets.
+You can find a few sample applications compiled to Wasm and also EBPF code snippets which use them under the [samples](./samples) directory. All examples use the CLI underneath, inside the Make targets.
 
 ### Simple Hello World
 
