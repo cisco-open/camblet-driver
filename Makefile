@@ -110,6 +110,9 @@ load-opa-policy-wasm:
 load-ebpf-xdp-prog:
 	cd samples/ebpf; make loadxdp
 
+unload-ebpf-xdp-prog:
+	cd samples/ebpf; make unloadxdp
+
 build-cli:
 	cd cli; go build
 
