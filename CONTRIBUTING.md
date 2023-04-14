@@ -72,5 +72,4 @@ and
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under MIT.
-
+By contributing, you agree that your contributions will be dual licensed under both MIT and GPLv2 licenses.
