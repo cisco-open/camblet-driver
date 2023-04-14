@@ -102,6 +102,10 @@ int parse_opa_eval_result(char *json)
         JSON_Object *result = json_array_get_object(results, 0);
         int ret = json_object_get_boolean(result, "result");
         json_value_free(root_value);
+        if (ret == -1)
+        {
+            ret = false;
+        }
         return ret;
     }
     return false;
@@ -227,7 +231,7 @@ int this_cpu_opa_eval(const char *input)
     opa_wrapper *opa = this_cpu_opa();
     if (!opa)
     {
-        ret = 1;
+        ret = true;
         pr_warn("wasm: opa policy module not loaded, eval always evalautes to true");
         goto cleanup;
     }
