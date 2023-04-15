@@ -94,3 +94,12 @@ Follow the kernel logs:
 ```
 make logs
 ```
+
+Install the [CLI](https://github.com/cisco-open/wasm-kernel-module-cli) for the kernel module:
+
+```bash
+git clone git@github.com:cisco-open/wasm-kernel-module-cli.git
+cd wasm-kernel-module-cli
+```
+
+Then follow the isntructions [here](https://github.com/cisco-open/wasm-kernel-module-cli#cli).
