@@ -70,7 +70,7 @@ vagrant ssh
 Checkout the code:
 ```
 bash
-git clone --recurse-submodules git@wwwin-github.cisco.com:eti/wasm-kernel-module.git
+git clone --recurse-submodules git@github.com:cisco-open/wasm-kernel-module.git
 cd wasm-kernel-module
 ```
 
