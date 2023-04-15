@@ -16,5 +16,14 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        echo "uname -a"
+        uname -a
+        echo "pwd"
+        pwd
+        sudo apt-get -y install bpfcc-tools linux-headers-$(uname -r)
+
     - name: Run build
       run: make
