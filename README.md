@@ -68,8 +68,8 @@ vagrant ssh
 *This assumes that you have created a development environment according to the previous section.*
 
 Checkout the code:
-```
-bash
+
+```bash
 git clone --recurse-submodules git@github.com:cisco-open/wasm-kernel-module.git
 cd wasm-kernel-module
 ```
