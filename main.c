@@ -8,6 +8,7 @@
  * modified, or distributed except according to those terms.
  */
 
+#include <linux/bpfptr.h>
 #include <linux/btf.h>
 #include <linux/btf_ids.h>
 #include <linux/module.h>
@@ -75,7 +76,7 @@ static int __init wasm_init(void)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
     ret += register_btf_kfunc_id_set(BPF_PROG_TYPE_XDP, &bpf_opa_kfunc_set);
 #else
-    pr_warn("%s: this kernel version (<5.18) doesn't support BTF kfuncs, can't register them", THIS_MODULE->name);
+    pr_warn("%s: your kernel version (<5.18) doesn't support BTF kfuncs, can't register them", THIS_MODULE->name);
 #endif
 
     return ret;
