@@ -8,6 +8,7 @@
  * modified, or distributed except according to those terms.
  */
 
+#include <linux/mm.h>
 #include <linux/bpfptr.h>
 #include <linux/btf.h>
 #include <linux/btf_ids.h>
