@@ -1,0 +1,36 @@
+name: Makefile CI
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - name: Install/setup prerequisites
+      run: make setup-vm
+
+    # - name: Setup upterm session
+    #   uses: lhotari/action-upterm@v1
+    #   with:
+    #     ## limits ssh access and adds the ssh public key for the user which triggered the workflow
+    #     limit-access-to-actor: true
+
+    - name: Build module
+      run: make
+
+    - name: Run module
+      run: |
+        make insmod
+        sudo dmesg -T
+
+    - name: Cleanup module
+      run: |
+        make rmmod
