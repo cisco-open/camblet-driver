@@ -2,12 +2,12 @@
 
 This Linux Kernel module runs and exposes a [Wasm](https://webassembly.org) runtime as a proof of concept for checking:
 - Wasm is capable of running the kernel space
-- running code in kernel space in allmost all languages compiled to Wasm
+- running code in kernel space in almost all languages compiled to Wasm
 - expose Wasm functionality written in Wasm to eBPF securely
 
 ## Why doing this?
 
-[eBPF](https://ebpf.io) is a fine piece of technology for doing low-level tracing, traffic shifting, authorization and other cool things in the kernel space, and a user space counterpart of an eBPF program helps it to manage more complex logic. Wasm is a fine piece of technology to write more [complex business logic](https://www.secondstate.io/articles/ebpf-and-webassembly-whose-vm-reigns-supreme/) (it is Turing-complete). This project aims to create such a setup, where one can support an eBPF program next from Kernel space, with user space level logic, written in Wasm, exposed as a normal Kernel function, instead of communicating through eBPF maps to user space.
+[eBPF](https://ebpf.io) is a fine piece of technology for doing low-level tracing, traffic shifting, authorization, and other cool things in the kernel space, and a user space counterpart of an eBPF program helps it to manage more complex logic. Wasm is a fine piece of technology to write more [complex business logic](https://www.secondstate.io/articles/ebpf-and-webassembly-whose-vm-reigns-supreme/) (it is Turing-complete). This project aims to create such a setup, where one can support an eBPF program next from Kernel space, with user space level logic, written in Wasm, exposed as a normal Kernel function, instead of communicating through eBPF maps to user space.
 
 ### Presentations
 
@@ -15,7 +15,7 @@ This project was presented on KubeCon 2023 Amsterdam, Wasm Day, you can find the
 
 ## Which Wasm runtime?
 
-The [wasm3](https://github.com/wasm3/wasm3) runtime got choosen since it is written in C and has minimal dependencies (except a C library) and this it is extremely portable. In kernel space there is no libc, but we maintain a fork of wasm3 which can run in kernel space as well (check the `thrid-party/wasm3/` submodule).
+The [wasm3](https://github.com/wasm3/wasm3) runtime got chosen since it is written in C and has minimal dependencies (except a C library) and it is extremely portable. In kernel space, there is no libc, but we maintain a fork of wasm3 which can run in kernel space as well (check the `thrid-party/wasm3/` submodule).
 
 Current restrictions for kernel-space wasm3:
 - no floating point support [can be soft-emulated if needed]
@@ -37,7 +37,7 @@ Launch the default VM which is an Ubuntu and matches the host's architecture by 
 limactl start
 ```
 
-Setup the required depdendencies in the VM:
+Setup the required dependencies in the VM:
 ```bash
 lima # enter the VM
 ...
@@ -55,7 +55,7 @@ On macOS install Vagrant and VirtualBox with brew:
 brew install vagrant virtualbox
 ```
 
-Bring up the Vagrant machine, this installs the required dependencies atuomatically into it:
+Bring up the Vagrant machine, this installs the required dependencies automatically into it:
 
 ```bash
 vagrant up
@@ -106,4 +106,4 @@ git clone git@github.com:cisco-open/wasm-kernel-module-cli.git
 cd wasm-kernel-module-cli
 ```
 
-Then follow the isntructions [here](https://github.com/cisco-open/wasm-kernel-module-cli#cli).
+Then follow the instructions [here](https://github.com/cisco-open/wasm-kernel-module-cli#cli).
