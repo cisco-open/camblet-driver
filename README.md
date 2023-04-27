@@ -9,6 +9,10 @@ This Linux Kernel module runs and exposes a [Wasm](https://webassembly.org) runt
 
 [eBPF](https://ebpf.io) is a fine piece of technology for doing low-level tracing, traffic shifting, authorization and other cool things in the kernel space, and a user space counterpart of an eBPF program helps it to manage more complex logic. Wasm is a fine piece of technology to write more [complex business logic](https://www.secondstate.io/articles/ebpf-and-webassembly-whose-vm-reigns-supreme/) (it is Turing-complete). This project aims to create such a setup, where one can support an eBPF program next from Kernel space, with user space level logic, written in Wasm, exposed as a normal Kernel function, instead of communicating through eBPF maps to user space.
 
+### Presentations
+
+This project was presented on KubeCon 2023 Amsterdam, Wasm Day, you can find the recording [here](https://www.youtube.com/watch?v=JSKNch6piyY).
+
 ## Which Wasm runtime?
 
 The [wasm3](https://github.com/wasm3/wasm3) runtime got choosen since it is written in C and has minimal dependencies (except a C library) and this it is extremely portable. In kernel space there is no libc, but we maintain a fork of wasm3 which can run in kernel space as well (check the `thrid-party/wasm3/` submodule).
