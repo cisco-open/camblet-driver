@@ -129,8 +129,9 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
             printk("wasm: calling module entrypoint: %s", entrypoint);
 
             result = wasm_vm_call(vm, name, entrypoint);
-            if (result.err && result.err != m3Err_functionLookupFailed
-                && strcmp(entrypoint, DEFAULT_MODULE_ENTRYPOINT))
+            // if we can't find the implicit main entrypoint, that is not an issue
+            if (result.err &&
+              !(result.err = m3Err_functionLookupFailed && strcmp(entrypoint, DEFAULT_MODULE_ENTRYPOINT) == 0))
             {
                 FATAL("wasm_vm_call: %s", result.err);
                 wasm_vm_unlock(vm);
