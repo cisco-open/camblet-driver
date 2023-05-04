@@ -18,6 +18,8 @@
 
 /* Global variables are declared as static, so are global within the file. */
 
+#define DEFAULT_MODULE_ENTRYPOINT "main"
+
 static int major; /* major number assigned to our device driver */
 
 enum
@@ -127,7 +129,8 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
             printk("wasm: calling module entrypoint: %s", entrypoint);
 
             result = wasm_vm_call(vm, name, entrypoint);
-            if (result.err && result.err != m3Err_functionLookupFailed)
+            if (result.err && result.err != m3Err_functionLookupFailed
+                && strcmp(entrypoint, DEFAULT_MODULE_ENTRYPOINT))
             {
                 FATAL("wasm_vm_call: %s", result.err);
                 wasm_vm_unlock(vm);
@@ -188,7 +191,8 @@ static int device_release(struct inode *inode, struct file *file)
             char *entrypoint = json_object_get_string(root, "entrypoint");
             if (entrypoint == NULL)
             {
-                entrypoint = "main";
+                printk("wasm: setting default module entrypoint \"%s\"", DEFAULT_MODULE_ENTRYPOINT);
+                entrypoint = DEFAULT_MODULE_ENTRYPOINT;
             }
 
             wasm_vm_result result = load_module(name, device_buffer, length, entrypoint);
