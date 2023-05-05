@@ -10,7 +10,6 @@
 
 #include "opa.h"
 #include "json.h"
-#include "runtime.h"
 
 typedef struct opa_wrapper
 {
