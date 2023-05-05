@@ -37,7 +37,7 @@ static proxywasm *proxywasms[NR_CPUS] = {0};
 
 wasm_vm_result proxy_on_memory_allocate(proxywasm *proxywasm, i32 size)
 {
-    return wasm_vm_call_direct(opa->vm, opa->proxy_on_memory_allocate, size);
+    return wasm_vm_call_direct(proxywasm->vm, proxywasm->proxy_on_memory_allocate, size);
 }
 
 proxywasm* this_cpu_proxywasm(void)
