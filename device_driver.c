@@ -14,6 +14,7 @@
 #include "device_driver.h"
 #include "json.h"
 #include "opa.h"
+#include "proxywasm.h"
 #include "runtime.h"
 
 /* Global variables are declared as static, so are global within the file. */
@@ -147,6 +148,16 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
             if (result.err)
             {
                 FATAL("init_opa_for: %s", result.err);
+                wasm_vm_unlock(vm);
+                return result;
+            }
+        }
+        else if (strstr(name, "proxywasm") != NULL)
+        {
+            result = init_proxywasm_for(vm, name);
+            if (result.err)
+            {
+                FATAL("init_proxywasm_for: %s", result.err);
                 wasm_vm_unlock(vm);
                 return result;
             }

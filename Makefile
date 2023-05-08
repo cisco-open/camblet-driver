@@ -8,7 +8,7 @@ EXTRA_CFLAGS := -foptimize-sibling-calls \
 				-I$(PWD)/third-party/wasm3/source/ \
 				-I$(PWD)/third-party/base64 \
 				-I$(PWD)/third-party/parson \
-				#-Dd_m3LogCompile=1
+				-Dd_m3LogCompile=1
 
 # Enable floating point arithmetic
 ARCH := $(shell uname -m)

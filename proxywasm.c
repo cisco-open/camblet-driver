@@ -110,9 +110,30 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
         return result;
     }
 
-    result = wasm_vm_call_direct(vm, proxywasm->proxy_on_context_create);
+    i32 root_context_id = 0; // TODO
+
+    result = wasm_vm_call_direct(vm, proxywasm->proxy_on_context_create, root_context_id, 0);
     if (result.err)
     {
+        FATAL("proxy_on_context_create for module %s failed: %s", module, result.err)
+        kfree(proxywasm);
+        return result;
+    }
+
+    result = wasm_vm_call_direct(vm, proxywasm->proxy_on_vm_start, root_context_id, 0);
+    if (result.err)
+    {
+        FATAL("proxy_on_vm_start for module %s failed: %s", module, result.err)
+        kfree(proxywasm);
+        return result;
+    }
+
+    i32 plugin_configuration_size = 0; // TODO
+
+    result = wasm_vm_call_direct(vm, proxywasm->proxy_on_configure, root_context_id, plugin_configuration_size);
+    if (result.err)
+    {
+        FATAL("proxy_on_configure for module %s failed: %s", module, result.err)
         kfree(proxywasm);
         return result;
     }

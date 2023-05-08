@@ -152,9 +152,9 @@ static wasm_vm_result link_opa_builtins(opa_wrapper *opa, wasm_vm_module *module
 
     const char *env = "env";
 
-    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_abort", "(i)", &opa_abort, opa)));
-    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_println", "(i)", &opa_println, opa)));
-    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_builtin0", "i(ii)", &opa_builtin0, opa)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_abort", "(i)", opa_abort, opa)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_println", "(i)", opa_println, opa)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_builtin0", "i(ii)", opa_builtin0, opa)));
 
 _catch:
     return (wasm_vm_result){.err = result};
