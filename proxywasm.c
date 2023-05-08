@@ -8,7 +8,18 @@
  * modified, or distributed except according to those terms.
  */
 
+#include <linux/hashtable.h>
+#include <linux/xxhash.h>
+
 #include "proxywasm.h"
+
+#define HASH_SEED 98469223
+
+typedef struct property_h_node {
+    int key;
+    char *value;
+    struct hlist_node node;
+} property_h_node;
 
 typedef struct proxywasm
 {
@@ -33,6 +44,8 @@ typedef struct proxywasm
     wasm_vm_function *proxy_on_upstream_close;
 
     i32 tick_period;
+
+    DECLARE_HASHTABLE(properties, 10);
 } proxywasm;
 
 static proxywasm *proxywasms[NR_CPUS] = {0};
@@ -61,7 +74,7 @@ m3ApiRawFunction(proxy_log)
 
     printk("proxywasm: [%d] %.*s", log_level, message_size, message_data);
 
-    m3ApiReturn(Ok);
+    m3ApiReturn(WasmResult_Ok);
 }
 
 m3ApiRawFunction(proxy_set_tick_period_milliseconds)
@@ -76,7 +89,7 @@ m3ApiRawFunction(proxy_set_tick_period_milliseconds)
 
     proxywasm->tick_period = tick_period;
 
-    m3ApiReturn(Ok);
+    m3ApiReturn(WasmResult_Ok);
 }
 
 m3ApiRawFunction(proxy_get_property)
@@ -93,7 +106,7 @@ m3ApiRawFunction(proxy_get_property)
 
     printk("wasm: calling proxy_get_property '%.*s'", property_path_size, property_path_data);
 
-    m3ApiReturn(Ok);
+    m3ApiReturn(WasmResult_Ok);
 }
 
 static wasm_vm_result link_proxywasm_hostfunctions(proxywasm *proxywasm, wasm_vm_module *module)
@@ -120,6 +133,8 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
     proxywasm->proxy_on_vm_start = wasm_vm_get_function(vm, module, "proxy_on_vm_start");
     proxywasm->proxy_on_configure = wasm_vm_get_function(vm, module, "proxy_on_configure");
     proxywasm->vm = vm;
+
+    hash_init(proxywasm->properties);
 
     result = link_proxywasm_hostfunctions(proxywasm, wasm_vm_get_module(vm, module));
     if (result.err)
@@ -165,3 +180,62 @@ wasm_vm_result proxy_on_new_connection(proxywasm *proxywasm, i32 context_id)
 {
     return wasm_vm_call_direct(proxywasm->vm, proxywasm->proxy_on_new_connection, context_id);
 }
+
+void set_property(proxywasm *proxywasm, const char *key, const char *value)
+{
+    // Since linux hashtable always appends the new element to the bucket ignoring key collision altogether
+    // we have to check whether an item with the key is already present in the map.
+    // If it does we must handle that with raising an error.
+    bool update = false;
+    struct property_h_node *cur = NULL;
+    struct property_h_node *bucket = NULL;
+    unsigned long key_i = xxhash(key, strlen(key), HASH_SEED);
+
+    hash_for_each_possible(proxywasm->properties, cur, node, key_i)
+    {
+        bucket = cur;
+    }
+
+    if (bucket)
+    {
+        printk("wasm: duplicate key (%s) found in hashmap, overwriting", key);
+        kfree(bucket->value);
+        update = true;
+    }
+    else
+    {
+        bucket = kmalloc(sizeof(struct property_h_node), GFP_KERNEL);
+    }
+
+    int value_len = strlen(value);
+    bucket->key = key_i;
+    bucket->value = (char*) kmalloc(value_len, GFP_KERNEL);
+    memcpy(bucket->value, value, value_len);
+
+    if (!update)
+    {
+        hash_add(proxywasm->properties, &bucket->node, key_i);
+    }
+}
+
+enum WasmResult get_property(proxywasm *proxywasm, const char *key, const char *value)
+{
+    struct property_h_node *cur = NULL;
+    struct property_h_node *temp = NULL;
+    unsigned long key_i = xxhash(key, strlen(key), HASH_SEED);
+
+    hash_for_each_possible(proxywasm->properties, cur, node, key_i)
+    {
+        temp = cur;
+    }
+
+    if (!temp)
+    {
+        return WasmResult_NotFound;
+    }
+
+    memcpy(value, temp->value, strlen(temp->value));
+
+    return WasmResult_Ok;
+}
+
