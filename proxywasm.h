@@ -42,8 +42,6 @@ enum WasmResult {
   Unimplemented = 12,
 };
 
-wasm_vm_result init_proxywasm_for(wasm_vm *vm);
-
-//int this_cpu_opa_eval(const char *input);
+wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module);
 
 #endif

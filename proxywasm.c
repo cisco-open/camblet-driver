@@ -30,7 +30,9 @@ typedef struct proxywasm
     wasm_vm_function *proxy_on_downstream_data;
     wasm_vm_function *proxy_on_downstream_close;
     wasm_vm_function *proxy_on_upstream_data;
-    wasm_vm_function *proxy_on_upstream_close;    
+    wasm_vm_function *proxy_on_upstream_close;
+
+    i32 tick_period;
 } proxywasm;
 
 static proxywasm *proxywasms[NR_CPUS] = {0};
@@ -68,16 +70,16 @@ m3ApiRawFunction(proxy_set_tick_period_milliseconds)
 
     m3ApiGetArg(i32, tick_period);
 
-    proxywasm *proxywasm = (proxywasm*) _ctx->userdata;
+    proxywasm *proxywasm = _ctx->userdata;
 
-    printk("wasm: calling proxy_set_tick_period_milliseconds %d", builtin_id);
+    printk("wasm: calling proxy_set_tick_period_milliseconds %d", tick_period);
 
     proxywasm->tick_period = tick_period;
 
-    m3ApiReturn(1);
+    m3ApiReturn(Ok);
 }
 
-static wasm_vm_result link_proxywasm_builtins(proxywasm *proxywasm, wasm_vm_module *module)
+static wasm_vm_result link_proxywasm_hostfunctions(proxywasm *proxywasm, wasm_vm_module *module)
 {
     M3Result result = m3Err_none;
 
@@ -91,6 +93,8 @@ _catch:
 
 wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
 {
+    wasm_vm_result result;
+
     proxywasm *proxywasm = kmalloc(sizeof(proxywasm), GFP_KERNEL);
     proxywasm->proxy_on_memory_allocate = wasm_vm_get_function(vm, module, "proxy_on_memory_allocate");
     proxywasm->proxy_on_context_create = wasm_vm_get_function(vm, module, "proxy_on_context_create");
@@ -98,49 +102,26 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
     proxywasm->proxy_on_configure = wasm_vm_get_function(vm, module, "proxy_on_configure");
     proxywasm->vm = vm;
 
-    wasm_vm_result result = wasm_vm_call_direct(vm, proxywasm->proxy_on_context_create);
+    result = link_proxywasm_hostfunctions(proxywasm, wasm_vm_get_module(vm, module));
     if (result.err)
     {
         kfree(proxywasm);
         return result;
     }
 
-    result = wasm_vm_call_direct(vm, opa->json_dump, result.data->i32);
+    result = wasm_vm_call_direct(vm, proxywasm->proxy_on_context_create);
     if (result.err)
     {
-        kfree(opa);
+        kfree(proxywasm);
         return result;
     }
 
-    uint8_t *memory = wasm_vm_memory(vm);
-    i32 builtinsJson = result.data->i32;
-
-    // parse and link
-    char *builtins = memory + builtinsJson;
-    if (parse_opa_builtins(opa, builtins) > 0)
-    {
-        result = link_proxywasm_builtins(opa, wasm_vm_get_module(vm, OPA_MODULE));
-        if (result.err)
-        {
-            kfree(opa->builtins);
-            kfree(opa);
-            return result;
-        }
-    }
-
-    opa_free(opa, builtinsJson);
-
-    opas[vm->cpu] = opa;
+    proxywasms[vm->cpu] = proxywasm;
 
     return (wasm_vm_result){.err = NULL};
 }
 
-wasm_vm_result opa_eval(proxywasm *proxywasm, i32 inputAddr, i32 inputLen)
+wasm_vm_result proxy_on_new_connection(proxywasm *proxywasm, i32 context_id)
 {
-    i32 entrypoint = 0;
-    i32 dataAddr = 0;
-    i32 heapAddr = 0;
-    i32 format = 0;
-
-    return wasm_vm_call_direct(proxywasm->vm, opa->eval, 0, entrypoint, dataAddr, inputAddr, inputLen, heapAddr, format);
+    return wasm_vm_call_direct(proxywasm->vm, proxywasm->proxy_on_new_connection, context_id);
 }
