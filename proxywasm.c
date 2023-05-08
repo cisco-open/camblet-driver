@@ -85,7 +85,8 @@ static wasm_vm_result link_proxywasm_hostfunctions(proxywasm *proxywasm, wasm_vm
 
     const char *env = "env";
 
-    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_log", "i(iii)", &proxy_log, proxywasm)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_log", "i(iii)", proxy_log, proxywasm)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_set_tick_period_milliseconds", "i(i)", proxy_set_tick_period_milliseconds, proxywasm)));
 
 _catch:
     return (wasm_vm_result){.err = result};
