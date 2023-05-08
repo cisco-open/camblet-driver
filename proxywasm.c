@@ -61,7 +61,7 @@ m3ApiRawFunction(proxy_log)
 
     printk("proxywasm: [%d] %.*s", log_level, message_size, message_data);
 
-    m3ApiSuccess();
+    m3ApiReturn(Ok);
 }
 
 m3ApiRawFunction(proxy_set_tick_period_milliseconds)
@@ -79,6 +79,23 @@ m3ApiRawFunction(proxy_set_tick_period_milliseconds)
     m3ApiReturn(Ok);
 }
 
+m3ApiRawFunction(proxy_get_property)
+{
+    m3ApiReturnType(i32);
+
+    m3ApiGetArgMem(char *, property_path_data);
+    m3ApiGetArg(i32, property_path_size);
+
+    m3ApiGetArgMem(char *, return_property_value_data);
+    m3ApiGetArgMem(i32 *, return_property_value_size);
+
+    proxywasm *proxywasm = _ctx->userdata;
+
+    printk("wasm: calling proxy_get_property '%.*s'", property_path_size, property_path_data);
+
+    m3ApiReturn(Ok);
+}
+
 static wasm_vm_result link_proxywasm_hostfunctions(proxywasm *proxywasm, wasm_vm_module *module)
 {
     M3Result result = m3Err_none;
@@ -87,6 +104,7 @@ static wasm_vm_result link_proxywasm_hostfunctions(proxywasm *proxywasm, wasm_vm
 
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_log", "i(iii)", proxy_log, proxywasm)));
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_set_tick_period_milliseconds", "i(i)", proxy_set_tick_period_milliseconds, proxywasm)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_property", "i(iiii)", proxy_get_property, proxywasm)));
 
 _catch:
     return (wasm_vm_result){.err = result};
