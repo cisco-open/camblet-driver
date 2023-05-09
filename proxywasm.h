@@ -42,6 +42,11 @@ enum WasmResult {
   WasmResult_Unimplemented = 12,
 };
 
+struct proxywasm;
+
 wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module);
+
+enum WasmResult get_property(struct proxywasm *proxywasm, const char *key, int key_len, char *value, int *value_len);
+void set_property(struct proxywasm *proxywasm, const char *key, int key_len, const char *value, int value_len);
 
 #endif

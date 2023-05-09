@@ -106,7 +106,9 @@ m3ApiRawFunction(proxy_get_property)
 
     printk("wasm: calling proxy_get_property '%.*s'", property_path_size, property_path_data);
 
-    m3ApiReturn(WasmResult_Ok);
+    // get_property(proxywasm, property_path_data, property_path_size, return_property_value_data, return_property_value_size);
+
+    m3ApiReturn(WasmResult_NotFound);
 }
 
 static wasm_vm_result link_proxywasm_hostfunctions(proxywasm *proxywasm, wasm_vm_module *module)
@@ -115,9 +117,9 @@ static wasm_vm_result link_proxywasm_hostfunctions(proxywasm *proxywasm, wasm_vm
 
     const char *env = "env";
 
-    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_log", "i(iii)", proxy_log, proxywasm)));
+    // _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_log", "i(i*i)", proxy_log, proxywasm)));
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_set_tick_period_milliseconds", "i(i)", proxy_set_tick_period_milliseconds, proxywasm)));
-    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_property", "i(iiii)", proxy_get_property, proxywasm)));
+    // _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_property", "i(iiii)", proxy_get_property, proxywasm)));
 
 _catch:
     return (wasm_vm_result){.err = result};
@@ -135,6 +137,10 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
     proxywasm->vm = vm;
 
     hash_init(proxywasm->properties);
+
+    char *node_key = "node";
+    char *node_value = "lima-linux-vm";
+//    set_property(proxywasm, node_key, strlen(node_key), node_value, strlen(node_value));
 
     result = link_proxywasm_hostfunctions(proxywasm, wasm_vm_get_module(vm, module));
     if (result.err)
@@ -181,7 +187,7 @@ wasm_vm_result proxy_on_new_connection(proxywasm *proxywasm, i32 context_id)
     return wasm_vm_call_direct(proxywasm->vm, proxywasm->proxy_on_new_connection, context_id);
 }
 
-void set_property(proxywasm *proxywasm, const char *key, const char *value)
+void set_property(proxywasm *proxywasm, const char *key, int key_len, const char *value, int value_len)
 {
     // Since linux hashtable always appends the new element to the bucket ignoring key collision altogether
     // we have to check whether an item with the key is already present in the map.
@@ -189,7 +195,7 @@ void set_property(proxywasm *proxywasm, const char *key, const char *value)
     bool update = false;
     struct property_h_node *cur = NULL;
     struct property_h_node *bucket = NULL;
-    unsigned long key_i = xxhash(key, strlen(key), HASH_SEED);
+    unsigned long key_i = xxhash(key, key_len, HASH_SEED);
 
     hash_for_each_possible(proxywasm->properties, cur, node, key_i)
     {
@@ -207,7 +213,6 @@ void set_property(proxywasm *proxywasm, const char *key, const char *value)
         bucket = kmalloc(sizeof(struct property_h_node), GFP_KERNEL);
     }
 
-    int value_len = strlen(value);
     bucket->key = key_i;
     bucket->value = (char*) kmalloc(value_len, GFP_KERNEL);
     memcpy(bucket->value, value, value_len);
@@ -218,11 +223,11 @@ void set_property(proxywasm *proxywasm, const char *key, const char *value)
     }
 }
 
-enum WasmResult get_property(proxywasm *proxywasm, const char *key, const char *value)
+enum WasmResult get_property(proxywasm *proxywasm, const char *key, int key_len, char *value, int *value_len)
 {
     struct property_h_node *cur = NULL;
     struct property_h_node *temp = NULL;
-    unsigned long key_i = xxhash(key, strlen(key), HASH_SEED);
+    unsigned long key_i = xxhash(key, key_len, HASH_SEED);
 
     hash_for_each_possible(proxywasm->properties, cur, node, key_i)
     {
@@ -234,7 +239,8 @@ enum WasmResult get_property(proxywasm *proxywasm, const char *key, const char *
         return WasmResult_NotFound;
     }
 
-    memcpy(value, temp->value, strlen(temp->value));
+    *value_len = strlen(temp->value);
+    memcpy(value, temp->value, *value_len);
 
     return WasmResult_Ok;
 }
