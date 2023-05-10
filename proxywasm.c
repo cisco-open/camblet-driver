@@ -113,9 +113,11 @@ m3ApiRawFunction(proxy_get_property)
 
     get_property(proxywasm, property_path_data, property_path_size, &value, &value_len);
 
+    printk("get_property ready, value_len: %d", value_len);
+
     if (value_len > 0)
     {
-        wasm_vm_result result = proxy_on_memory_allocate(proxywasm, temp->value_len);
+        wasm_vm_result result = proxy_on_memory_allocate(proxywasm, value_len);
         if (result.err)
         {
             FATAL("proxywasm proxy_on_memory_allocate error: %s", result.err);
@@ -124,8 +126,11 @@ m3ApiRawFunction(proxy_get_property)
 
         value = m3ApiOffsetToPtr(result.data->i32);
 
-        // *value_len = temp->value_len;
-        memcpy(value, temp->value, temp->value_len);
+        *return_property_value_data = result.data->i32;
+        *return_property_value_size = value_len;
+        memcpy(value, value, value_len);
+
+        m3ApiReturn(WasmResult_Ok);
     }
 
     //m3ApiReturn(result);
@@ -151,7 +156,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
     wasm_vm_result result;
 
     proxywasm *proxywasm = kmalloc(sizeof(proxywasm), GFP_KERNEL);
-    proxywasm->proxy_on_memory_allocate = wasm_vm_get_function(vm, module, "proxy_on_memory_allocate");
+    proxywasm->proxy_on_memory_allocate = wasm_vm_get_function(vm, module, "malloc"); // ???? proxy_on_memory_allocate?
     proxywasm->proxy_on_context_create = wasm_vm_get_function(vm, module, "proxy_on_context_create");
     proxywasm->proxy_on_vm_start = wasm_vm_get_function(vm, module, "proxy_on_vm_start");
     proxywasm->proxy_on_configure = wasm_vm_get_function(vm, module, "proxy_on_configure");
