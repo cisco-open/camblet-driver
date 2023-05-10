@@ -18,6 +18,7 @@
 typedef struct property_h_node {
     int key;
     char *value;
+    int value_len;
     struct hlist_node node;
 } property_h_node;
 
@@ -45,7 +46,7 @@ typedef struct proxywasm
 
     i32 tick_period;
 
-    DECLARE_HASHTABLE(properties, 10);
+    DECLARE_HASHTABLE(properties, 5);
 } proxywasm;
 
 static proxywasm *proxywasms[NR_CPUS] = {0};
@@ -97,17 +98,37 @@ m3ApiRawFunction(proxy_get_property)
     m3ApiReturnType(i32);
 
     m3ApiGetArgMem(char *, property_path_data);
-    m3ApiGetArg(i32, property_path_size);
+    m3ApiGetArg(size_t, property_path_size);
+
+    m3ApiCheckMem(property_path_data, property_path_size);
 
     m3ApiGetArgMem(char *, return_property_value_data);
     m3ApiGetArgMem(i32 *, return_property_value_size);
 
     proxywasm *proxywasm = _ctx->userdata;
 
-    printk("wasm: calling proxy_get_property '%.*s'", property_path_size, property_path_data);
+    char *value;
+    int value_len;
+    printk("wasm: calling proxy_get_property '%.*s' (%d) return values -> %p %p", property_path_size, property_path_data, property_path_size, return_property_value_data, return_property_value_size);
 
-    // get_property(proxywasm, property_path_data, property_path_size, return_property_value_data, return_property_value_size);
+    get_property(proxywasm, property_path_data, property_path_size, &value, &value_len);
 
+    if (value_len > 0)
+    {
+        wasm_vm_result result = proxy_on_memory_allocate(proxywasm, temp->value_len);
+        if (result.err)
+        {
+            FATAL("proxywasm proxy_on_memory_allocate error: %s", result.err);
+            return WasmResult_InvalidMemoryAccess;
+        }
+
+        value = m3ApiOffsetToPtr(result.data->i32);
+
+        // *value_len = temp->value_len;
+        memcpy(value, temp->value, temp->value_len);
+    }
+
+    //m3ApiReturn(result);
     m3ApiReturn(WasmResult_NotFound);
 }
 
@@ -117,9 +138,9 @@ static wasm_vm_result link_proxywasm_hostfunctions(proxywasm *proxywasm, wasm_vm
 
     const char *env = "env";
 
-    // _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_log", "i(i*i)", proxy_log, proxywasm)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_log", "i(i*i)", proxy_log, proxywasm)));
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_set_tick_period_milliseconds", "i(i)", proxy_set_tick_period_milliseconds, proxywasm)));
-    // _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_property", "i(iiii)", proxy_get_property, proxywasm)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_property", "i(*i**)", proxy_get_property, proxywasm)));
 
 _catch:
     return (wasm_vm_result){.err = result};
@@ -136,11 +157,13 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
     proxywasm->proxy_on_configure = wasm_vm_get_function(vm, module, "proxy_on_configure");
     proxywasm->vm = vm;
 
-    hash_init(proxywasm->properties);
+    printk("wasm: ARRAY_SIZE %d", ARRAY_SIZE(proxywasm->properties));
 
-    char *node_key = "node";
+    // hash_init((proxywasm->properties));
+
+    char node_key[] = {'n', 'o', 'd', 'e', 0, 'i', 'd'};
     char *node_value = "lima-linux-vm";
-//    set_property(proxywasm, node_key, strlen(node_key), node_value, strlen(node_value));
+    set_property(proxywasm, node_key, 7, node_value, strlen(node_value));
 
     result = link_proxywasm_hostfunctions(proxywasm, wasm_vm_get_module(vm, module));
     if (result.err)
@@ -196,6 +219,7 @@ void set_property(proxywasm *proxywasm, const char *key, int key_len, const char
     struct property_h_node *cur = NULL;
     struct property_h_node *bucket = NULL;
     unsigned long key_i = xxhash(key, key_len, HASH_SEED);
+    printk("wasm: key hash %lu, key len: %d key: '%.*s'", key_i, key_len, key_len, key); 
 
     hash_for_each_possible(proxywasm->properties, cur, node, key_i)
     {
@@ -215,19 +239,26 @@ void set_property(proxywasm *proxywasm, const char *key, int key_len, const char
 
     bucket->key = key_i;
     bucket->value = (char*) kmalloc(value_len, GFP_KERNEL);
+    bucket->value_len = value_len;
     memcpy(bucket->value, value, value_len);
 
     if (!update)
     {
+        printk("wasm: not update, adding key to hashtable");
         hash_add(proxywasm->properties, &bucket->node, key_i);
+
+        hash_for_each_possible(proxywasm->properties, cur, node, key_i) {
+            pr_info("myhashtable: match for key %lu: data = '%.*s'\n", key_i, cur->value_len, cur->value);
+        }
     }
 }
 
-enum WasmResult get_property(proxywasm *proxywasm, const char *key, int key_len, char *value, int *value_len)
+void get_property(proxywasm *proxywasm, const char *key, int key_len, char **value, int *value_len)
 {
     struct property_h_node *cur = NULL;
     struct property_h_node *temp = NULL;
     unsigned long key_i = xxhash(key, key_len, HASH_SEED);
+    printk("wasm: key hash %lu, key len: %d key: '%.*s'", key_i, key_len, key_len, key); 
 
     hash_for_each_possible(proxywasm->properties, cur, node, key_i)
     {
@@ -236,12 +267,13 @@ enum WasmResult get_property(proxywasm *proxywasm, const char *key, int key_len,
 
     if (!temp)
     {
-        return WasmResult_NotFound;
+        printk("wasm: '%.*s' key not found", key_len, key);
+        return;
     }
 
-    *value_len = strlen(temp->value);
-    memcpy(value, temp->value, *value_len);
+    printk("wasm: '%.*s' key found, value: %.*s", key_len, key, temp->value_len, temp->value);
 
-    return WasmResult_Ok;
+    *value = temp->value;
+    *value_len = temp->value_len;
 }
 
