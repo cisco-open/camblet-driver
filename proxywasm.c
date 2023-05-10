@@ -16,7 +16,8 @@
 #define HASH_SEED 98469223
 
 typedef struct property_h_node {
-    int key;
+    char key[256];
+    int key_len;
     char *value;
     int value_len;
     struct hlist_node node;
@@ -46,7 +47,7 @@ typedef struct proxywasm
 
     i32 tick_period;
 
-    DECLARE_HASHTABLE(properties, 5);
+    DECLARE_HASHTABLE(properties, 6);
 } proxywasm;
 
 static proxywasm *proxywasms[NR_CPUS] = {0};
@@ -151,6 +152,40 @@ _catch:
     return (wasm_vm_result){.err = result};
 }
 
+void set_property_v(proxywasm *proxywasm, const char *value, const char *term, ...)
+{
+    char path[256];
+    int path_len = 0;
+
+    va_list ap;
+    va_start(ap, term);
+    char *part = NULL;
+    while ((part = va_arg(ap, char*)) != NULL)
+    {
+        int len = strlen(part);
+        memcpy(path + path_len, part, len);
+        path_len += len + 1;
+        path[path_len] = 0;
+    }
+    va_end(ap);
+
+    set_property(proxywasm, path, path_len - 1, value, strlen(value));
+}
+
+void print_property_key(const char *func, const char *key, int key_len)
+{
+    char buf[256] = {0};
+    while (key_len-- > 0)
+    {
+        char c = *(key + key_len);
+        if (c == 0) {
+            c = '.';            
+        }
+        buf[key_len] = c;
+    }
+    printk("wasm: %s key: %s", func, buf);
+}
+
 wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
 {
     wasm_vm_result result;
@@ -164,11 +199,22 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
 
     printk("wasm: ARRAY_SIZE %d", ARRAY_SIZE(proxywasm->properties));
 
-    // hash_init((proxywasm->properties));
+    hash_init((proxywasm->properties));
 
-    char node_key[] = {'n', 'o', 'd', 'e', 0, 'i', 'd'};
-    char *node_value = "lima-linux-vm";
-    set_property(proxywasm, node_key, 7, node_value, strlen(node_value));
+    {
+        set_property_v(proxywasm, "lima-linux-vm", NULL, "node", "id", NULL);
+        set_property_v(proxywasm, "catalog-v1-6578575465-lz5h2", NULL, "node", "metadata", "NAME", NULL);
+        set_property_v(proxywasm, "default", NULL, "node", "metadata", "NAMESPACE", NULL);
+        set_property_v(proxywasm, "me", NULL, "node", "metadata", "OWNER", NULL);
+        set_property_v(proxywasm, "joska", NULL, "node", "metadata", "WORKLOAD_NAME", NULL);
+        set_property_v(proxywasm, "1.13.5", NULL, "node", "metadata", "ISTIO_VERSION", NULL);
+        set_property_v(proxywasm, "mesh1", NULL, "node", "metadata", "MESH_ID", NULL);
+        set_property_v(proxywasm, "cluster1", NULL, "node", "metadata", "CLUSTER_ID", NULL);
+        set_property_v(proxywasm, "", NULL, "node", "metadata", "LABELS", NULL);
+        set_property_v(proxywasm, "", NULL, "node", "metadata", "PLATFORM_METADATA", NULL);
+        set_property_v(proxywasm, "catalog", NULL, "node", "metadata", "APP_CONTAINERS", NULL);
+        set_property_v(proxywasm, "10.20.160.34,fe80::84cb:9eff:feb7:941b", NULL, "node", "metadata", "INSTANCE_IPS", NULL);
+    }
 
     result = link_proxywasm_hostfunctions(proxywasm, wasm_vm_get_module(vm, module));
     if (result.err)
@@ -217,45 +263,23 @@ wasm_vm_result proxy_on_new_connection(proxywasm *proxywasm, i32 context_id)
 
 void set_property(proxywasm *proxywasm, const char *key, int key_len, const char *value, int value_len)
 {
-    // Since linux hashtable always appends the new element to the bucket ignoring key collision altogether
-    // we have to check whether an item with the key is already present in the map.
-    // If it does we must handle that with raising an error.
-    bool update = false;
-    struct property_h_node *cur = NULL;
-    struct property_h_node *bucket = NULL;
+    struct property_h_node *cur, *node = kmalloc(sizeof(property_h_node), GFP_KERNEL);
     unsigned long key_i = xxhash(key, key_len, HASH_SEED);
-    printk("wasm: key hash %lu, key len: %d key: '%.*s'", key_i, key_len, key_len, key); 
+    print_property_key("set_property", key, key_len);
+    printk("wasm: set_property key hash %lu, key len: %d", key_i, key_len, key_len);
 
-    hash_for_each_possible(proxywasm->properties, cur, node, key_i)
-    {
-        bucket = cur;
-    }
+    node->key_len = key_len;
+    memcpy(node->key, key, key_len);
+    node->value_len = value_len;
+    node->value = (char*) kmalloc(value_len, GFP_KERNEL);
+    memcpy(node->value, value, value_len);
 
-    if (bucket)
-    {
-        printk("wasm: duplicate key (%s) found in hashmap, overwriting", key);
-        kfree(bucket->value);
-        update = true;
-    }
-    else
-    {
-        bucket = kmalloc(sizeof(struct property_h_node), GFP_KERNEL);
-    }
+    printk("wasm: adding new bucket to hashtable");
+    hash_add(proxywasm->properties, &node->node, key_i);
 
-    bucket->key = key_i;
-    bucket->value = (char*) kmalloc(value_len, GFP_KERNEL);
-    bucket->value_len = value_len;
-    memcpy(bucket->value, value, value_len);
-
-    if (!update)
-    {
-        printk("wasm: not update, adding key to hashtable");
-        hash_add(proxywasm->properties, &bucket->node, key_i);
-
-        hash_for_each_possible(proxywasm->properties, cur, node, key_i) {
-            pr_info("myhashtable: match for key %lu: data = '%.*s'\n", key_i, cur->value_len, cur->value);
-        }
-    }
+    // printk("wasm: listing all possible entries under key %lu", key_i);
+    // hash_for_each_possible(proxywasm->properties, cur, node, key_i)
+    //     pr_info("wasm:   match for key %lu: data = '%.*s'\n", key_i, cur->value_len, cur->value);
 }
 
 void get_property(proxywasm *proxywasm, const char *key, int key_len, char **value, int *value_len)
@@ -263,6 +287,7 @@ void get_property(proxywasm *proxywasm, const char *key, int key_len, char **val
     struct property_h_node *cur = NULL;
     struct property_h_node *temp = NULL;
     unsigned long key_i = xxhash(key, key_len, HASH_SEED);
+    print_property_key("get_property", key, key_len);
     printk("wasm: key hash %lu, key len: %d key: '%.*s'", key_i, key_len, key_len, key); 
 
     hash_for_each_possible(proxywasm->properties, cur, node, key_i)
@@ -281,4 +306,3 @@ void get_property(proxywasm *proxywasm, const char *key, int key_len, char **val
     *value = temp->value;
     *value_len = temp->value_len;
 }
-
