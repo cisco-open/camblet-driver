@@ -114,8 +114,6 @@ m3ApiRawFunction(proxy_get_property)
 
     get_property(proxywasm, property_path_data, property_path_size, &value, &value_len);
 
-    printk("get_property ready, value_len: %d", value_len);
-
     if (value_len > 0)
     {
         wasm_vm_result result = proxy_on_memory_allocate(proxywasm, value_len);
@@ -131,10 +129,12 @@ m3ApiRawFunction(proxy_get_property)
         *return_property_value_size = value_len;
         memcpy(value, value, value_len);
 
+        printk("wasm: proxy_get_property ready, value_len: %d", value_len);
+
         m3ApiReturn(WasmResult_Ok);
     }
 
-    //m3ApiReturn(result);
+    printk("wasm: proxy_get_property WasmResult_NotFound");
     m3ApiReturn(WasmResult_NotFound);
 }
 
@@ -292,7 +292,11 @@ void get_property(proxywasm *proxywasm, const char *key, int key_len, char **val
 
     hash_for_each_possible(proxywasm->properties, cur, node, key_i)
     {
-        temp = cur;
+        if (cur->key_len == key_len && memcmp(cur->key, key, key_len) == 0)
+        {
+            temp = cur;
+            break;
+        }
     }
 
     if (!temp)
