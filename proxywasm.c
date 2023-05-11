@@ -216,8 +216,8 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
         set_property_v(proxywasm, "1.13.5", strlen("1.13.5"), "node", "metadata", "ISTIO_VERSION", NULL);
         set_property_v(proxywasm, "mesh1", strlen("mesh1"), "node", "metadata", "MESH_ID", NULL);
         set_property_v(proxywasm, "cluster1", strlen("cluster1"), "node", "metadata", "CLUSTER_ID", NULL);
-        set_property_v(proxywasm, empty_map, 4, "node", "metadata", "LABELS", NULL);
-        set_property_v(proxywasm, empty_map, 4, "node", "metadata", "PLATFORM_METADATA", NULL);
+        set_property_v(proxywasm, empty_map, sizeof(empty_map), "node", "metadata", "LABELS", NULL);
+        set_property_v(proxywasm, empty_map, sizeof(empty_map), "node", "metadata", "PLATFORM_METADATA", NULL);
         set_property_v(proxywasm, "catalog", strlen("catalog"), "node", "metadata", "APP_CONTAINERS", NULL);
         set_property_v(proxywasm, "10.20.160.34,fe80::84cb:9eff:feb7:941b", strlen("10.20.160.34,fe80::84cb:9eff:feb7:941b"), "node", "metadata", "INSTANCE_IPS", NULL);
     }
