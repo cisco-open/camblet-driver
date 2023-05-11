@@ -23,6 +23,8 @@ typedef struct property_h_node {
     struct hlist_node node;
 } property_h_node;
 
+DEFINE_HASHTABLE(properties, 6);
+
 typedef struct proxywasm
 {
     wasm_vm *vm;
@@ -47,7 +49,7 @@ typedef struct proxywasm
 
     i32 tick_period;
 
-    DECLARE_HASHTABLE(properties, 6);
+    // DECLARE_HASHTABLE(properties, 6);
 } proxywasm;
 
 static proxywasm *proxywasms[NR_CPUS] = {0};
@@ -99,16 +101,16 @@ m3ApiRawFunction(proxy_get_property)
     m3ApiReturnType(i32);
 
     m3ApiGetArgMem(char *, property_path_data);
-    m3ApiGetArg(size_t, property_path_size);
+    m3ApiGetArg(i32, property_path_size);
 
     m3ApiCheckMem(property_path_data, property_path_size);
 
-    m3ApiGetArgMem(char *, return_property_value_data);
+    m3ApiGetArgMem(i32 *, return_property_value_data);
     m3ApiGetArgMem(i32 *, return_property_value_size);
 
     proxywasm *proxywasm = _ctx->userdata;
 
-    char *value;
+    char *value = NULL;
     int value_len;
     printk("wasm: calling proxy_get_property '%.*s' (%d) return values -> %p %p", property_path_size, property_path_data, property_path_size, return_property_value_data, return_property_value_size);
 
@@ -123,13 +125,17 @@ m3ApiRawFunction(proxy_get_property)
             return WasmResult_InvalidMemoryAccess;
         }
 
-        value = m3ApiOffsetToPtr(result.data->i32);
+        printk("wasm: proxy_on_memory_allocate returned %d, value points to %p, *return_property_value_data -> %d", result.data->i32, value, *return_property_value_data);
 
-        *return_property_value_data = result.data->i32;
+        int wasm_ptr = result.data->i32;
+
+        void *value_ptr = m3ApiOffsetToPtr(wasm_ptr);
+        memcpy(value_ptr, value, value_len);
+
+        *return_property_value_data = wasm_ptr;
         *return_property_value_size = value_len;
-        memcpy(value, value, value_len);
 
-        printk("wasm: proxy_get_property ready, value_len: %d", value_len);
+        printk("wasm: proxy_get_property ready, value_len: %d, return_property_value_data -> %d", value_len, *return_property_value_data);
 
         m3ApiReturn(WasmResult_Ok);
     }
@@ -152,13 +158,13 @@ _catch:
     return (wasm_vm_result){.err = result};
 }
 
-void set_property_v(proxywasm *proxywasm, const char *value, const char *term, ...)
+void set_property_v(proxywasm *proxywasm, const char *value, const int value_len, ...)
 {
     char path[256];
     int path_len = 0;
 
     va_list ap;
-    va_start(ap, term);
+    va_start(ap, value_len);
     char *part = NULL;
     while ((part = va_arg(ap, char*)) != NULL)
     {
@@ -169,7 +175,7 @@ void set_property_v(proxywasm *proxywasm, const char *value, const char *term, .
     }
     va_end(ap);
 
-    set_property(proxywasm, path, path_len - 1, value, strlen(value));
+    set_property(proxywasm, path, path_len - 1, value, value_len);
 }
 
 void print_property_key(const char *func, const char *key, int key_len)
@@ -178,9 +184,8 @@ void print_property_key(const char *func, const char *key, int key_len)
     while (key_len-- > 0)
     {
         char c = *(key + key_len);
-        if (c == 0) {
-            c = '.';            
-        }
+        if (c == 0)
+            c = '.';
         buf[key_len] = c;
     }
     printk("wasm: %s key: %s", func, buf);
@@ -197,23 +202,24 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
     proxywasm->proxy_on_configure = wasm_vm_get_function(vm, module, "proxy_on_configure");
     proxywasm->vm = vm;
 
-    printk("wasm: ARRAY_SIZE %d", ARRAY_SIZE(proxywasm->properties));
+    // printk("wasm: ARRAY_SIZE %d", ARRAY_SIZE(proxywasm->properties));
 
-    hash_init((proxywasm->properties));
+    // hash_init((proxywasm->properties));
 
     {
-        set_property_v(proxywasm, "lima-linux-vm", NULL, "node", "id", NULL);
-        set_property_v(proxywasm, "catalog-v1-6578575465-lz5h2", NULL, "node", "metadata", "NAME", NULL);
-        set_property_v(proxywasm, "default", NULL, "node", "metadata", "NAMESPACE", NULL);
-        set_property_v(proxywasm, "me", NULL, "node", "metadata", "OWNER", NULL);
-        set_property_v(proxywasm, "joska", NULL, "node", "metadata", "WORKLOAD_NAME", NULL);
-        set_property_v(proxywasm, "1.13.5", NULL, "node", "metadata", "ISTIO_VERSION", NULL);
-        set_property_v(proxywasm, "mesh1", NULL, "node", "metadata", "MESH_ID", NULL);
-        set_property_v(proxywasm, "cluster1", NULL, "node", "metadata", "CLUSTER_ID", NULL);
-        set_property_v(proxywasm, "", NULL, "node", "metadata", "LABELS", NULL);
-        set_property_v(proxywasm, "", NULL, "node", "metadata", "PLATFORM_METADATA", NULL);
-        set_property_v(proxywasm, "catalog", NULL, "node", "metadata", "APP_CONTAINERS", NULL);
-        set_property_v(proxywasm, "10.20.160.34,fe80::84cb:9eff:feb7:941b", NULL, "node", "metadata", "INSTANCE_IPS", NULL);
+        char empty_map[] = {0,0,0,0};
+        set_property_v(proxywasm, "lima", strlen("lima"), "node", "id", NULL);
+        set_property_v(proxywasm, "catalog-v1-6578575465-lz5h2", strlen("catalog-v1-6578575465-lz5h2"), "node", "metadata", "NAME", NULL);
+        set_property_v(proxywasm, "kube-system", strlen("kube-system"), "node", "metadata", "NAMESPACE", NULL);
+        set_property_v(proxywasm, "blade-runner", strlen( "blade-runner"), "node", "metadata", "OWNER", NULL);
+        set_property_v(proxywasm, "joska", strlen("joska"), "node", "metadata", "WORKLOAD_NAME", NULL);
+        set_property_v(proxywasm, "1.13.5", strlen("1.13.5"), "node", "metadata", "ISTIO_VERSION", NULL);
+        set_property_v(proxywasm, "mesh1", strlen("mesh1"), "node", "metadata", "MESH_ID", NULL);
+        set_property_v(proxywasm, "cluster1", strlen("cluster1"), "node", "metadata", "CLUSTER_ID", NULL);
+        set_property_v(proxywasm, empty_map, 4, "node", "metadata", "LABELS", NULL);
+        set_property_v(proxywasm, empty_map, 4, "node", "metadata", "PLATFORM_METADATA", NULL);
+        set_property_v(proxywasm, "catalog", strlen("catalog"), "node", "metadata", "APP_CONTAINERS", NULL);
+        set_property_v(proxywasm, "10.20.160.34,fe80::84cb:9eff:feb7:941b", strlen("10.20.160.34,fe80::84cb:9eff:feb7:941b"), "node", "metadata", "INSTANCE_IPS", NULL);
     }
 
     result = link_proxywasm_hostfunctions(proxywasm, wasm_vm_get_module(vm, module));
@@ -266,7 +272,7 @@ void set_property(proxywasm *proxywasm, const char *key, int key_len, const char
     struct property_h_node *cur, *node = kmalloc(sizeof(property_h_node), GFP_KERNEL);
     unsigned long key_i = xxhash(key, key_len, HASH_SEED);
     print_property_key("set_property", key, key_len);
-    printk("wasm: set_property key hash %lu, key len: %d", key_i, key_len, key_len);
+    printk("wasm: set_property key hash %lu, key len: %d", key_i, key_len);
 
     node->key_len = key_len;
     memcpy(node->key, key, key_len);
@@ -275,7 +281,7 @@ void set_property(proxywasm *proxywasm, const char *key, int key_len, const char
     memcpy(node->value, value, value_len);
 
     printk("wasm: adding new bucket to hashtable");
-    hash_add(proxywasm->properties, &node->node, key_i);
+    hash_add(properties, &node->node, key_i);
 
     // printk("wasm: listing all possible entries under key %lu", key_i);
     // hash_for_each_possible(proxywasm->properties, cur, node, key_i)
@@ -290,7 +296,7 @@ void get_property(proxywasm *proxywasm, const char *key, int key_len, char **val
     print_property_key("get_property", key, key_len);
     printk("wasm: key hash %lu, key len: %d key: '%.*s'", key_i, key_len, key_len, key); 
 
-    hash_for_each_possible(proxywasm->properties, cur, node, key_i)
+    hash_for_each_possible(properties, cur, node, key_i)
     {
         if (cur->key_len == key_len && memcmp(cur->key, key, key_len) == 0)
         {
