@@ -13,8 +13,6 @@
 
 #include "proxywasm.h"
 
-#define HASH_SEED 98469223
-
 typedef struct property_h_node {
     char key[256];
     int key_len;
@@ -22,6 +20,16 @@ typedef struct property_h_node {
     int value_len;
     struct hlist_node node;
 } property_h_node;
+
+static atomic_t context_id = ATOMIC_INIT(0);
+
+static int new_context_id(void) {
+    return atomic_inc_return(&context_id);
+}
+
+typedef struct proxywasm_context {
+    int id;
+} proxywasm_context;
 
 DEFINE_HASHTABLE(properties, 6);
 
@@ -270,7 +278,7 @@ wasm_vm_result proxy_on_new_connection(proxywasm *proxywasm, i32 context_id)
 void set_property(proxywasm *proxywasm, const char *key, int key_len, const char *value, int value_len)
 {
     struct property_h_node *cur, *node = kmalloc(sizeof(property_h_node), GFP_KERNEL);
-    unsigned long key_i = xxhash(key, key_len, HASH_SEED);
+    unsigned long key_i = xxhash(key, key_len, 0);
     print_property_key("set_property", key, key_len);
     printk("wasm: set_property key hash %lu, key len: %d", key_i, key_len);
 
@@ -292,7 +300,7 @@ void get_property(proxywasm *proxywasm, const char *key, int key_len, char **val
 {
     struct property_h_node *cur = NULL;
     struct property_h_node *temp = NULL;
-    unsigned long key_i = xxhash(key, key_len, HASH_SEED);
+    unsigned long key_i = xxhash(key, key_len, 0);
     print_property_key("get_property", key, key_len);
     printk("wasm: key hash %lu, key len: %d key: '%.*s'", key_i, key_len, key_len, key); 
 
