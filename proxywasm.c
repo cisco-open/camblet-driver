@@ -237,8 +237,9 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
         return result;
     }
 
-    i32 root_context_id = 0; // TODO
+    i32 root_context_id = 0;
 
+    // Create the root context
     result = wasm_vm_call_direct(vm, proxywasm->proxy_on_context_create, root_context_id, 0);
     if (result.err)
     {
