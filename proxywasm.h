@@ -67,6 +67,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module);
 
 wasm_vm_result proxy_on_context_create(struct proxywasm *p, i32 context_id, i32 root_context_id);
 wasm_vm_result proxy_on_new_connection(struct proxywasm *p, i32 context_id);
+wasm_vm_result proxy_on_downstream_data(struct proxywasm *p, i32 context_id, i32 data_size, i32 end_of_stream);
 
 void get_property(struct proxywasm *p, const char *key, int key_len, char **value, int *value_len);
 void set_property(struct proxywasm *p, const char *key, int key_len, const char *value, int value_len);

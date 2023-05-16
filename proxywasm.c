@@ -57,6 +57,9 @@ typedef struct proxywasm
 
     i32 tick_period;
 
+    // the current context under processing
+    proxywasm_context *current_context;
+
     // DECLARE_HASHTABLE(properties, 6);
 } proxywasm;
 
@@ -260,6 +263,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
     proxywasm->proxy_on_new_connection = wasm_vm_get_function(vm, module, "proxy_on_new_connection");
     proxywasm->proxy_on_vm_start = wasm_vm_get_function(vm, module, "proxy_on_vm_start");
     proxywasm->proxy_on_configure = wasm_vm_get_function(vm, module, "proxy_on_configure");
+    proxywasm->proxy_on_downstream_data = wasm_vm_get_function(vm, module, "proxy_on_downstream_data");
     proxywasm->vm = vm;
 
     // printk("wasm: ARRAY_SIZE %d", ARRAY_SIZE(proxywasm->properties));
@@ -343,6 +347,14 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
 
     printk("wasm: proxy_on_new_connection result %d", result.data->i32);
 
+    result = proxy_on_downstream_data(proxywasm, context_id, 128, false);
+    if (result.err)
+    {
+        FATAL("proxy_on_downstream_data for module %s failed: %s", module, result.err)
+        kfree(proxywasm);
+        return result;
+    }
+
     proxywasms[vm->cpu] = proxywasm;
 
     return (wasm_vm_result){.err = NULL};
@@ -356,6 +368,11 @@ wasm_vm_result proxy_on_context_create(proxywasm *p, i32 context_id, i32 root_co
 wasm_vm_result proxy_on_new_connection(proxywasm *p, i32 context_id)
 {
     return wasm_vm_call_direct(p->vm, p->proxy_on_new_connection, context_id);
+}
+
+wasm_vm_result proxy_on_downstream_data(proxywasm *p, i32 context_id, i32 data_size, i32 end_of_stream)
+{
+    return wasm_vm_call_direct(p->vm, p->proxy_on_downstream_data, context_id, data_size, end_of_stream);
 }
 
 void set_property(proxywasm *p, const char *key, int key_len, const char *value, int value_len)
