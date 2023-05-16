@@ -257,6 +257,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
     proxywasm *proxywasm = kmalloc(sizeof(proxywasm), GFP_KERNEL);
     proxywasm->proxy_on_memory_allocate = wasm_vm_get_function(vm, module, "malloc"); // ???? proxy_on_memory_allocate?
     proxywasm->proxy_on_context_create = wasm_vm_get_function(vm, module, "proxy_on_context_create");
+    proxywasm->proxy_on_new_connection = wasm_vm_get_function(vm, module, "proxy_on_new_connection");
     proxywasm->proxy_on_vm_start = wasm_vm_get_function(vm, module, "proxy_on_vm_start");
     proxywasm->proxy_on_configure = wasm_vm_get_function(vm, module, "proxy_on_configure");
     proxywasm->vm = vm;
@@ -288,10 +289,11 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
         return result;
     }
 
-    i32 root_context_id = 0;
+    i32 root_context_id = new_context_id();
+    printk("wasm: root_context_id %d", root_context_id);
 
     // Create the root context
-    result = wasm_vm_call_direct(vm, proxywasm->proxy_on_context_create, root_context_id, 0);
+    result = proxy_on_context_create(proxywasm, root_context_id, 0);
     if (result.err)
     {
         FATAL("proxy_on_context_create for module %s failed: %s", module, result.err)
@@ -317,17 +319,46 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
         return result;
     }
 
+    // Create a new non-root context
+    i32 context_id = new_context_id();
+    printk("wasm: root_context_id %d, context_id: %d", root_context_id, context_id);
+
+    result = proxy_on_context_create(proxywasm, context_id, root_context_id);
+    if (result.err)
+    {
+        FATAL("proxy_on_context_create for module %s failed: %s", module, result.err)
+        kfree(proxywasm);
+        return result;
+    }
+
+    printk("wasm: proxy_on_context_create result %d", result.data->i32);
+
+    result = proxy_on_new_connection(proxywasm, context_id);
+    if (result.err)
+    {
+        FATAL("proxy_on_new_connection for module %s failed: %s", module, result.err)
+        kfree(proxywasm);
+        return result;
+    }
+
+    printk("wasm: proxy_on_new_connection result %d", result.data->i32);
+
     proxywasms[vm->cpu] = proxywasm;
 
     return (wasm_vm_result){.err = NULL};
 }
 
-wasm_vm_result proxy_on_new_connection(proxywasm *proxywasm, i32 context_id)
+wasm_vm_result proxy_on_context_create(proxywasm *p, i32 context_id, i32 root_context_id)
 {
-    return wasm_vm_call_direct(proxywasm->vm, proxywasm->proxy_on_new_connection, context_id);
+    return wasm_vm_call_direct(p->vm, p->proxy_on_context_create, context_id, root_context_id);
 }
 
-void set_property(proxywasm *proxywasm, const char *key, int key_len, const char *value, int value_len)
+wasm_vm_result proxy_on_new_connection(proxywasm *p, i32 context_id)
+{
+    return wasm_vm_call_direct(p->vm, p->proxy_on_new_connection, context_id);
+}
+
+void set_property(proxywasm *p, const char *key, int key_len, const char *value, int value_len)
 {
     struct property_h_node *cur, *node = kmalloc(sizeof(property_h_node), GFP_KERNEL);
     unsigned long key_i = xxhash(key, key_len, 0);
