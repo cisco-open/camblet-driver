@@ -57,7 +57,8 @@ struct proxywasm;
 
 wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module);
 
-void get_property(struct proxywasm *proxywasm, const char *key, int key_len, char **value, int *value_len);
-void set_property(struct proxywasm *proxywasm, const char *key, int key_len, const char *value, int value_len);
+void get_property(struct proxywasm *p, const char *key, int key_len, char **value, int *value_len);
+void set_property(struct proxywasm *p, const char *key, int key_len, const char *value, int value_len);
+void get_buffer(struct proxywasm *p, BufferType buffer_type, i32 offset, i32 max_size, char **value, i32 *value_len, int *return_flags);
 
 #endif

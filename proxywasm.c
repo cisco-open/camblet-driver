@@ -152,6 +152,56 @@ m3ApiRawFunction(proxy_get_property)
     m3ApiReturn(WasmResult_NotFound);
 }
 
+m3ApiRawFunction(proxy_get_buffer)
+{
+    m3ApiReturnType(i32);
+
+    m3ApiGetArg(i32, buffer_type);
+    m3ApiGetArg(i32, offset);
+    m3ApiGetArg(i32, max_size);
+
+    m3ApiGetArgMem(char *, return_buffer_data);
+    m3ApiGetArgMem(i32 *, return_buffer_size);
+    m3ApiGetArgMem(i32 *, return_flags);
+
+    proxywasm *proxywasm = _ctx->userdata;
+
+    char *value = NULL;
+    int value_len;
+    int flags;
+    printk("wasm: calling proxy_get_buffer buffer_type '%d' (offset: %d, max_size: %d)", buffer_type, offset, max_size);
+
+    get_buffer(proxywasm, buffer_type, offset, max_size, &value, &value_len, flags);
+
+    if (value_len > 0)
+    {
+        wasm_vm_result result = proxy_on_memory_allocate(proxywasm, value_len);
+        if (result.err)
+        {
+            FATAL("proxywasm proxy_on_memory_allocate error: %s", result.err);
+            return WasmResult_InvalidMemoryAccess;
+        }
+
+        printk("wasm: proxy_on_memory_allocate returned %d, value points to %p, *return_buffer_data -> %d", result.data->i32, value, *return_buffer_data);
+
+        int wasm_ptr = result.data->i32;
+
+        void *value_ptr = m3ApiOffsetToPtr(wasm_ptr);
+        memcpy(value_ptr, value, value_len);
+
+        *return_buffer_data = wasm_ptr;
+        *return_buffer_size = value_len;
+        *return_flags = flags;
+
+        printk("wasm: proxy_get_buffer ready, value_len: %d, return_buffer_data -> %d", value_len, *return_buffer_data);
+
+        m3ApiReturn(WasmResult_Ok);
+    }
+
+    printk("wasm: proxy_get_buffer WasmResult_NotFound");
+    m3ApiReturn(WasmResult_NotFound);
+}
+
 static wasm_vm_result link_proxywasm_hostfunctions(proxywasm *proxywasm, wasm_vm_module *module)
 {
     M3Result result = m3Err_none;
@@ -161,6 +211,7 @@ static wasm_vm_result link_proxywasm_hostfunctions(proxywasm *proxywasm, wasm_vm
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_log", "i(i*i)", proxy_log, proxywasm)));
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_set_tick_period_milliseconds", "i(i)", proxy_set_tick_period_milliseconds, proxywasm)));
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_property", "i(*i**)", proxy_get_property, proxywasm)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_buffer", "i(iii***)", proxy_get_buffer, proxywasm)));
 
 _catch:
     return (wasm_vm_result){.err = result};
@@ -324,4 +375,12 @@ void get_property(proxywasm *proxywasm, const char *key, int key_len, char **val
 
     *value = temp->value;
     *value_len = temp->value_len;
+}
+
+void get_buffer(proxywasm *proxywasm, BufferType buffer_type, i32 offset, i32 max_size, char **value, i32 *value_len, int *return_flags)
+{
+    printk("wasm: get_buffer BufferType: %d, offset: %d, max_size: %d", buffer_type, offset, max_size);
+
+    // *value = temp->value;
+    // *value_len = temp->value_len;
 }
