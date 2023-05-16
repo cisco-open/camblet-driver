@@ -13,7 +13,8 @@
 
 #include "runtime.h"
 
-typedef enum {
+typedef enum
+{
   WasmResult_Ok = 0,
   // The result could not be found, e.g. a provided key did not appear in a
   // table.
@@ -42,16 +43,23 @@ typedef enum {
   WasmResult_Unimplemented = 12,
 } WasmResult;
 
-typedef enum {
-    HttpRequestBody = 0,
-    HttpResponseBody = 1,
-    DownstreamData = 2,
-    UpstreamData = 3,
-    HttpCallResponseBody = 4,
-    GrpcReceiveBuffer = 5,
-    VmConfiguration = 6,
-    PluginConfiguration = 7,
+typedef enum
+{
+  HttpRequestBody = 0,
+  HttpResponseBody = 1,
+  DownstreamData = 2,
+  UpstreamData = 3,
+  HttpCallResponseBody = 4,
+  GrpcReceiveBuffer = 5,
+  VmConfiguration = 6,
+  PluginConfiguration = 7,
 } BufferType;
+
+typedef enum
+{
+  Continue = 0,
+  Pause = 1,
+} Action;
 
 struct proxywasm;
 
