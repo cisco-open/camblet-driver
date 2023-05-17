@@ -27,9 +27,32 @@ static int new_context_id(void) {
     return atomic_inc_return(&context_id);
 }
 
-typedef struct proxywasm_context {
+typedef struct proxywasm_context
+{
     int id;
+
+    i32 tick_period;
+
+    //DECLARE_HASHTABLE(properties, 6);
+    struct hlist_head *properties;
+
+    struct proxywasm_context *parent;
 } proxywasm_context;
+
+#define HASHTABLE_BITS 4
+
+proxywasm_context* new_proxywasm_context(proxywasm_context *parent)
+{
+    proxywasm_context *context = kzalloc(sizeof(proxywasm_context), GFP_KERNEL);
+
+    context->properties = kzalloc((1<<HASHTABLE_BITS) * sizeof(struct hlist_head), GFP_KERNEL);
+    __hash_init(context->properties, 1<<HASHTABLE_BITS);
+
+    context->id = new_context_id();
+    context->parent = parent;
+
+    return context;
+}
 
 // DEFINE_HASHTABLE(properties, 6);
 
@@ -55,10 +78,7 @@ typedef struct proxywasm
     wasm_vm_function *proxy_on_upstream_data;
     wasm_vm_function *proxy_on_upstream_close;
 
-    i32 tick_period;
-
-    //DECLARE_HASHTABLE(properties, 6);
-    struct hlist_head *properties;
+    proxywasm_context *root_context;
 
     // the current context under processing
     proxywasm_context *current_context;
@@ -103,7 +123,7 @@ m3ApiRawFunction(proxy_set_tick_period_milliseconds)
 
     printk("wasm: calling proxy_set_tick_period_milliseconds %d", tick_period);
 
-    proxywasm->tick_period = tick_period;
+    proxywasm->current_context->tick_period = tick_period;
 
     m3ApiReturn(WasmResult_Ok);
 }
@@ -126,7 +146,7 @@ m3ApiRawFunction(proxy_get_property)
     int value_len;
     printk("wasm: calling proxy_get_property '%.*s' (%d) return values -> %p %p", property_path_size, property_path_data, property_path_size, return_property_value_data, return_property_value_size);
 
-    get_property(p, property_path_data, property_path_size, &value, &value_len);
+    get_property(p->current_context, property_path_data, property_path_size, &value, &value_len);
 
     if (value_len > 0)
     {
@@ -174,7 +194,7 @@ m3ApiRawFunction(proxy_set_property)
 
     printk("wasm: calling proxy_set_property '%.*s' (%d) -> %.*s (%d)", property_path_size, property_path_data, property_path_size, property_value_size, property_value_data, property_value_size);
 
-    set_property(p, property_path_data, property_path_size, property_value_data, property_value_size);
+    set_property(p->current_context, property_path_data, property_path_size, property_value_data, property_value_size);
 
     m3ApiReturn(WasmResult_Ok);
 }
@@ -196,7 +216,7 @@ m3ApiRawFunction(proxy_get_buffer_bytes)
     int value_len = 0;
     printk("wasm: calling proxy_get_buffer buffer_type '%d' (offset: %d, max_size: %d)", buffer_type, offset, max_size);
 
-    get_buffer_bytes(p, buffer_type, offset, max_size, &value, &value_len);
+    get_buffer_bytes(p->current_context, buffer_type, offset, max_size, &value, &value_len);
 
     if (value_len > 0)
     {
@@ -259,7 +279,7 @@ void set_property_v(proxywasm *p, const char *value, const int value_len, ...)
     }
     va_end(ap);
 
-    set_property(p, path, path_len - 1, value, value_len);
+    set_property(p->current_context, path, path_len - 1, value, value_len);
 }
 
 void print_property_key(const char *func, const char *key, int key_len)
@@ -288,10 +308,18 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
     proxywasm->proxy_on_downstream_data = wasm_vm_get_function(vm, module, "proxy_on_downstream_data");
     proxywasm->vm = vm;
 
-    // printk("wasm: ARRAY_SIZE %d", ARRAY_SIZE(proxywasm->properties));
+    result = link_proxywasm_hostfunctions(proxywasm, wasm_vm_get_module(vm, module));
+    if (result.err)
+    {
+        kfree(proxywasm);
+        return result;
+    }
 
-    proxywasm->properties = kzalloc((1<<4) * sizeof(struct hlist_head) , GFP_KERNEL);
-    __hash_init(proxywasm->properties, 1<<4);
+    proxywasm_context *root_context = new_proxywasm_context(NULL);
+    printk("wasm: root_context_id %d", root_context->id);
+
+    proxywasm->root_context = root_context;
+    proxywasm->current_context = root_context;
 
     {
         char empty_map[] = {0,0,0,0};
@@ -311,18 +339,8 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
         set_property_v(proxywasm, (char*)&listener_direction, sizeof(listener_direction), "listener_direction", NULL);
     }
 
-    result = link_proxywasm_hostfunctions(proxywasm, wasm_vm_get_module(vm, module));
-    if (result.err)
-    {
-        kfree(proxywasm);
-        return result;
-    }
-
-    i32 root_context_id = new_context_id();
-    printk("wasm: root_context_id %d", root_context_id);
-
     // Create the root context
-    result = proxy_on_context_create(proxywasm, root_context_id, 0);
+    result = proxy_on_context_create(proxywasm, root_context->id, 0);
     if (result.err)
     {
         FATAL("proxy_on_context_create for module %s failed: %s", module, result.err)
@@ -330,7 +348,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
         return result;
     }
 
-    result = wasm_vm_call_direct(vm, proxywasm->proxy_on_vm_start, root_context_id, 0);
+    result = wasm_vm_call_direct(vm, proxywasm->proxy_on_vm_start, root_context->id, 0);
     if (result.err)
     {
         FATAL("proxy_on_vm_start for module %s failed: %s", module, result.err)
@@ -340,7 +358,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
 
     i32 plugin_configuration_size = 0; // TODO
 
-    result = wasm_vm_call_direct(vm, proxywasm->proxy_on_configure, root_context_id, plugin_configuration_size);
+    result = wasm_vm_call_direct(vm, proxywasm->proxy_on_configure, root_context->id, plugin_configuration_size);
     if (result.err)
     {
         FATAL("proxy_on_configure for module %s failed: %s", module, result.err)
@@ -349,10 +367,12 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
     }
 
     // Create a new non-root context
-    i32 context_id = new_context_id();
-    printk("wasm: root_context_id %d, context_id: %d", root_context_id, context_id);
+    proxywasm_context *context = new_proxywasm_context(root_context);
+    printk("wasm: root_context_id %d, context_id: %d", root_context->id, context->id);
 
-    result = proxy_on_context_create(proxywasm, context_id, root_context_id);
+    proxywasm->current_context = context;
+
+    result = proxy_on_context_create(proxywasm, context->id, root_context->id);
     if (result.err)
     {
         FATAL("proxy_on_context_create for module %s failed: %s", module, result.err)
@@ -362,7 +382,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
 
     printk("wasm: proxy_on_context_create result %d", result.data->i32);
 
-    result = proxy_on_new_connection(proxywasm, context_id);
+    result = proxy_on_new_connection(proxywasm, context->id);
     if (result.err)
     {
         FATAL("proxy_on_new_connection for module %s failed: %s", module, result.err)
@@ -372,7 +392,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
 
     printk("wasm: proxy_on_new_connection result %d", result.data->i32);
 
-    result = proxy_on_downstream_data(proxywasm, context_id, 128, false);
+    result = proxy_on_downstream_data(proxywasm, context->id, 128, false);
     if (result.err)
     {
         FATAL("proxy_on_downstream_data for module %s failed: %s", module, result.err)
@@ -406,7 +426,7 @@ wasm_vm_result proxy_on_downstream_data(proxywasm *p, i32 context_id, i32 data_s
 #define hash_for_each_possible(name, obj, member, key, bits)			\
 	hlist_for_each_entry(obj, &name[hash_min(key, bits)], member)
 
-void set_property(proxywasm *p, const char *key, int key_len, const char *value, int value_len)
+void set_property(proxywasm_context *p, const char *key, int key_len, const char *value, int value_len)
 {
     struct property_h_node *cur, *node = kmalloc(sizeof(property_h_node), GFP_KERNEL);
     uint32_t key_i = xxh32(key, key_len, 0);
@@ -420,14 +440,14 @@ void set_property(proxywasm *p, const char *key, int key_len, const char *value,
     memcpy(node->value, value, value_len);
 
     printk("wasm: adding new bucket to hashtable");
-    hash_add(p->properties, &node->node, key_i, 4);
+    hash_add(p->properties, &node->node, key_i, HASHTABLE_BITS);
 
     // printk("wasm: listing all possible entries under key %lu", key_i);
     // hash_for_each_possible(p->properties, cur, node, key_i)
     //     pr_info("wasm:   match for key %lu: data = '%.*s'\n", key_i, cur->value_len, cur->value);
 }
 
-void get_property(proxywasm *p, const char *key, int key_len, char **value, int *value_len)
+void get_property(proxywasm_context *p, const char *key, int key_len, char **value, int *value_len)
 {
     struct property_h_node *cur = NULL;
     struct property_h_node *temp = NULL;
@@ -435,7 +455,7 @@ void get_property(proxywasm *p, const char *key, int key_len, char **value, int 
     print_property_key("get_property", key, key_len);
     printk("wasm: key hash %u, key len: %d key: '%.*s'", key_i, key_len, key_len, key); 
 
-    hash_for_each_possible(p->properties, cur, node, key_i, 4)
+    hash_for_each_possible(p->properties, cur, node, key_i, HASHTABLE_BITS)
     {
         if (cur->key_len == key_len && memcmp(cur->key, key, key_len) == 0)
         {
@@ -446,7 +466,16 @@ void get_property(proxywasm *p, const char *key, int key_len, char **value, int 
 
     if (!temp)
     {
-        printk("wasm: '%.*s' key not found", key_len, key);
+        if (p->parent != NULL)
+        {
+            printk("wasm: '%.*s' key not found, searching in parent", key_len, key);
+            get_property(p->parent, key, key_len, value, value_len);
+        }
+        else
+        {
+            printk("wasm: '%.*s' key not found", key_len, key);
+        }
+
         return;
     }
 
@@ -458,7 +487,7 @@ void get_property(proxywasm *p, const char *key, int key_len, char **value, int 
 
 u32 magic_number = htonl(1025705063);
 
-void get_buffer_bytes(proxywasm *p, BufferType buffer_type, i32 offset, i32 max_size, char **value, i32 *value_len)
+void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 offset, i32 max_size, char **value, i32 *value_len)
 {
     printk("wasm: get_buffer_bytes BufferType: %d, offset: %d, max_size: %d", buffer_type, offset, max_size);
 
