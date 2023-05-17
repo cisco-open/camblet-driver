@@ -119,17 +119,17 @@ m3ApiRawFunction(proxy_get_property)
     m3ApiGetArgMem(i32 *, return_property_value_data);
     m3ApiGetArgMem(i32 *, return_property_value_size);
 
-    proxywasm *proxywasm = _ctx->userdata;
+    proxywasm *p = _ctx->userdata;
 
     char *value = NULL;
     int value_len;
     printk("wasm: calling proxy_get_property '%.*s' (%d) return values -> %p %p", property_path_size, property_path_data, property_path_size, return_property_value_data, return_property_value_size);
 
-    get_property(proxywasm, property_path_data, property_path_size, &value, &value_len);
+    get_property(p, property_path_data, property_path_size, &value, &value_len);
 
     if (value_len > 0)
     {
-        wasm_vm_result result = proxy_on_memory_allocate(proxywasm, value_len);
+        wasm_vm_result result = proxy_on_memory_allocate(p, value_len);
         if (result.err)
         {
             FATAL("proxywasm proxy_on_memory_allocate error: %s", result.err);
@@ -155,6 +155,29 @@ m3ApiRawFunction(proxy_get_property)
     m3ApiReturn(WasmResult_NotFound);
 }
 
+m3ApiRawFunction(proxy_set_property)
+{
+    m3ApiReturnType(i32);
+
+    m3ApiGetArgMem(char *, property_path_data);
+    m3ApiGetArg(i32, property_path_size);
+
+    m3ApiCheckMem(property_path_data, property_path_size);
+
+    m3ApiGetArgMem(char *, property_value_data);
+    m3ApiGetArg(i32, property_value_size);
+
+    m3ApiCheckMem(property_value_data, property_value_size);
+
+    proxywasm *p = _ctx->userdata;
+
+    printk("wasm: calling proxy_set_property '%.*s' (%d) -> %.*s (%d)", property_path_size, property_path_data, property_path_size, property_value_size, property_value_data, property_value_size);
+
+    set_property(p, property_path_data, property_path_size, property_value_data, property_value_size);
+
+    m3ApiReturn(WasmResult_Ok);
+}
+
 m3ApiRawFunction(proxy_get_buffer_bytes)
 {
     m3ApiReturnType(i32);
@@ -166,17 +189,17 @@ m3ApiRawFunction(proxy_get_buffer_bytes)
     m3ApiGetArgMem(i32 *, return_buffer_data);
     m3ApiGetArgMem(i32 *, return_buffer_size);
 
-    proxywasm *proxywasm = _ctx->userdata;
+    proxywasm *p = _ctx->userdata;
 
     char *value = NULL;
     int value_len = 0;
     printk("wasm: calling proxy_get_buffer buffer_type '%d' (offset: %d, max_size: %d)", buffer_type, offset, max_size);
 
-    get_buffer_bytes(proxywasm, buffer_type, offset, max_size, &value, &value_len);
+    get_buffer_bytes(p, buffer_type, offset, max_size, &value, &value_len);
 
     if (value_len > 0)
     {
-        wasm_vm_result result = proxy_on_memory_allocate(proxywasm, value_len);
+        wasm_vm_result result = proxy_on_memory_allocate(p, value_len);
         if (result.err)
         {
             FATAL("proxywasm proxy_on_memory_allocate error: %s", result.err);
@@ -211,13 +234,14 @@ static wasm_vm_result link_proxywasm_hostfunctions(proxywasm *proxywasm, wasm_vm
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_log", "i(i*i)", proxy_log, proxywasm)));
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_set_tick_period_milliseconds", "i(i)", proxy_set_tick_period_milliseconds, proxywasm)));
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_property", "i(*i**)", proxy_get_property, proxywasm)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_set_property", "i(*i*i)", proxy_set_property, proxywasm)));
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_buffer_bytes", "i(iii**)", proxy_get_buffer_bytes, proxywasm)));
 
 _catch:
     return (wasm_vm_result){.err = result};
 }
 
-void set_property_v(proxywasm *proxywasm, const char *value, const int value_len, ...)
+void set_property_v(proxywasm *p, const char *value, const int value_len, ...)
 {
     char path[256];
     int path_len = 0;
@@ -234,7 +258,7 @@ void set_property_v(proxywasm *proxywasm, const char *value, const int value_len
     }
     va_end(ap);
 
-    set_property(proxywasm, path, path_len - 1, value, value_len);
+    set_property(p, path, path_len - 1, value, value_len);
 }
 
 void print_property_key(const char *func, const char *key, int key_len)
@@ -391,11 +415,11 @@ void set_property(proxywasm *p, const char *key, int key_len, const char *value,
     hash_add(properties, &node->node, key_i);
 
     // printk("wasm: listing all possible entries under key %lu", key_i);
-    // hash_for_each_possible(proxywasm->properties, cur, node, key_i)
+    // hash_for_each_possible(p->properties, cur, node, key_i)
     //     pr_info("wasm:   match for key %lu: data = '%.*s'\n", key_i, cur->value_len, cur->value);
 }
 
-void get_property(proxywasm *proxywasm, const char *key, int key_len, char **value, int *value_len)
+void get_property(proxywasm *p, const char *key, int key_len, char **value, int *value_len)
 {
     struct property_h_node *cur = NULL;
     struct property_h_node *temp = NULL;
@@ -426,10 +450,18 @@ void get_property(proxywasm *proxywasm, const char *key, int key_len, char **val
 
 u32 magic_number = htonl(1025705063);
 
-void get_buffer_bytes(proxywasm *proxywasm, BufferType buffer_type, i32 offset, i32 max_size, char **value, i32 *value_len)
+void get_buffer_bytes(proxywasm *p, BufferType buffer_type, i32 offset, i32 max_size, char **value, i32 *value_len)
 {
     printk("wasm: get_buffer_bytes BufferType: %d, offset: %d, max_size: %d", buffer_type, offset, max_size);
 
-    *value = (char *)&magic_number;
-    *value_len = sizeof(magic_number);
+    switch (buffer_type)
+    {
+    case DownstreamData:
+        *value = (char *)&magic_number;
+        *value_len = sizeof(magic_number);
+        break;
+
+    default:
+        break;
+    }
 }
