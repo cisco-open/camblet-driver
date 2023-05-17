@@ -163,7 +163,7 @@ m3ApiRawFunction(proxy_get_buffer_bytes)
     m3ApiGetArg(i32, offset);
     m3ApiGetArg(i32, max_size);
 
-    m3ApiGetArgMem(char *, return_buffer_data);
+    m3ApiGetArgMem(i32 *, return_buffer_data);
     m3ApiGetArgMem(i32 *, return_buffer_size);
 
     proxywasm *proxywasm = _ctx->userdata;
@@ -183,7 +183,7 @@ m3ApiRawFunction(proxy_get_buffer_bytes)
             return m3Err_mallocFailed;
         }
 
-        printk("wasm: proxy_on_memory_allocate returned %d, value points to %p, *return_buffer_data -> %d", result.data->i32, value, *return_buffer_data);
+        printk("wasm: proxy_on_memory_allocate returned %d, value points to %p, size -> %d", result.data->i32, value, value_len);
 
         int wasm_ptr = result.data->i32;
 
@@ -193,7 +193,7 @@ m3ApiRawFunction(proxy_get_buffer_bytes)
         *return_buffer_data = wasm_ptr;
         *return_buffer_size = value_len;
 
-        printk("wasm: get_buffer_bytes ready, value_len: %d, return_buffer_data -> %d value %d", value_len, *return_buffer_data, *(u32*)value_ptr);
+        printk("wasm: get_buffer_bytes ready, value_len: %d, return_buffer_data -> %d", value_len, *return_buffer_data);
 
         m3ApiReturn(WasmResult_Ok);
     }
@@ -424,7 +424,7 @@ void get_property(proxywasm *proxywasm, const char *key, int key_len, char **val
     *value_len = temp->value_len;
 }
 
-u32 magic_number = 1025705063;
+u32 magic_number = htonl(1025705063);
 
 void get_buffer_bytes(proxywasm *proxywasm, BufferType buffer_type, i32 offset, i32 max_size, char **value, i32 *value_len)
 {
