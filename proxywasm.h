@@ -61,6 +61,12 @@ typedef enum
   Pause = 1,
 } Action;
 
+typedef enum {
+  ListenerDirectionUnspecified = 0,
+  ListenerDirectionInbound = 1,
+  ListenerDirectionOutbound = 2,
+} ListenerDirection;
+
 struct proxywasm;
 
 wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module);
@@ -71,6 +77,6 @@ wasm_vm_result proxy_on_downstream_data(struct proxywasm *p, i32 context_id, i32
 
 void get_property(struct proxywasm *p, const char *key, int key_len, char **value, int *value_len);
 void set_property(struct proxywasm *p, const char *key, int key_len, const char *value, int value_len);
-void get_buffer(struct proxywasm *p, BufferType buffer_type, i32 offset, i32 max_size, char **value, i32 *value_len, int *return_flags);
+void get_buffer_bytes(struct proxywasm *p, BufferType buffer_type, i32 offset, i32 max_size, char **value, i32 *value_len);
 
 #endif

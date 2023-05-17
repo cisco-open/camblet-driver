@@ -133,7 +133,7 @@ m3ApiRawFunction(proxy_get_property)
         if (result.err)
         {
             FATAL("proxywasm proxy_on_memory_allocate error: %s", result.err);
-            return WasmResult_InvalidMemoryAccess;
+            return m3Err_mallocFailed;
         }
 
         printk("wasm: proxy_on_memory_allocate returned %d, value points to %p, *return_property_value_data -> %d", result.data->i32, value, *return_property_value_data);
@@ -155,7 +155,7 @@ m3ApiRawFunction(proxy_get_property)
     m3ApiReturn(WasmResult_NotFound);
 }
 
-m3ApiRawFunction(proxy_get_buffer)
+m3ApiRawFunction(proxy_get_buffer_bytes)
 {
     m3ApiReturnType(i32);
 
@@ -165,16 +165,14 @@ m3ApiRawFunction(proxy_get_buffer)
 
     m3ApiGetArgMem(char *, return_buffer_data);
     m3ApiGetArgMem(i32 *, return_buffer_size);
-    m3ApiGetArgMem(i32 *, return_flags);
 
     proxywasm *proxywasm = _ctx->userdata;
 
     char *value = NULL;
-    int value_len;
-    int flags;
+    int value_len = 0;
     printk("wasm: calling proxy_get_buffer buffer_type '%d' (offset: %d, max_size: %d)", buffer_type, offset, max_size);
 
-    get_buffer(proxywasm, buffer_type, offset, max_size, &value, &value_len, flags);
+    get_buffer_bytes(proxywasm, buffer_type, offset, max_size, &value, &value_len);
 
     if (value_len > 0)
     {
@@ -182,7 +180,7 @@ m3ApiRawFunction(proxy_get_buffer)
         if (result.err)
         {
             FATAL("proxywasm proxy_on_memory_allocate error: %s", result.err);
-            return WasmResult_InvalidMemoryAccess;
+            return m3Err_mallocFailed;
         }
 
         printk("wasm: proxy_on_memory_allocate returned %d, value points to %p, *return_buffer_data -> %d", result.data->i32, value, *return_buffer_data);
@@ -194,14 +192,13 @@ m3ApiRawFunction(proxy_get_buffer)
 
         *return_buffer_data = wasm_ptr;
         *return_buffer_size = value_len;
-        *return_flags = flags;
 
-        printk("wasm: proxy_get_buffer ready, value_len: %d, return_buffer_data -> %d", value_len, *return_buffer_data);
+        printk("wasm: get_buffer_bytes ready, value_len: %d, return_buffer_data -> %d value %d", value_len, *return_buffer_data, *(u32*)value_ptr);
 
         m3ApiReturn(WasmResult_Ok);
     }
 
-    printk("wasm: proxy_get_buffer WasmResult_NotFound");
+    printk("wasm: get_buffer_bytes WasmResult_NotFound");
     m3ApiReturn(WasmResult_NotFound);
 }
 
@@ -214,7 +211,7 @@ static wasm_vm_result link_proxywasm_hostfunctions(proxywasm *proxywasm, wasm_vm
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_log", "i(i*i)", proxy_log, proxywasm)));
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_set_tick_period_milliseconds", "i(i)", proxy_set_tick_period_milliseconds, proxywasm)));
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_property", "i(*i**)", proxy_get_property, proxywasm)));
-    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_buffer", "i(iii***)", proxy_get_buffer, proxywasm)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_buffer_bytes", "i(iii**)", proxy_get_buffer_bytes, proxywasm)));
 
 _catch:
     return (wasm_vm_result){.err = result};
@@ -272,6 +269,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
 
     {
         char empty_map[] = {0,0,0,0};
+        u64 listener_direction = ListenerDirectionInbound;
         set_property_v(proxywasm, "lima", strlen("lima"), "node", "id", NULL);
         set_property_v(proxywasm, "catalog-v1-6578575465-lz5h2", strlen("catalog-v1-6578575465-lz5h2"), "node", "metadata", "NAME", NULL);
         set_property_v(proxywasm, "kube-system", strlen("kube-system"), "node", "metadata", "NAMESPACE", NULL);
@@ -284,6 +282,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
         set_property_v(proxywasm, empty_map, sizeof(empty_map), "node", "metadata", "PLATFORM_METADATA", NULL);
         set_property_v(proxywasm, "catalog", strlen("catalog"), "node", "metadata", "APP_CONTAINERS", NULL);
         set_property_v(proxywasm, "10.20.160.34,fe80::84cb:9eff:feb7:941b", strlen("10.20.160.34,fe80::84cb:9eff:feb7:941b"), "node", "metadata", "INSTANCE_IPS", NULL);
+        set_property_v(proxywasm, (char*)&listener_direction, sizeof(listener_direction), "listener_direction", NULL);
     }
 
     result = link_proxywasm_hostfunctions(proxywasm, wasm_vm_get_module(vm, module));
@@ -425,10 +424,12 @@ void get_property(proxywasm *proxywasm, const char *key, int key_len, char **val
     *value_len = temp->value_len;
 }
 
-void get_buffer(proxywasm *proxywasm, BufferType buffer_type, i32 offset, i32 max_size, char **value, i32 *value_len, int *return_flags)
-{
-    printk("wasm: get_buffer BufferType: %d, offset: %d, max_size: %d", buffer_type, offset, max_size);
+u32 magic_number = 1025705063;
 
-    // *value = temp->value;
-    // *value_len = temp->value_len;
+void get_buffer_bytes(proxywasm *proxywasm, BufferType buffer_type, i32 offset, i32 max_size, char **value, i32 *value_len)
+{
+    printk("wasm: get_buffer_bytes BufferType: %d, offset: %d, max_size: %d", buffer_type, offset, max_size);
+
+    *value = (char *)&magic_number;
+    *value_len = sizeof(magic_number);
 }
