@@ -287,7 +287,7 @@ _catch:
     return (wasm_vm_result){.err = result};
 }
 
-void set_property_v(proxywasm *p, const char *value, const int value_len, ...)
+void set_property_v(proxywasm_context *p, const char *value, const int value_len, ...)
 {
     char path[256];
     int path_len = 0;
@@ -304,7 +304,7 @@ void set_property_v(proxywasm *p, const char *value, const int value_len, ...)
     }
     va_end(ap);
 
-    set_property(p->current_context, path, path_len - 1, value, value_len);
+    set_property(p, path, path_len - 1, value, value_len);
 }
 
 void print_property_key(const char *func, const char *key, int key_len)
@@ -350,19 +350,19 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char *module)
         // TODO: this is only test data
         char empty_map[] = {0, 0, 0, 0};
         u64 listener_direction = ListenerDirectionInbound;
-        set_property_v(proxywasm, "lima", strlen("lima"), "node", "id", NULL);
-        set_property_v(proxywasm, "catalog-v1-6578575465-lz5h2", strlen("catalog-v1-6578575465-lz5h2"), "node", "metadata", "NAME", NULL);
-        set_property_v(proxywasm, "kube-system", strlen("kube-system"), "node", "metadata", "NAMESPACE", NULL);
-        set_property_v(proxywasm, "blade-runner", strlen("blade-runner"), "node", "metadata", "OWNER", NULL);
-        set_property_v(proxywasm, "joska", strlen("joska"), "node", "metadata", "WORKLOAD_NAME", NULL);
-        set_property_v(proxywasm, "1.13.5", strlen("1.13.5"), "node", "metadata", "ISTIO_VERSION", NULL);
-        set_property_v(proxywasm, "mesh1", strlen("mesh1"), "node", "metadata", "MESH_ID", NULL);
-        set_property_v(proxywasm, "cluster1", strlen("cluster1"), "node", "metadata", "CLUSTER_ID", NULL);
-        set_property_v(proxywasm, empty_map, sizeof(empty_map), "node", "metadata", "LABELS", NULL);
-        set_property_v(proxywasm, empty_map, sizeof(empty_map), "node", "metadata", "PLATFORM_METADATA", NULL);
-        set_property_v(proxywasm, "catalog", strlen("catalog"), "node", "metadata", "APP_CONTAINERS", NULL);
-        set_property_v(proxywasm, "10.20.160.34,fe80::84cb:9eff:feb7:941b", strlen("10.20.160.34,fe80::84cb:9eff:feb7:941b"), "node", "metadata", "INSTANCE_IPS", NULL);
-        set_property_v(proxywasm, (char *)&listener_direction, sizeof(listener_direction), "listener_direction", NULL);
+        set_property_v(root_context, "lima", strlen("lima"), "node", "id", NULL);
+        set_property_v(root_context, "catalog-v1-6578575465-lz5h2", strlen("catalog-v1-6578575465-lz5h2"), "node", "metadata", "NAME", NULL);
+        set_property_v(root_context, "kube-system", strlen("kube-system"), "node", "metadata", "NAMESPACE", NULL);
+        set_property_v(root_context, "blade-runner", strlen("blade-runner"), "node", "metadata", "OWNER", NULL);
+        set_property_v(root_context, "joska", strlen("joska"), "node", "metadata", "WORKLOAD_NAME", NULL);
+        set_property_v(root_context, "1.13.5", strlen("1.13.5"), "node", "metadata", "ISTIO_VERSION", NULL);
+        set_property_v(root_context, "mesh1", strlen("mesh1"), "node", "metadata", "MESH_ID", NULL);
+        set_property_v(root_context, "cluster1", strlen("cluster1"), "node", "metadata", "CLUSTER_ID", NULL);
+        set_property_v(root_context, empty_map, sizeof(empty_map), "node", "metadata", "LABELS", NULL);
+        set_property_v(root_context, empty_map, sizeof(empty_map), "node", "metadata", "PLATFORM_METADATA", NULL);
+        set_property_v(root_context, "catalog", strlen("catalog"), "node", "metadata", "APP_CONTAINERS", NULL);
+        set_property_v(root_context, "10.20.160.34,fe80::84cb:9eff:feb7:941b", strlen("10.20.160.34,fe80::84cb:9eff:feb7:941b"), "node", "metadata", "INSTANCE_IPS", NULL);
+        set_property_v(root_context, (char *)&listener_direction, sizeof(listener_direction), "listener_direction", NULL);
     }
 
     // Create the root context

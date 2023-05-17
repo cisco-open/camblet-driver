@@ -76,6 +76,10 @@ wasm_vm_result proxy_on_context_create(struct proxywasm *p, i32 context_id, i32 
 wasm_vm_result proxy_on_new_connection(struct proxywasm *p, i32 context_id);
 wasm_vm_result proxy_on_downstream_data(struct proxywasm *p, i32 context_id, i32 data_size, i32 end_of_stream);
 
+// set_property_v is convenience funtion for setting a property on a context, with simple C string paths,
+// the varargs should be path elements followed by a NULL, like: ..., "node", "id", NULL);
+void set_property_v(struct proxywasm_context *p, const char *value, const int value_len, ...);
+
 // host functions, not needed by the API, just forward declerations
 void get_property(struct proxywasm_context *p, const char *key, int key_len, char **value, int *value_len);
 void set_property(struct proxywasm_context *p, const char *key, int key_len, const char *value, int value_len);
