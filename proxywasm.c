@@ -31,7 +31,7 @@ typedef struct proxywasm_context {
     int id;
 } proxywasm_context;
 
-DEFINE_HASHTABLE(properties, 6);
+// DEFINE_HASHTABLE(properties, 6);
 
 typedef struct proxywasm
 {
@@ -57,10 +57,11 @@ typedef struct proxywasm
 
     i32 tick_period;
 
+    //DECLARE_HASHTABLE(properties, 6);
+    struct hlist_head *properties;
+
     // the current context under processing
     proxywasm_context *current_context;
-
-    // DECLARE_HASHTABLE(properties, 6);
 } proxywasm;
 
 static proxywasm *proxywasms[NR_CPUS] = {0};
@@ -289,7 +290,8 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module)
 
     // printk("wasm: ARRAY_SIZE %d", ARRAY_SIZE(proxywasm->properties));
 
-    // hash_init((proxywasm->properties));
+    proxywasm->properties = kzalloc((1<<4) * sizeof(struct hlist_head) , GFP_KERNEL);
+    __hash_init(proxywasm->properties, 1<<4);
 
     {
         char empty_map[] = {0,0,0,0};
@@ -398,12 +400,18 @@ wasm_vm_result proxy_on_downstream_data(proxywasm *p, i32 context_id, i32 data_s
     return wasm_vm_call_direct(p->vm, p->proxy_on_downstream_data, context_id, data_size, end_of_stream);
 }
 
+#define hash_add(hashtable, node, key, bits)						\
+	hlist_add_head(node, &hashtable[hash_min(key, bits)])
+
+#define hash_for_each_possible(name, obj, member, key, bits)			\
+	hlist_for_each_entry(obj, &name[hash_min(key, bits)], member)
+
 void set_property(proxywasm *p, const char *key, int key_len, const char *value, int value_len)
 {
     struct property_h_node *cur, *node = kmalloc(sizeof(property_h_node), GFP_KERNEL);
-    unsigned long key_i = xxhash(key, key_len, 0);
+    uint32_t key_i = xxh32(key, key_len, 0);
     print_property_key("set_property", key, key_len);
-    printk("wasm: set_property key hash %lu, key len: %d", key_i, key_len);
+    printk("wasm: set_property key hash %u, key len: %d", key_i, key_len);
 
     node->key_len = key_len;
     memcpy(node->key, key, key_len);
@@ -412,7 +420,7 @@ void set_property(proxywasm *p, const char *key, int key_len, const char *value,
     memcpy(node->value, value, value_len);
 
     printk("wasm: adding new bucket to hashtable");
-    hash_add(properties, &node->node, key_i);
+    hash_add(p->properties, &node->node, key_i, 4);
 
     // printk("wasm: listing all possible entries under key %lu", key_i);
     // hash_for_each_possible(p->properties, cur, node, key_i)
@@ -423,11 +431,11 @@ void get_property(proxywasm *p, const char *key, int key_len, char **value, int 
 {
     struct property_h_node *cur = NULL;
     struct property_h_node *temp = NULL;
-    unsigned long key_i = xxhash(key, key_len, 0);
+    uint32_t key_i = xxh32(key, key_len, 0);
     print_property_key("get_property", key, key_len);
-    printk("wasm: key hash %lu, key len: %d key: '%.*s'", key_i, key_len, key_len, key); 
+    printk("wasm: key hash %u, key len: %d key: '%.*s'", key_i, key_len, key_len, key); 
 
-    hash_for_each_possible(properties, cur, node, key_i)
+    hash_for_each_possible(p->properties, cur, node, key_i, 4)
     {
         if (cur->key_len == key_len && memcmp(cur->key, key, key_len) == 0)
         {
