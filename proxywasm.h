@@ -76,8 +76,10 @@ wasm_vm_result proxy_on_context_create(struct proxywasm *p, i32 context_id, i32 
 wasm_vm_result proxy_on_new_connection(struct proxywasm *p, i32 context_id);
 wasm_vm_result proxy_on_downstream_data(struct proxywasm *p, i32 context_id, i32 data_size, i32 end_of_stream);
 
+// host functions, not needed by the API, just forward declerations
 void get_property(struct proxywasm_context *p, const char *key, int key_len, char **value, int *value_len);
 void set_property(struct proxywasm_context *p, const char *key, int key_len, const char *value, int value_len);
-void get_buffer_bytes(struct proxywasm_context *p, BufferType buffer_type, i32 offset, i32 max_size, char **value, i32 *value_len);
+void get_buffer_bytes(struct proxywasm_context *p, BufferType buffer_type, i32 start, i32 max_size, char **value, i32 *value_len);
+void set_buffer_bytes(struct proxywasm_context *p, BufferType buffer_type, i32 start, i32 size, char *value, i32 value_len);
 
 #endif
