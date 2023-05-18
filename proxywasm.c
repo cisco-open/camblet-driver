@@ -13,6 +13,16 @@
 
 #include "proxywasm.h"
 
+
+// We need to use dynamic hashtables, so we have to hack a bit around hashing macros:
+#define HASHTABLE_BITS 4
+
+#define hash_add(hashtable, node, key, bits)						\
+	hlist_add_head(node, &hashtable[hash_min(key, bits)])
+
+#define hash_for_each_possible(name, obj, member, key, bits)			\
+	hlist_for_each_entry(obj, &name[hash_min(key, bits)], member)
+
 typedef struct property_h_node
 {
     char key[256];
@@ -40,8 +50,6 @@ typedef struct proxywasm_context
 
     struct proxywasm_context *parent;
 } proxywasm_context;
-
-#define HASHTABLE_BITS 4
 
 proxywasm_context* new_proxywasm_context(proxywasm_context *parent)
 {
@@ -76,9 +84,9 @@ typedef struct proxywasm
     // TCP/UDP/QUIC stream (L4) extensions
     wasm_vm_function *proxy_on_new_connection;
     wasm_vm_function *proxy_on_downstream_data;
-    wasm_vm_function *proxy_on_downstream_close;
+    wasm_vm_function *proxy_on_downstream_connection_close;
     wasm_vm_function *proxy_on_upstream_data;
-    wasm_vm_function *proxy_on_upstream_close;
+    wasm_vm_function *proxy_on_upstream_connection_close;
 
     proxywasm_context *root_context;
 
@@ -331,6 +339,12 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char *module)
     proxywasm->proxy_on_vm_start = wasm_vm_get_function(vm, module, "proxy_on_vm_start");
     proxywasm->proxy_on_configure = wasm_vm_get_function(vm, module, "proxy_on_configure");
     proxywasm->proxy_on_downstream_data = wasm_vm_get_function(vm, module, "proxy_on_downstream_data");
+    proxywasm->proxy_on_downstream_connection_close = wasm_vm_get_function(vm, module, "proxy_on_downstream_connection_close");
+    proxywasm->proxy_on_upstream_data = wasm_vm_get_function(vm, module, "proxy_on_upstream_data");
+    proxywasm->proxy_on_upstream_connection_close = wasm_vm_get_function(vm, module, "proxy_on_upstream_connection_close");
+    proxywasm->proxy_on_tick = wasm_vm_get_function(vm, module, "proxy_on_tick");
+    proxywasm->proxy_on_done = wasm_vm_get_function(vm, module, "proxy_on_done");
+    proxywasm->proxy_on_delete = wasm_vm_get_function(vm, module, "proxy_on_delete");
     proxywasm->vm = vm;
 
     result = link_proxywasm_hostfunctions(proxywasm, wasm_vm_get_module(vm, module));
@@ -441,16 +455,25 @@ wasm_vm_result proxy_on_new_connection(proxywasm *p, i32 context_id)
     return wasm_vm_call_direct(p->vm, p->proxy_on_new_connection, context_id);
 }
 
-wasm_vm_result proxy_on_downstream_data(proxywasm *p, i32 context_id, i32 data_size, i32 end_of_stream)
+wasm_vm_result proxy_on_downstream_data(proxywasm *p, i32 context_id, i32 data_size, bool end_of_stream)
 {
     return wasm_vm_call_direct(p->vm, p->proxy_on_downstream_data, context_id, data_size, end_of_stream);
 }
 
-#define hash_add(hashtable, node, key, bits)						\
-	hlist_add_head(node, &hashtable[hash_min(key, bits)])
+wasm_vm_result proxy_on_downstream_connection_close(proxywasm *p, i32 context_id, PeerType peer_type)
+{
+    return wasm_vm_call_direct(p->vm, p->proxy_on_downstream_connection_close, context_id, peer_type);
+}
 
-#define hash_for_each_possible(name, obj, member, key, bits)			\
-	hlist_for_each_entry(obj, &name[hash_min(key, bits)], member)
+wasm_vm_result proxy_on_upstream_data(proxywasm *p, i32 context_id, i32 data_size, bool end_of_stream)
+{
+    return wasm_vm_call_direct(p->vm, p->proxy_on_upstream_data, context_id, data_size, end_of_stream);
+}
+
+wasm_vm_result proxy_on_upstream_connection_close(proxywasm *p, i32 context_id, PeerType peer_type)
+{
+    return wasm_vm_call_direct(p->vm, p->proxy_on_upstream_connection_close, context_id, peer_type);
+}
 
 void set_property(proxywasm_context *p, const char *key, int key_len, const char *value, int value_len)
 {
@@ -469,7 +492,7 @@ void set_property(proxywasm_context *p, const char *key, int key_len, const char
     hash_add(p->properties, &node->node, key_i, HASHTABLE_BITS);
 
     // printk("wasm: listing all possible entries under key %lu", key_i);
-    // hash_for_each_possible(p->properties, cur, node, key_i)
+    // hash_for_each_possible(p->properties, cur, node, key_i, HASHTABLE_BITS)
     //     pr_info("wasm:   match for key %lu: data = '%.*s'\n", key_i, cur->value_len, cur->value);
 }
 

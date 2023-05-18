@@ -61,29 +61,40 @@ typedef enum
   Pause = 1,
 } Action;
 
-typedef enum {
+typedef enum
+{
   ListenerDirectionUnspecified = 0,
   ListenerDirectionInbound = 1,
   ListenerDirectionOutbound = 2,
 } ListenerDirection;
 
-struct proxywasm;
-struct proxywasm_context;
+typedef enum
+{
+  Unknown = 0,
+  Local = 1,
+  Remote = 2,
+} PeerType;
+
+typedef struct proxywasm proxywasm;
+typedef struct proxywasm_context proxywasm_context;
 
 wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module);
 
-wasm_vm_result proxy_on_context_create(struct proxywasm *p, i32 context_id, i32 root_context_id);
-wasm_vm_result proxy_on_new_connection(struct proxywasm *p, i32 context_id);
-wasm_vm_result proxy_on_downstream_data(struct proxywasm *p, i32 context_id, i32 data_size, i32 end_of_stream);
+wasm_vm_result proxy_on_context_create(proxywasm *p, i32 context_id, i32 root_context_id);
+wasm_vm_result proxy_on_new_connection(proxywasm *p, i32 context_id);
+wasm_vm_result proxy_on_downstream_data(proxywasm *p, i32 context_id, i32 data_size, bool end_of_stream);
+wasm_vm_result proxy_on_upstream_data(proxywasm *p, i32 context_id, i32 data_size, bool end_of_stream);
+wasm_vm_result proxy_on_downstream_connection_close(proxywasm *p, i32 context_id, PeerType peer_type);
+wasm_vm_result proxy_on_upstream_connection_close(proxywasm *p, i32 context_id, PeerType peer_type);
 
 // set_property_v is convenience funtion for setting a property on a context, with simple C string paths,
 // the varargs should be path elements followed by a NULL, like: ..., "node", "id", NULL);
-void set_property_v(struct proxywasm_context *p, const char *value, const int value_len, ...);
+void set_property_v(proxywasm_context *p, const char *value, const int value_len, ...);
 
 // host functions, not needed by the API, just forward declerations
-void get_property(struct proxywasm_context *p, const char *key, int key_len, char **value, int *value_len);
-void set_property(struct proxywasm_context *p, const char *key, int key_len, const char *value, int value_len);
-void get_buffer_bytes(struct proxywasm_context *p, BufferType buffer_type, i32 start, i32 max_size, char **value, i32 *value_len);
-void set_buffer_bytes(struct proxywasm_context *p, BufferType buffer_type, i32 start, i32 size, char *value, i32 value_len);
+void get_property(proxywasm_context *p, const char *key, int key_len, char **value, int *value_len);
+void set_property(proxywasm_context *p, const char *key, int key_len, const char *value, int value_len);
+void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i32 max_size, char **value, i32 *value_len);
+void set_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i32 size, char *value, i32 value_len);
 
 #endif
