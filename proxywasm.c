@@ -330,9 +330,16 @@ void print_property_key(const char *func, const char *key, int key_len)
 
 wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char *module)
 {
-    wasm_vm_result result;
-
     proxywasm *proxywasm = kmalloc(sizeof(proxywasm), GFP_KERNEL);
+
+    wasm_vm_result result;
+    result = link_proxywasm_hostfunctions(proxywasm, wasm_vm_get_module(vm, module));
+    if (result.err)
+    {
+        kfree(proxywasm);
+        return result;
+    }
+
     proxywasm->proxy_on_memory_allocate = wasm_vm_get_function(vm, module, "malloc"); // ???? proxy_on_memory_allocate?
     proxywasm->proxy_on_context_create = wasm_vm_get_function(vm, module, "proxy_on_context_create");
     proxywasm->proxy_on_new_connection = wasm_vm_get_function(vm, module, "proxy_on_new_connection");
@@ -346,13 +353,6 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char *module)
     proxywasm->proxy_on_done = wasm_vm_get_function(vm, module, "proxy_on_done");
     proxywasm->proxy_on_delete = wasm_vm_get_function(vm, module, "proxy_on_delete");
     proxywasm->vm = vm;
-
-    result = link_proxywasm_hostfunctions(proxywasm, wasm_vm_get_module(vm, module));
-    if (result.err)
-    {
-        kfree(proxywasm);
-        return result;
-    }
 
     proxywasm_context *root_context = new_proxywasm_context(NULL);
     printk("wasm: root_context_id %d", root_context->id);
