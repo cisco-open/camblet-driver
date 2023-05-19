@@ -548,7 +548,7 @@ static void *print_module_symbols(IM3Module module, void * i_info)
     {
         IM3Function f = & module->functions [i];
 
-        if (f->numNames >= 1) {
+        if (f->numNames > 1) {
             printk("wasm:     function -> %s(%d) -> %d", f->names[0], f->funcType->numArgs, f->funcType->numRets);
         }
     }
