@@ -328,31 +328,39 @@ void print_property_key(const char *func, const char *key, int key_len)
     printk("wasm: %s key: %s", func, buf);
 }
 
-wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char *module)
+wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
 {
     proxywasm *proxywasm = kmalloc(sizeof(proxywasm), GFP_KERNEL);
 
     wasm_vm_result result;
-    result = link_proxywasm_hostfunctions(proxywasm, wasm_vm_get_module(vm, module));
+    result = link_proxywasm_hostfunctions(proxywasm, module);
     if (result.err)
     {
         kfree(proxywasm);
         return result;
     }
 
-    proxywasm->proxy_on_memory_allocate = wasm_vm_get_function(vm, module, "malloc"); // ???? proxy_on_memory_allocate?
-    proxywasm->proxy_on_context_create = wasm_vm_get_function(vm, module, "proxy_on_context_create");
-    proxywasm->proxy_on_new_connection = wasm_vm_get_function(vm, module, "proxy_on_new_connection");
-    proxywasm->proxy_on_vm_start = wasm_vm_get_function(vm, module, "proxy_on_vm_start");
-    proxywasm->proxy_on_configure = wasm_vm_get_function(vm, module, "proxy_on_configure");
-    proxywasm->proxy_on_downstream_data = wasm_vm_get_function(vm, module, "proxy_on_downstream_data");
-    proxywasm->proxy_on_downstream_connection_close = wasm_vm_get_function(vm, module, "proxy_on_downstream_connection_close");
-    proxywasm->proxy_on_upstream_data = wasm_vm_get_function(vm, module, "proxy_on_upstream_data");
-    proxywasm->proxy_on_upstream_connection_close = wasm_vm_get_function(vm, module, "proxy_on_upstream_connection_close");
-    proxywasm->proxy_on_tick = wasm_vm_get_function(vm, module, "proxy_on_tick");
-    proxywasm->proxy_on_done = wasm_vm_get_function(vm, module, "proxy_on_done");
-    proxywasm->proxy_on_delete = wasm_vm_get_function(vm, module, "proxy_on_delete");
+    wasm_vm_try_get_function(proxywasm->proxy_on_memory_allocate, wasm_vm_get_function(vm, module->name, "malloc")); // ???? proxy_on_memory_allocate?
+    wasm_vm_try_get_function(proxywasm->proxy_on_context_create, wasm_vm_get_function(vm, module->name, "proxy_on_context_create"));
+    wasm_vm_try_get_function(proxywasm->proxy_on_new_connection, wasm_vm_get_function(vm, module->name, "proxy_on_new_connection"));
+    wasm_vm_try_get_function(proxywasm->proxy_on_vm_start, wasm_vm_get_function(vm, module->name, "proxy_on_vm_start"));
+    wasm_vm_try_get_function(proxywasm->proxy_on_configure, wasm_vm_get_function(vm, module->name, "proxy_on_configure"));
+    wasm_vm_try_get_function(proxywasm->proxy_on_downstream_data, wasm_vm_get_function(vm, module->name, "proxy_on_downstream_data"));
+    wasm_vm_try_get_function(proxywasm->proxy_on_downstream_connection_close, wasm_vm_get_function(vm, module->name, "proxy_on_downstream_connection_close"));
+    wasm_vm_try_get_function(proxywasm->proxy_on_upstream_data, wasm_vm_get_function(vm, module->name, "proxy_on_upstream_data"));
+    wasm_vm_try_get_function(proxywasm->proxy_on_upstream_connection_close, wasm_vm_get_function(vm, module->name, "proxy_on_upstream_connection_close"));
+    wasm_vm_try_get_function(proxywasm->proxy_on_tick, wasm_vm_get_function(vm, module->name, "proxy_on_tick"));
+    wasm_vm_try_get_function(proxywasm->proxy_on_done, wasm_vm_get_function(vm, module->name, "proxy_on_done"));
+    wasm_vm_try_get_function(proxywasm->proxy_on_delete, wasm_vm_get_function(vm, module->name, "proxy_on_delete"));
     proxywasm->vm = vm;
+
+error:
+    if (result.err)
+    {
+        FATAL("proxywasm function lookups failed for module %s failed: %s -> %s", module->name, result.err, wasm_vm_last_error(vm));
+        kfree(proxywasm);
+        return result;
+    }
 
     proxywasm_context *root_context = new_proxywasm_context(NULL);
     printk("wasm: root_context_id %d", root_context->id);
@@ -383,7 +391,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char *module)
     result = proxy_on_context_create(proxywasm, root_context->id, 0);
     if (result.err)
     {
-        FATAL("proxy_on_context_create for module %s failed: %s", module, result.err)
+        FATAL("proxy_on_context_create for module %s failed: %s", module->name, result.err);
         kfree(proxywasm);
         return result;
     }
@@ -391,7 +399,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char *module)
     result = wasm_vm_call_direct(vm, proxywasm->proxy_on_vm_start, root_context->id, 0);
     if (result.err)
     {
-        FATAL("proxy_on_vm_start for module %s failed: %s", module, result.err)
+        FATAL("proxy_on_vm_start for module %s failed: %s", module->name, result.err)
         kfree(proxywasm);
         return result;
     }
@@ -401,7 +409,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char *module)
     result = wasm_vm_call_direct(vm, proxywasm->proxy_on_configure, root_context->id, plugin_configuration_size);
     if (result.err)
     {
-        FATAL("proxy_on_configure for module %s failed: %s", module, result.err)
+        FATAL("proxy_on_configure for module %s failed: %s", module->name, result.err)
         kfree(proxywasm);
         return result;
     }
@@ -415,7 +423,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char *module)
     result = proxy_on_context_create(proxywasm, context->id, root_context->id);
     if (result.err)
     {
-        FATAL("proxy_on_context_create for module %s failed: %s", module, result.err)
+        FATAL("proxy_on_context_create for module %s failed: %s", module->name, result.err)
         kfree(proxywasm);
         return result;
     }
@@ -425,7 +433,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char *module)
     result = proxy_on_new_connection(proxywasm, context->id);
     if (result.err)
     {
-        FATAL("proxy_on_new_connection for module %s failed: %s", module, result.err)
+        FATAL("proxy_on_new_connection for module %s failed: %s", module->name, result.err)
         kfree(proxywasm);
         return result;
     }
@@ -435,7 +443,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char *module)
     result = proxy_on_downstream_data(proxywasm, context->id, 128, false);
     if (result.err)
     {
-        FATAL("proxy_on_downstream_data for module %s failed: %s", module, result.err)
+        FATAL("proxy_on_downstream_data for module %s failed: %s", module->name, result.err)
         kfree(proxywasm);
         return result;
     }

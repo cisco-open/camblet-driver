@@ -125,6 +125,8 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
             return result;
         }
 
+        wasm_vm_module *module = result.data->module;
+
         if (entrypoint)
         {
             printk("wasm: calling module entrypoint: %s", entrypoint);
@@ -134,7 +136,7 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
             if (result.err &&
               !(result.err = m3Err_functionLookupFailed && strcmp(entrypoint, DEFAULT_MODULE_ENTRYPOINT) == 0))
             {
-                FATAL("wasm_vm_call: %s", result.err);
+                FATAL("wasm_vm_call: %s error: %s", result.err, wasm_vm_last_error(vm));
                 wasm_vm_unlock(vm);
                 return result;
             }
@@ -144,7 +146,7 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
 
         if (strcmp(name, OPA_MODULE) == 0)
         {
-            result = init_opa_for(vm);
+            result = init_opa_for(vm, module);
             if (result.err)
             {
                 FATAL("init_opa_for: %s", result.err);
@@ -154,7 +156,7 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
         }
         else if (strstr(name, "proxywasm") != NULL)
         {
-            result = init_proxywasm_for(vm, name);
+            result = init_proxywasm_for(vm, module);
             if (result.err)
             {
                 FATAL("init_proxywasm_for: %s", result.err);

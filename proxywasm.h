@@ -78,7 +78,7 @@ typedef enum
 typedef struct proxywasm proxywasm;
 typedef struct proxywasm_context proxywasm_context;
 
-wasm_vm_result init_proxywasm_for(wasm_vm *vm, const char* module);
+wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module);
 
 wasm_vm_result proxy_on_context_create(proxywasm *p, i32 context_id, i32 root_context_id);
 wasm_vm_result proxy_on_new_connection(proxywasm *p, i32 context_id);

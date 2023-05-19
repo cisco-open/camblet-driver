@@ -22,8 +22,7 @@
     }
 
 // MAX_RETURN_VALUES defines the amount of return values.
-// currently only 5 return value supported per function.
-#define MAX_RETURN_VALUES 5
+#define MAX_RETURN_VALUES 3
 
 typedef struct wasm_vm
 {
@@ -35,6 +34,9 @@ typedef struct wasm_vm
     IM3Runtime _runtime;
 } wasm_vm;
 
+typedef M3Module wasm_vm_module;
+typedef M3Function wasm_vm_function;
+
 typedef struct wasm_vm_result
 {
     union
@@ -43,12 +45,13 @@ typedef struct wasm_vm_result
         i64 i64;
         f32 f32;
         f64 f64;
+        wasm_vm_module *module;
+        wasm_vm_function *function;
     } data[MAX_RETURN_VALUES];
-    char *err;
+    const char *err;
 } wasm_vm_result;
 
-typedef M3Module wasm_vm_module;
-typedef M3Function wasm_vm_function;
+#define wasm_vm_try_get_function(VAR, CALL) { result = CALL; if (result.err) goto error; VAR = result.data->function; }
 
 wasm_vm *wasm_vm_for_cpu(unsigned cpu);
 wasm_vm *this_cpu_wasm_vm(void);
@@ -67,8 +70,9 @@ void wasm_vm_set_userdata(wasm_vm *vm, void *userdata);
 void wasm_vm_dump_symbols(wasm_vm *vm);
 void wasm_vm_lock(wasm_vm *vm);
 void wasm_vm_unlock(wasm_vm *vm);
-wasm_vm_module *wasm_vm_get_module(wasm_vm *vm, const char *module);
-wasm_vm_function *wasm_vm_get_function(wasm_vm *vm, const char *module, const char *function);
+wasm_vm_result wasm_vm_get_module(wasm_vm *vm, const char *module);
+wasm_vm_result wasm_vm_get_function(wasm_vm *vm, const char *module, const char *function);
+const char *wasm_vm_last_error(wasm_vm *vm);
 
 M3Result SuppressLookupFailure(M3Result i_result);
 
