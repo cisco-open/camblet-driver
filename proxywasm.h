@@ -88,8 +88,8 @@ wasm_vm_result proxy_on_downstream_connection_close(proxywasm *p, i32 context_id
 wasm_vm_result proxy_on_upstream_connection_close(proxywasm *p, i32 context_id, PeerType peer_type);
 
 // set_property_v is convenience funtion for setting a property on a context, with simple C string paths,
-// the varargs should be path elements followed by a NULL, like: ..., "node", "id", NULL);
-void set_property_v(proxywasm_context *p, const char *value, const int value_len, ...);
+// use the '.' as delimiter, those will be replaced to a '0' delimiter 
+void set_property_v(proxywasm_context *p, const char *key, const void *value, const int value_len);
 
 // host functions, not needed by the API, just forward declerations
 void get_property(proxywasm_context *p, const char *key, int key_len, char **value, int *value_len);
