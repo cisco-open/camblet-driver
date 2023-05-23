@@ -450,6 +450,12 @@ m3ApiRawFunction(m3_wasi_generic_environ_sizes_get)
     m3ApiReturn(ret);
 }
 
+m3ApiRawFunction(m3_wasi_generic_proc_exit)
+{
+    m3ApiGetArg   (i32, code)
+    m3ApiSuccess();
+}
+
 M3Result SuppressLookupFailure(M3Result i_result)
 {
     if (i_result == m3Err_functionLookupFailed)
@@ -483,6 +489,7 @@ static M3Result m3_LinkWASI(IM3Module module)
 
     _(SuppressLookupFailure (m3_LinkRawFunction (module, wasi, "environ_get",       "i(**)", m3_wasi_generic_environ_get)));
     _(SuppressLookupFailure (m3_LinkRawFunction (module, wasi, "environ_sizes_get", "i(**)", m3_wasi_generic_environ_sizes_get)));
+    _(SuppressLookupFailure (m3_LinkRawFunction (module, wasi, "proc_exit",           "(i)", m3_wasi_generic_proc_exit)));
 
 _catch:
     return result;

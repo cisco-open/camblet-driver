@@ -141,6 +141,8 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
                 return result;
             }
 
+            printk("wasm: module entrypoint finished");
+
             result.err = NULL;
         }
 

@@ -385,13 +385,14 @@ error:
         set_property_v(root_context, "catalog", strlen("catalog"), "node", "metadata", "APP_CONTAINERS", NULL);
         set_property_v(root_context, "10.20.160.34,fe80::84cb:9eff:feb7:941b", strlen("10.20.160.34,fe80::84cb:9eff:feb7:941b"), "node", "metadata", "INSTANCE_IPS", NULL);
         set_property_v(root_context, (char *)&listener_direction, sizeof(listener_direction), "listener_direction", NULL);
+        set_property_v(root_context, "0", strlen("0"), "plugin_root_id", NULL);
     }
 
     // Create the root context
     result = proxy_on_context_create(proxywasm, root_context->id, 0);
     if (result.err)
     {
-        FATAL("proxy_on_context_create for module %s failed: %s", module->name, result.err);
+        FATAL("proxy_on_context_create for module %s failed: %s -> %s", module->name, result.err, wasm_vm_last_error(vm));
         kfree(proxywasm);
         return result;
     }
