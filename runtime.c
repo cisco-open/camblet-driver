@@ -481,7 +481,7 @@ _catch:
 }
 
 // Some Wasi mockings only for proxy-wasm
-static M3Result m3_LinkWASI(IM3Module module)
+static M3Result m3_LinkWASIMocks(IM3Module module)
 {
     M3Result result = m3Err_none;
 
@@ -506,11 +506,9 @@ static M3Result m3_link_all(IM3Module module)
     if (res)
         return res;
 
-// #if defined(LINK_WASI)
-    res = m3_LinkWASI(module);
+    res = m3_LinkWASIMocks(module);
     if (res)
         return res;
-// #endif
 
 #if defined(d_m3HasTracer)
     res = m3_LinkTracer(module);
@@ -553,13 +551,14 @@ static void *print_module_symbols(IM3Module module, void * i_info)
     }
     for (i = 0; i < module->numFunctions; i++)
     {
-        IM3Function f = & module->functions [i];
+        IM3Function f = &module->functions[i];
 
-        if (f->numNames > 1) {
-            printk("wasm:     function -> %s(%d) -> %d", f->names[0], f->funcType->numArgs, f->funcType->numRets);
+        if (f->export_name != NULL)
+        {
+            printk("wasm:     function -> %s(%d) -> %d", f->export_name, f->funcType->numArgs, f->funcType->numRets);
         }
     }
-    
+
     return NULL;
 }
 
@@ -581,7 +580,7 @@ void wasm_vm_unlock(wasm_vm *vm)
 
 wasm_vm_result wasm_vm_get_module(wasm_vm *vm, const char *name)
 {
-    wasm_vm_module* module = ForEachModule (vm->_runtime, (ModuleVisitor) v_FindModule, (void *) name);
+    wasm_vm_module *module = ForEachModule(vm->_runtime, (ModuleVisitor)v_FindModule, (void *)name);
 
     return (wasm_vm_result){.data = {{.module = module}}};
 }

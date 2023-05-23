@@ -302,7 +302,8 @@ void set_property_v(proxywasm_context *p, const char *key, const void *value, co
 
     strcpy(path, key);
 
-    for (int i = 0; i < path_len; i++)
+    int i;
+    for (i = 0; i < path_len; i++)
     {
         if (path[i] == '.')
             path[i] = 0;
