@@ -431,7 +431,7 @@ m3ApiRawFunction(m3_wasi_generic_environ_get)
     //     env[i] = m3ApiPtrToOffset (env[i]);
     // }
 
-    m3ApiReturn(ret);
+    m3ApiReturn(0);
 }
 
 m3ApiRawFunction(m3_wasi_generic_environ_sizes_get)
@@ -444,10 +444,11 @@ m3ApiRawFunction(m3_wasi_generic_environ_sizes_get)
     m3ApiCheckMem(env_buf_size, sizeof(uint32_t));
 
     *env_count = 0;
+    *env_buf_size = 0;
 
     uint32_t ret = 0; //__wasi_environ_sizes_get(env_count, env_buf_size);
 
-    m3ApiReturn(ret);
+    m3ApiReturn(0);
 }
 
 m3ApiRawFunction(m3_wasi_generic_proc_exit)
