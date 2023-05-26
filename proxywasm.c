@@ -112,6 +112,11 @@ wasm_vm_result proxy_on_memory_allocate(proxywasm_filter *filter, i32 size)
     return wasm_vm_call_direct(filter->proxywasm->vm, filter->proxy_on_memory_allocate, size);
 }
 
+proxywasm *proxywasm_for_vm(wasm_vm *vm)
+{
+    return proxywasms[vm->cpu];
+}
+
 proxywasm* this_cpu_proxywasm(void)
 {
     int cpu = get_cpu();
@@ -339,11 +344,12 @@ void print_property_key(const char *func, const char *key, int key_len)
 wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
 {
     proxywasm *proxywasm = proxywasms[vm->cpu];
-    proxywasm_filter *filter = kzalloc(sizeof(proxywasm_filter), GFP_KERNEL);
 
     if (proxywasm == NULL)
     {
         proxywasm = kzalloc(sizeof(proxywasm), GFP_KERNEL);
+        proxywasm->vm = vm;
+        proxywasms[vm->cpu] = proxywasm;
 
         proxywasm_context *root_context = new_proxywasm_context(NULL);
         printk("wasm: root_context_id %d", root_context->id);
@@ -372,6 +378,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
         }
     }
 
+    proxywasm_filter *filter = kzalloc(sizeof(proxywasm_filter), GFP_KERNEL);
     filter->proxywasm = proxywasm;
 
     wasm_vm_result result;
@@ -394,7 +401,6 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
     wasm_vm_try_get_function(filter->proxy_on_tick, wasm_vm_get_function(vm, module->name, "proxy_on_tick"));
     wasm_vm_try_get_function(filter->proxy_on_done, wasm_vm_get_function(vm, module->name, "proxy_on_done"));
     wasm_vm_try_get_function(filter->proxy_on_delete, wasm_vm_get_function(vm, module->name, "proxy_on_delete"));
-    proxywasm->vm = vm;
 
 error:
     if (result.err)
@@ -430,40 +436,6 @@ error:
         kfree(proxywasm);
         return result;
     }
-
-    // // Create a new non-root context
-    // proxywasm_context *context = new_proxywasm_context(root_context);
-    // printk("wasm: root_context_id %d, context_id: %d", root_context->id, context->id);
-
-    // proxywasm->current_context = context;
-
-    // result = proxy_on_context_create(proxywasm, context->id, root_context->id);
-    // if (result.err)
-    // {
-    //     FATAL("proxy_on_context_create for module %s failed: %s", module->name, result.err)
-    //     kfree(proxywasm);
-    //     return result;
-    // }
-
-    // printk("wasm: proxy_on_context_create result %d", result.data->i32);
-
-    // result = proxy_on_new_connection(proxywasm, context->id);
-    // if (result.err)
-    // {
-    //     FATAL("proxy_on_new_connection for module %s failed: %s", module->name, result.err)
-    //     kfree(proxywasm);
-    //     return result;
-    // }
-
-    // printk("wasm: proxy_on_new_connection result %d", result.data->i32);
-
-    // result = proxy_on_downstream_data(proxywasm, context->id, 128, false);
-    // if (result.err)
-    // {
-    //     FATAL("proxy_on_downstream_data for module %s failed: %s", module->name, result.err)
-    //     kfree(proxywasm);
-    //     return result;
-    // }
     
     if (proxywasm->filters == NULL)
     {
@@ -478,8 +450,6 @@ error:
         }
         cur->next = filter;
     }
-
-    proxywasms[vm->cpu] = proxywasm;
 
     return (wasm_vm_result){.err = NULL};
 }
@@ -497,34 +467,41 @@ error:
     } \
     return result;
 
+wasm_vm_result proxywasm_create_context(proxywasm *p)
+{
+    proxywasm_context *context = new_proxywasm_context(p->root_context);
+    p->current_context = context;
+    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_context_create, p->current_context->id, p->root_context->id));
+}
+
 wasm_vm_result proxy_on_context_create(proxywasm *p, i32 context_id, i32 root_context_id)
 {
     FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_context_create, context_id, root_context_id));
 }
 
-wasm_vm_result proxy_on_new_connection(proxywasm *p, i32 context_id)
+wasm_vm_result proxy_on_new_connection(proxywasm *p)
 {
-    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_new_connection, context_id));
+    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_new_connection, p->current_context->id));
 }
 
-wasm_vm_result proxy_on_downstream_data(proxywasm *p, i32 context_id, i32 data_size, bool end_of_stream)
+wasm_vm_result proxy_on_downstream_data(proxywasm *p, i32 data_size, bool end_of_stream)
 {
-    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_downstream_data, context_id, data_size, end_of_stream));
+    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_downstream_data, p->current_context->id, data_size, end_of_stream));
 }
 
-wasm_vm_result proxy_on_downstream_connection_close(proxywasm *p, i32 context_id, PeerType peer_type)
+wasm_vm_result proxy_on_downstream_connection_close(proxywasm *p, PeerType peer_type)
 {
-    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_downstream_connection_close, context_id, peer_type));
+    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_downstream_connection_close, p->current_context->id, peer_type));
 }
 
-wasm_vm_result proxy_on_upstream_data(proxywasm *p, i32 context_id, i32 data_size, bool end_of_stream)
+wasm_vm_result proxy_on_upstream_data(proxywasm *p, i32 data_size, bool end_of_stream)
 {
-    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_upstream_data, context_id, data_size, end_of_stream));
+    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_upstream_data, p->current_context->id, data_size, end_of_stream));
 }
 
-wasm_vm_result proxy_on_upstream_connection_close(proxywasm *p, i32 context_id, PeerType peer_type)
+wasm_vm_result proxy_on_upstream_connection_close(proxywasm *p, PeerType peer_type)
 {
-    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_upstream_connection_close, context_id, peer_type));
+    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_upstream_connection_close, p->current_context->id, peer_type));
 }
 
 void set_property(proxywasm_context *p, const char *key, int key_len, const char *value, int value_len)

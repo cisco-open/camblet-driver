@@ -231,6 +231,37 @@ static int device_release(struct inode *inode, struct file *file)
                 goto cleanup;
             }
         }
+        else if (strcmp("proxywasm_test", command) == 0)
+        {
+            // TODO test only
+            // Create a new non-root context
+            proxywasm *proxywasm = this_cpu_proxywasm();
+
+            wasm_vm_result result = proxywasm_create_context(proxywasm);
+            if (result.err)
+            {
+                FATAL("proxywasm_create_context for module failed: %s", result.err)
+                goto cleanup;
+            }
+
+            printk("wasm: proxy_on_context_create result %d", result.data->i32);
+
+            result = proxy_on_new_connection(proxywasm);
+            if (result.err)
+            {
+                FATAL("proxy_on_new_connection for module failed: %s", result.err)
+                goto cleanup;
+            }
+
+            printk("wasm: proxy_on_new_connection result %d", result.data->i32);
+
+            result = proxy_on_downstream_data(proxywasm, 128, false);
+            if (result.err)
+            {
+                FATAL("proxy_on_downstream_data for module failed: %s",result.err)
+                goto cleanup;
+            }
+        }
         else
         {
             printk(KERN_ERR "wasm: command not implemented: %s", command);

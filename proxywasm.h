@@ -79,14 +79,19 @@ typedef struct proxywasm proxywasm;
 typedef struct proxywasm_context proxywasm_context;
 typedef struct proxywasm_filter proxywasm_filter;
 
+proxywasm *proxywasm_for_vm(wasm_vm *vm);
+proxywasm *this_cpu_proxywasm(void);
+
 wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module);
 
 wasm_vm_result proxy_on_context_create(proxywasm *p, i32 context_id, i32 root_context_id);
-wasm_vm_result proxy_on_new_connection(proxywasm *p, i32 context_id);
-wasm_vm_result proxy_on_downstream_data(proxywasm *p, i32 context_id, i32 data_size, bool end_of_stream);
-wasm_vm_result proxy_on_upstream_data(proxywasm *p, i32 context_id, i32 data_size, bool end_of_stream);
-wasm_vm_result proxy_on_downstream_connection_close(proxywasm *p, i32 context_id, PeerType peer_type);
-wasm_vm_result proxy_on_upstream_connection_close(proxywasm *p, i32 context_id, PeerType peer_type);
+wasm_vm_result proxy_on_new_connection(proxywasm *p);
+wasm_vm_result proxy_on_downstream_data(proxywasm *p, i32 data_size, bool end_of_stream);
+wasm_vm_result proxy_on_upstream_data(proxywasm *p, i32 data_size, bool end_of_stream);
+wasm_vm_result proxy_on_downstream_connection_close(proxywasm *p, PeerType peer_type);
+wasm_vm_result proxy_on_upstream_connection_close(proxywasm *p, PeerType peer_type);
+
+wasm_vm_result proxywasm_create_context(proxywasm *p);
 
 // set_property_v is convenience funtion for setting a property on a context, with simple C string paths,
 // use the '.' as delimiter, those will be replaced to a '0' delimiter 
