@@ -77,6 +77,7 @@ typedef enum
 
 typedef struct proxywasm proxywasm;
 typedef struct proxywasm_context proxywasm_context;
+typedef struct proxywasm_filter proxywasm_filter;
 
 wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module);
 

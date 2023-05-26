@@ -66,10 +66,9 @@ proxywasm_context* new_proxywasm_context(proxywasm_context *parent)
 
 // DEFINE_HASHTABLE(properties, 6);
 
-typedef struct proxywasm
+typedef struct proxywasm_filter
 {
-    wasm_vm *vm;
-	// Memory management
+    // Memory management
     wasm_vm_function *proxy_on_memory_allocate;
     // Module lifecycle
     wasm_vm_function *proxy_on_context_create;
@@ -88,6 +87,18 @@ typedef struct proxywasm
     wasm_vm_function *proxy_on_upstream_data;
     wasm_vm_function *proxy_on_upstream_connection_close;
 
+    proxywasm_filter *next;
+
+    proxywasm *proxywasm;
+
+} proxywasm_filter;
+
+typedef struct proxywasm
+{
+    wasm_vm *vm;
+
+    proxywasm_filter *filters;
+
     proxywasm_context *root_context;
 
     // the current context under processing
@@ -96,9 +107,9 @@ typedef struct proxywasm
 
 static proxywasm *proxywasms[NR_CPUS] = {0};
 
-wasm_vm_result proxy_on_memory_allocate(proxywasm *proxywasm, i32 size)
+wasm_vm_result proxy_on_memory_allocate(proxywasm_filter *filter, i32 size)
 {
-    return wasm_vm_call_direct(proxywasm->vm, proxywasm->proxy_on_memory_allocate, size);
+    return wasm_vm_call_direct(filter->proxywasm->vm, filter->proxy_on_memory_allocate, size);
 }
 
 proxywasm* this_cpu_proxywasm(void)
@@ -129,11 +140,11 @@ m3ApiRawFunction(proxy_set_tick_period_milliseconds)
 
     m3ApiGetArg(i32, tick_period);
 
-    proxywasm *proxywasm = _ctx->userdata;
+    proxywasm_filter *filter = _ctx->userdata;
 
     printk("wasm: calling proxy_set_tick_period_milliseconds %d", tick_period);
 
-    proxywasm->current_context->tick_period = tick_period;
+    filter->proxywasm->current_context->tick_period = tick_period;
 
     m3ApiReturn(WasmResult_Ok);
 }
@@ -150,17 +161,17 @@ m3ApiRawFunction(proxy_get_property)
     m3ApiGetArgMem(i32 *, return_property_value_data);
     m3ApiGetArgMem(i32 *, return_property_value_size);
 
-    proxywasm *p = _ctx->userdata;
+    proxywasm_filter *filter = _ctx->userdata;
 
     char *value = NULL;
     int value_len;
     printk("wasm: calling proxy_get_property '%.*s' (%d) return values -> %p %p", property_path_size, property_path_data, property_path_size, return_property_value_data, return_property_value_size);
 
-    get_property(p->current_context, property_path_data, property_path_size, &value, &value_len);
+    get_property(filter->proxywasm->current_context, property_path_data, property_path_size, &value, &value_len);
 
     if (value_len > 0)
     {
-        wasm_vm_result result = proxy_on_memory_allocate(p, value_len);
+        wasm_vm_result result = proxy_on_memory_allocate(filter, value_len);
         if (result.err)
         {
             FATAL("proxywasm proxy_on_memory_allocate error: %s", result.err);
@@ -200,11 +211,11 @@ m3ApiRawFunction(proxy_set_property)
 
     m3ApiCheckMem(property_value_data, property_value_size);
 
-    proxywasm *p = _ctx->userdata;
+    proxywasm_filter *filter = _ctx->userdata;
 
     printk("wasm: calling proxy_set_property '%.*s' (%d) -> %.*s (%d)", property_path_size, property_path_data, property_path_size, property_value_size, property_value_data, property_value_size);
 
-    set_property(p->current_context, property_path_data, property_path_size, property_value_data, property_value_size);
+    set_property(filter->proxywasm->current_context, property_path_data, property_path_size, property_value_data, property_value_size);
 
     m3ApiReturn(WasmResult_Ok);
 }
@@ -220,17 +231,17 @@ m3ApiRawFunction(proxy_get_buffer_bytes)
     m3ApiGetArgMem(i32 *, return_buffer_data);
     m3ApiGetArgMem(i32 *, return_buffer_size);
 
-    proxywasm *p = _ctx->userdata;
+    proxywasm_filter *filter = _ctx->userdata;
 
     char *value = NULL;
     int value_len = 0;
     printk("wasm: calling proxy_get_buffer_bytes buffer_type '%d' (start: %d, max_size: %d)", buffer_type, start, max_size);
 
-    get_buffer_bytes(p->current_context, buffer_type, start, max_size, &value, &value_len);
+    get_buffer_bytes(filter->proxywasm->current_context, buffer_type, start, max_size, &value, &value_len);
 
     if (value_len > 0)
     {
-        wasm_vm_result result = proxy_on_memory_allocate(p, value_len);
+        wasm_vm_result result = proxy_on_memory_allocate(filter, value_len);
         if (result.err)
         {
             FATAL("proxywasm proxy_on_memory_allocate error: %s", result.err);
@@ -269,27 +280,27 @@ m3ApiRawFunction(proxy_set_buffer_bytes)
 
     m3ApiCheckMem(buffer_data, buffer_size);
 
-    proxywasm *p = _ctx->userdata;
+    proxywasm_filter *filter = _ctx->userdata;
 
     printk("wasm: calling proxy_set_buffer_bytes buffer_type '%d' (start: %d, size: %d)", buffer_type, start, size);
 
-    set_buffer_bytes(p->current_context, buffer_type, start, size, buffer_data, buffer_size);
+    set_buffer_bytes(filter->proxywasm->current_context, buffer_type, start, size, buffer_data, buffer_size);
 
     m3ApiReturn(WasmResult_Ok);
 }
 
-static wasm_vm_result link_proxywasm_hostfunctions(proxywasm *proxywasm, wasm_vm_module *module)
+static wasm_vm_result link_proxywasm_hostfunctions(proxywasm_filter *filter, wasm_vm_module *module)
 {
     M3Result result = m3Err_none;
 
     const char *env = "env";
 
-    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_log", "i(i*i)", proxy_log, proxywasm)));
-    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_set_tick_period_milliseconds", "i(i)", proxy_set_tick_period_milliseconds, proxywasm)));
-    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_property", "i(*i**)", proxy_get_property, proxywasm)));
-    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_set_property", "i(*i*i)", proxy_set_property, proxywasm)));
-    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_buffer_bytes", "i(iii**)", proxy_get_buffer_bytes, proxywasm)));
-    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_set_buffer_bytes", "i(iii**)", proxy_set_buffer_bytes, proxywasm)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_log", "i(i*i)", proxy_log, filter)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_set_tick_period_milliseconds", "i(i)", proxy_set_tick_period_milliseconds, filter)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_property", "i(*i**)", proxy_get_property, filter)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_set_property", "i(*i*i)", proxy_set_property, filter)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_buffer_bytes", "i(iii**)", proxy_get_buffer_bytes, filter)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_set_buffer_bytes", "i(iii**)", proxy_set_buffer_bytes, filter)));
 
 _catch:
     return (wasm_vm_result){.err = result};
@@ -327,28 +338,62 @@ void print_property_key(const char *func, const char *key, int key_len)
 
 wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
 {
-    proxywasm *proxywasm = kmalloc(sizeof(proxywasm), GFP_KERNEL);
+    proxywasm *proxywasm = proxywasms[vm->cpu];
+    proxywasm_filter *filter = kzalloc(sizeof(proxywasm_filter), GFP_KERNEL);
+
+    if (proxywasm == NULL)
+    {
+        proxywasm = kzalloc(sizeof(proxywasm), GFP_KERNEL);
+
+        proxywasm_context *root_context = new_proxywasm_context(NULL);
+        printk("wasm: root_context_id %d", root_context->id);
+
+        proxywasm->root_context = root_context;
+        proxywasm->current_context = root_context;
+
+        {
+            // TODO: this is only test data
+            char empty_map[] = {0, 0, 0, 0};
+            u64 listener_direction = ListenerDirectionInbound;
+            set_property_v(root_context, "node.id", "lima", strlen("lima"));
+            set_property_v(root_context, "node.metadata.NAME", "catalog-v1-6578575465-lz5h2", strlen("catalog-v1-6578575465-lz5h2"));
+            set_property_v(root_context, "node.metadata.NAMESPACE", "kube-system", strlen("kube-system"));
+            set_property_v(root_context, "node.metadata.OWNER", "blade-runner", strlen("blade-runner"));
+            set_property_v(root_context, "node.metadata.WORKLOAD_NAME", "joska", strlen("joska"));
+            set_property_v(root_context, "node.metadata.ISTIO_VERSION", "1.13.5", strlen("1.13.5"));
+            set_property_v(root_context, "node.metadata.MESH_ID", "mesh1", strlen("mesh1"));
+            set_property_v(root_context, "node.metadata.CLUSTER_ID", "cluster1", strlen("cluster1"));
+            set_property_v(root_context, "node.metadata.LABELS", empty_map, sizeof(empty_map));
+            set_property_v(root_context, "node.metadata.PLATFORM_METADATA", empty_map, sizeof(empty_map));
+            set_property_v(root_context, "node.metadata.APP_CONTAINERS", "catalog", strlen("catalog"));
+            set_property_v(root_context, "node.metadata.INSTANCE_IPS", "10.20.160.34,fe80::84cb:9eff:feb7:941b", strlen("10.20.160.34,fe80::84cb:9eff:feb7:941b"));
+            set_property_v(root_context, "listener_direction", (char *)&listener_direction, sizeof(listener_direction));
+            set_property_v(root_context, "plugin_root_id", "0", strlen("0"));
+        }
+    }
+
+    filter->proxywasm = proxywasm;
 
     wasm_vm_result result;
-    result = link_proxywasm_hostfunctions(proxywasm, module);
+    result = link_proxywasm_hostfunctions(filter, module);
     if (result.err)
     {
         kfree(proxywasm);
         return result;
     }
 
-    wasm_vm_try_get_function(proxywasm->proxy_on_memory_allocate, wasm_vm_get_function(vm, module->name, "malloc")); // ???? proxy_on_memory_allocate?
-    wasm_vm_try_get_function(proxywasm->proxy_on_context_create, wasm_vm_get_function(vm, module->name, "proxy_on_context_create"));
-    wasm_vm_try_get_function(proxywasm->proxy_on_new_connection, wasm_vm_get_function(vm, module->name, "proxy_on_new_connection"));
-    wasm_vm_try_get_function(proxywasm->proxy_on_vm_start, wasm_vm_get_function(vm, module->name, "proxy_on_vm_start"));
-    wasm_vm_try_get_function(proxywasm->proxy_on_configure, wasm_vm_get_function(vm, module->name, "proxy_on_configure"));
-    wasm_vm_try_get_function(proxywasm->proxy_on_downstream_data, wasm_vm_get_function(vm, module->name, "proxy_on_downstream_data"));
-    wasm_vm_try_get_function(proxywasm->proxy_on_downstream_connection_close, wasm_vm_get_function(vm, module->name, "proxy_on_downstream_connection_close"));
-    wasm_vm_try_get_function(proxywasm->proxy_on_upstream_data, wasm_vm_get_function(vm, module->name, "proxy_on_upstream_data"));
-    wasm_vm_try_get_function(proxywasm->proxy_on_upstream_connection_close, wasm_vm_get_function(vm, module->name, "proxy_on_upstream_connection_close"));
-    wasm_vm_try_get_function(proxywasm->proxy_on_tick, wasm_vm_get_function(vm, module->name, "proxy_on_tick"));
-    wasm_vm_try_get_function(proxywasm->proxy_on_done, wasm_vm_get_function(vm, module->name, "proxy_on_done"));
-    wasm_vm_try_get_function(proxywasm->proxy_on_delete, wasm_vm_get_function(vm, module->name, "proxy_on_delete"));
+    wasm_vm_try_get_function(filter->proxy_on_memory_allocate, wasm_vm_get_function(vm, module->name, "malloc")); // ???? proxy_on_memory_allocate?
+    wasm_vm_try_get_function(filter->proxy_on_context_create, wasm_vm_get_function(vm, module->name, "proxy_on_context_create"));
+    wasm_vm_try_get_function(filter->proxy_on_new_connection, wasm_vm_get_function(vm, module->name, "proxy_on_new_connection"));
+    wasm_vm_try_get_function(filter->proxy_on_vm_start, wasm_vm_get_function(vm, module->name, "proxy_on_vm_start"));
+    wasm_vm_try_get_function(filter->proxy_on_configure, wasm_vm_get_function(vm, module->name, "proxy_on_configure"));
+    wasm_vm_try_get_function(filter->proxy_on_downstream_data, wasm_vm_get_function(vm, module->name, "proxy_on_downstream_data"));
+    wasm_vm_try_get_function(filter->proxy_on_downstream_connection_close, wasm_vm_get_function(vm, module->name, "proxy_on_downstream_connection_close"));
+    wasm_vm_try_get_function(filter->proxy_on_upstream_data, wasm_vm_get_function(vm, module->name, "proxy_on_upstream_data"));
+    wasm_vm_try_get_function(filter->proxy_on_upstream_connection_close, wasm_vm_get_function(vm, module->name, "proxy_on_upstream_connection_close"));
+    wasm_vm_try_get_function(filter->proxy_on_tick, wasm_vm_get_function(vm, module->name, "proxy_on_tick"));
+    wasm_vm_try_get_function(filter->proxy_on_done, wasm_vm_get_function(vm, module->name, "proxy_on_done"));
+    wasm_vm_try_get_function(filter->proxy_on_delete, wasm_vm_get_function(vm, module->name, "proxy_on_delete"));
     proxywasm->vm = vm;
 
 error:
@@ -359,34 +404,8 @@ error:
         return result;
     }
 
-    proxywasm_context *root_context = new_proxywasm_context(NULL);
-    printk("wasm: root_context_id %d", root_context->id);
-
-    proxywasm->root_context = root_context;
-    proxywasm->current_context = root_context;
-
-    {
-        // TODO: this is only test data
-        char empty_map[] = {0, 0, 0, 0};
-        u64 listener_direction = ListenerDirectionInbound;
-        set_property_v(root_context, "node.id", "lima", strlen("lima"));
-        set_property_v(root_context, "node.metadata.NAME", "catalog-v1-6578575465-lz5h2", strlen("catalog-v1-6578575465-lz5h2"));
-        set_property_v(root_context, "node.metadata.NAMESPACE", "kube-system", strlen("kube-system"));
-        set_property_v(root_context, "node.metadata.OWNER", "blade-runner", strlen("blade-runner"));
-        set_property_v(root_context, "node.metadata.WORKLOAD_NAME", "joska", strlen("joska"));
-        set_property_v(root_context, "node.metadata.ISTIO_VERSION", "1.13.5", strlen("1.13.5"));
-        set_property_v(root_context, "node.metadata.MESH_ID", "mesh1", strlen("mesh1"));
-        set_property_v(root_context, "node.metadata.CLUSTER_ID", "cluster1", strlen("cluster1"));
-        set_property_v(root_context, "node.metadata.LABELS", empty_map, sizeof(empty_map));
-        set_property_v(root_context, "node.metadata.PLATFORM_METADATA", empty_map, sizeof(empty_map));
-        set_property_v(root_context, "node.metadata.APP_CONTAINERS", "catalog", strlen("catalog"));
-        set_property_v(root_context, "node.metadata.INSTANCE_IPS", "10.20.160.34,fe80::84cb:9eff:feb7:941b", strlen("10.20.160.34,fe80::84cb:9eff:feb7:941b"));
-        set_property_v(root_context, "listener_direction", (char *)&listener_direction, sizeof(listener_direction));
-        set_property_v(root_context, "plugin_root_id", "0", strlen("0"));
-    }
-
     // Create the root context
-    result = proxy_on_context_create(proxywasm, root_context->id, 0);
+    result = wasm_vm_call_direct(vm, filter->proxy_on_context_create, proxywasm->root_context->id, 0);
     if (result.err)
     {
         FATAL("proxy_on_context_create for module %s failed: %s -> %s", module->name, result.err, wasm_vm_last_error(vm));
@@ -394,7 +413,7 @@ error:
         return result;
     }
 
-    result = wasm_vm_call_direct(vm, proxywasm->proxy_on_vm_start, root_context->id, 0);
+    result = wasm_vm_call_direct(vm, filter->proxy_on_vm_start, proxywasm->root_context->id, 0);
     if (result.err)
     {
         FATAL("proxy_on_vm_start for module %s failed: %s", module->name, result.err)
@@ -404,7 +423,7 @@ error:
 
     i32 plugin_configuration_size = 0; // TODO
 
-    result = wasm_vm_call_direct(vm, proxywasm->proxy_on_configure, root_context->id, plugin_configuration_size);
+    result = wasm_vm_call_direct(vm, filter->proxy_on_configure, proxywasm->root_context->id, plugin_configuration_size);
     if (result.err)
     {
         FATAL("proxy_on_configure for module %s failed: %s", module->name, result.err)
@@ -412,38 +431,52 @@ error:
         return result;
     }
 
-    // Create a new non-root context
-    proxywasm_context *context = new_proxywasm_context(root_context);
-    printk("wasm: root_context_id %d, context_id: %d", root_context->id, context->id);
+    // // Create a new non-root context
+    // proxywasm_context *context = new_proxywasm_context(root_context);
+    // printk("wasm: root_context_id %d, context_id: %d", root_context->id, context->id);
 
-    proxywasm->current_context = context;
+    // proxywasm->current_context = context;
 
-    result = proxy_on_context_create(proxywasm, context->id, root_context->id);
-    if (result.err)
+    // result = proxy_on_context_create(proxywasm, context->id, root_context->id);
+    // if (result.err)
+    // {
+    //     FATAL("proxy_on_context_create for module %s failed: %s", module->name, result.err)
+    //     kfree(proxywasm);
+    //     return result;
+    // }
+
+    // printk("wasm: proxy_on_context_create result %d", result.data->i32);
+
+    // result = proxy_on_new_connection(proxywasm, context->id);
+    // if (result.err)
+    // {
+    //     FATAL("proxy_on_new_connection for module %s failed: %s", module->name, result.err)
+    //     kfree(proxywasm);
+    //     return result;
+    // }
+
+    // printk("wasm: proxy_on_new_connection result %d", result.data->i32);
+
+    // result = proxy_on_downstream_data(proxywasm, context->id, 128, false);
+    // if (result.err)
+    // {
+    //     FATAL("proxy_on_downstream_data for module %s failed: %s", module->name, result.err)
+    //     kfree(proxywasm);
+    //     return result;
+    // }
+    
+    if (proxywasm->filters == NULL)
     {
-        FATAL("proxy_on_context_create for module %s failed: %s", module->name, result.err)
-        kfree(proxywasm);
-        return result;
+        proxywasm->filters = filter;
     }
-
-    printk("wasm: proxy_on_context_create result %d", result.data->i32);
-
-    result = proxy_on_new_connection(proxywasm, context->id);
-    if (result.err)
+    else
     {
-        FATAL("proxy_on_new_connection for module %s failed: %s", module->name, result.err)
-        kfree(proxywasm);
-        return result;
-    }
-
-    printk("wasm: proxy_on_new_connection result %d", result.data->i32);
-
-    result = proxy_on_downstream_data(proxywasm, context->id, 128, false);
-    if (result.err)
-    {
-        FATAL("proxy_on_downstream_data for module %s failed: %s", module->name, result.err)
-        kfree(proxywasm);
-        return result;
+        proxywasm_filter *cur = proxywasm->filters;
+        while (cur->next != NULL)
+        {
+            cur = cur->next;
+        }
+        cur->next = filter;
     }
 
     proxywasms[vm->cpu] = proxywasm;
@@ -451,34 +484,47 @@ error:
     return (wasm_vm_result){.err = NULL};
 }
 
+#define FOR_ALL_FILTERS(CALL) \
+    wasm_vm_result result; \
+    proxywasm_filter *f; \
+    for (f = p->filters; f != NULL; f = f->next) \
+    { \
+        result = CALL; \
+        if (result.err != NULL) \
+        { \
+            return result; \
+        } \
+    } \
+    return result;
+
 wasm_vm_result proxy_on_context_create(proxywasm *p, i32 context_id, i32 root_context_id)
 {
-    return wasm_vm_call_direct(p->vm, p->proxy_on_context_create, context_id, root_context_id);
+    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_context_create, context_id, root_context_id));
 }
 
 wasm_vm_result proxy_on_new_connection(proxywasm *p, i32 context_id)
 {
-    return wasm_vm_call_direct(p->vm, p->proxy_on_new_connection, context_id);
+    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_new_connection, context_id));
 }
 
 wasm_vm_result proxy_on_downstream_data(proxywasm *p, i32 context_id, i32 data_size, bool end_of_stream)
 {
-    return wasm_vm_call_direct(p->vm, p->proxy_on_downstream_data, context_id, data_size, end_of_stream);
+    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_downstream_data, context_id, data_size, end_of_stream));
 }
 
 wasm_vm_result proxy_on_downstream_connection_close(proxywasm *p, i32 context_id, PeerType peer_type)
 {
-    return wasm_vm_call_direct(p->vm, p->proxy_on_downstream_connection_close, context_id, peer_type);
+    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_downstream_connection_close, context_id, peer_type));
 }
 
 wasm_vm_result proxy_on_upstream_data(proxywasm *p, i32 context_id, i32 data_size, bool end_of_stream)
 {
-    return wasm_vm_call_direct(p->vm, p->proxy_on_upstream_data, context_id, data_size, end_of_stream);
+    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_upstream_data, context_id, data_size, end_of_stream));
 }
 
 wasm_vm_result proxy_on_upstream_connection_close(proxywasm *p, i32 context_id, PeerType peer_type)
 {
-    return wasm_vm_call_direct(p->vm, p->proxy_on_upstream_connection_close, context_id, peer_type);
+    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_upstream_connection_close, context_id, peer_type));
 }
 
 void set_property(proxywasm_context *p, const char *key, int key_len, const char *value, int value_len)
