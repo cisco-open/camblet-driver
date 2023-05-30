@@ -44,4 +44,4 @@ jobs:
     - name: Cleanup module
       working-directory: ../wasm-kernel-module
       run: |
-        make rmmod
+        ls -larth
