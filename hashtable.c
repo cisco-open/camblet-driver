@@ -16,8 +16,8 @@
 
 struct h_node
 {
-    void *data;
     int key;
+    void *data;
     int data_length;
     struct hlist_node node;
 };

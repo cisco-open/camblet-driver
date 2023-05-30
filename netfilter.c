@@ -42,13 +42,18 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
         goto accept;
     }
 
-    wasm_vm_module *module = wasm_vm_get_module(vm, DNS_MODULE);
-    if (!module)
+    wasm_vm_result result = wasm_vm_get_module(vm, DNS_MODULE); // TODO this we could use a module cache here, this is an expensive lookup
+    if (result.err)
+    {
+        FATAL("netfilter wasm_vm_get_module error: %s", result.err);
+        goto accept;
+    }
+    if (!result.data->module)
     {
         goto accept;
     }
 
-    wasm_vm_result result = wasm_vm_malloc(vm, DNS_MODULE, packetLen);
+    result = wasm_vm_malloc(vm, DNS_MODULE, packetLen);
     if (result.err)
     {
         FATAL("netfilter wasm_vm_malloc error: %s", result.err);
@@ -60,7 +65,7 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
     char *wasmPacketPtr = mem + wasmPacket;
     memcpy(wasmPacketPtr, packetData, packetLen);
 
-    result = wasm_vm_call(vm,
+    result = wasm_vm_call(vm, // TODO this we could use a function cache here, this is an expensive lookup
                           DNS_MODULE,
                           "packet_out",
                           wasmPacket,
@@ -100,13 +105,18 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
         goto accept;
     }
 
-    wasm_vm_module *module = wasm_vm_get_module(vm, DNS_MODULE);
-    if (!module)
+    wasm_vm_result result = wasm_vm_get_module(vm, DNS_MODULE); // TODO this we could use a module cache here, this is an expensive lookup
+    if (result.err)
+    {
+        FATAL("netfilter wasm_vm_get_module error: %s", result.err);
+        goto accept;
+    }
+    if (!result.data->module)
     {
         goto accept;
     }
 
-    wasm_vm_result result = wasm_vm_malloc(vm, DNS_MODULE, packetLen);
+    result = wasm_vm_malloc(vm, DNS_MODULE, packetLen);
     if (result.err)
     {
         FATAL("netfilter wasm_vm_malloc error: %s", result.err);

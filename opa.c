@@ -10,7 +10,6 @@
 
 #include "opa.h"
 #include "json.h"
-#include "runtime.h"
 
 typedef struct opa_wrapper
 {
@@ -153,32 +152,34 @@ static wasm_vm_result link_opa_builtins(opa_wrapper *opa, wasm_vm_module *module
 
     const char *env = "env";
 
-    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_abort", "(i)", &opa_abort, opa)));
-    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_println", "(i)", &opa_println, opa)));
-    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_builtin0", "i(ii)", &opa_builtin0, opa)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_abort", "(i)", opa_abort, opa)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_println", "(i)", opa_println, opa)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_builtin0", "i(ii)", opa_builtin0, opa)));
 
 _catch:
     return (wasm_vm_result){.err = result};
 }
 
-wasm_vm_result init_opa_for(wasm_vm *vm)
+wasm_vm_result init_opa_for(wasm_vm *vm, wasm_vm_module *module)
 {
+    wasm_vm_result result;
+    wasm_vm_function *builtinsFunc;
+
     opa_wrapper *opa = kmalloc(sizeof(opa_wrapper), GFP_KERNEL);
-    opa->malloc = wasm_vm_get_function(vm, OPA_MODULE, "opa_malloc");
-    opa->free = wasm_vm_get_function(vm, OPA_MODULE, "opa_free");
-    opa->eval = wasm_vm_get_function(vm, OPA_MODULE, "opa_eval");
-    opa->json_dump = wasm_vm_get_function(vm, OPA_MODULE, "opa_json_dump");
+    wasm_vm_try_get_function(opa->malloc, wasm_vm_get_function(vm, OPA_MODULE, "opa_malloc"));
+    wasm_vm_try_get_function(opa->free, wasm_vm_get_function(vm, OPA_MODULE, "opa_free"));
+    wasm_vm_try_get_function(opa->eval, wasm_vm_get_function(vm, OPA_MODULE, "opa_eval"));
+    wasm_vm_try_get_function(opa->json_dump, wasm_vm_get_function(vm, OPA_MODULE, "opa_json_dump"));
+    wasm_vm_try_get_function(builtinsFunc, wasm_vm_get_function(vm, OPA_MODULE, "builtins"));
     opa->vm = vm;
 
-    wasm_vm_function *builtinsFunc = wasm_vm_get_function(vm, OPA_MODULE, "builtins");
-    wasm_vm_result result = wasm_vm_call_direct(vm, builtinsFunc);
+    result = wasm_vm_call_direct(vm, builtinsFunc);
     if (result.err)
-    {
-        kfree(opa);
-        return result;
-    }
+        goto error;
 
     result = wasm_vm_call_direct(vm, opa->json_dump, result.data->i32);
+
+error:
     if (result.err)
     {
         kfree(opa);
@@ -192,7 +193,7 @@ wasm_vm_result init_opa_for(wasm_vm *vm)
     char *builtins = memory + builtinsJson;
     if (parse_opa_builtins(opa, builtins) > 0)
     {
-        result = link_opa_builtins(opa, wasm_vm_get_module(vm, OPA_MODULE));
+        result = link_opa_builtins(opa, module);
         if (result.err)
         {
             kfree(opa->builtins);

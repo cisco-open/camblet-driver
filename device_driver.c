@@ -14,6 +14,7 @@
 #include "device_driver.h"
 #include "json.h"
 #include "opa.h"
+#include "proxywasm.h"
 #include "runtime.h"
 
 /* Global variables are declared as static, so are global within the file. */
@@ -124,6 +125,8 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
             return result;
         }
 
+        wasm_vm_module *module = result.data->module;
+
         if (entrypoint)
         {
             printk("wasm: calling module entrypoint: %s", entrypoint);
@@ -133,20 +136,32 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
             if (result.err &&
               !(result.err = m3Err_functionLookupFailed && strcmp(entrypoint, DEFAULT_MODULE_ENTRYPOINT) == 0))
             {
-                FATAL("wasm_vm_call: %s", result.err);
+                FATAL("wasm_vm_call: %s error: %s", result.err, wasm_vm_last_error(vm));
                 wasm_vm_unlock(vm);
                 return result;
             }
+
+            printk("wasm: module entrypoint finished");
 
             result.err = NULL;
         }
 
         if (strcmp(name, OPA_MODULE) == 0)
         {
-            result = init_opa_for(vm);
+            result = init_opa_for(vm, module);
             if (result.err)
             {
                 FATAL("init_opa_for: %s", result.err);
+                wasm_vm_unlock(vm);
+                return result;
+            }
+        }
+        else if (strstr(name, "proxywasm") != NULL)
+        {
+            result = init_proxywasm_for(vm, module);
+            if (result.err)
+            {
+                FATAL("init_proxywasm_for: %s", result.err);
                 wasm_vm_unlock(vm);
                 return result;
             }
@@ -213,6 +228,37 @@ static int device_release(struct inode *inode, struct file *file)
             {
                 FATAL("reset_vms: %s", result.err);
                 status = -1;
+                goto cleanup;
+            }
+        }
+        else if (strcmp("proxywasm_test", command) == 0)
+        {
+            // TODO test only
+            // Create a new non-root context
+            proxywasm *proxywasm = this_cpu_proxywasm();
+
+            wasm_vm_result result = proxywasm_create_context(proxywasm);
+            if (result.err)
+            {
+                FATAL("proxywasm_create_context for module failed: %s", result.err)
+                goto cleanup;
+            }
+
+            printk("wasm: proxy_on_context_create result %d", result.data->i32);
+
+            result = proxy_on_new_connection(proxywasm);
+            if (result.err)
+            {
+                FATAL("proxy_on_new_connection for module failed: %s", result.err)
+                goto cleanup;
+            }
+
+            printk("wasm: proxy_on_new_connection result %d", result.data->i32);
+
+            result = proxy_on_downstream_data(proxywasm, 128, false);
+            if (result.err)
+            {
+                FATAL("proxy_on_downstream_data for module failed: %s",result.err)
                 goto cleanup;
             }
         }
