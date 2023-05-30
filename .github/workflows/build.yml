@@ -11,10 +11,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+      name: Checkout wasm-kernel-module
       with:
         submodules: recursive
+        path: wasm-kernel-module
 
     - name: Install/setup prerequisites
+      working-directory: wasm-kernel-module
       run: make setup-vm
 
     # - name: Setup upterm session
@@ -23,14 +26,37 @@ jobs:
     #     ## limits ssh access and adds the ssh public key for the user which triggered the workflow
     #     limit-access-to-actor: true
 
-    - name: Build module
+    - name: Build kernel module
+      working-directory: wasm-kernel-module
       run: make
 
-    - name: Run module
+    - name: Run kernel module
+      working-directory: wasm-kernel-module
       run: |
         make insmod
         sudo dmesg -T
 
-    - name: Cleanup module
+    - uses: actions/checkout@v3
+      name: Checkout wasm-kernel-module-cli
+      with:
+        submodules: recursive
+        repository: cisco-open/wasm-kernel-module-cli
+        path: wasm-kernel-module-cli
+
+    - name: Build CLI
+      working-directory: wasm-kernel-module-cli
+      run: make build-cli
+
+    - name: Build OPA policy module
+      working-directory: wasm-kernel-module-cli
+      run: make build-opa-policy-wasm
+
+    - name: Run OPA policy module
+      working-directory: wasm-kernel-module-cli
       run: |
-        make rmmod
+        make load-opa-policy-wasm
+        sudo dmesg -T
+
+    - name: Cleanup module
+      working-directory: wasm-kernel-module
+      run: make rmmod
