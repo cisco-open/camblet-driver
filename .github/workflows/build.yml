@@ -17,6 +17,7 @@ jobs:
         path: wasm-kernel-module
 
     - name: Install/setup prerequisites
+      working-directory: wasm-kernel-module
       run: make setup-vm
 
     # - name: Setup upterm session
@@ -26,9 +27,11 @@ jobs:
     #     limit-access-to-actor: true
 
     - name: Build module
+      working-directory: wasm-kernel-module
       run: make
 
     - name: Run module
+      working-directory: wasm-kernel-module
       run: |
         make insmod
         sudo dmesg -T
@@ -41,11 +44,9 @@ jobs:
         path: wasm-kernel-module-cli
 
     - name: Build CLI
+      working-directory: wasm-kernel-module-cli
       run: make build-cli
 
     - name: Cleanup module
-      working-directory: ../wasm-kernel-module
-      run: |
-        ls -larth
-        pwd
-        ls -larth ..
+      working-directory: wasm-kernel-module
+      run: make rmmod
