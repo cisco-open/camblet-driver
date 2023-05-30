@@ -45,3 +45,5 @@ jobs:
       working-directory: ../wasm-kernel-module
       run: |
         ls -larth
+        pwd
+        ls -larth ..
