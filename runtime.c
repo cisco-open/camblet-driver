@@ -415,22 +415,6 @@ m3ApiRawFunction(m3_wasi_generic_environ_get)
     m3ApiGetArgMem   (uint32_t *           , env)
     m3ApiGetArgMem   (char *               , env_buf)
 
-    uint32_t ret = 0;
-    // __wasi_size_t env_count, env_buf_size;
-
-    // ret = __wasi_environ_sizes_get(&env_count, &env_buf_size);
-    // if (ret != __WASI_ERRNO_SUCCESS) m3ApiReturn(ret);
-
-    // m3ApiCheckMem(env,      env_count * sizeof(uint32_t));
-    // m3ApiCheckMem(env_buf,  env_buf_size);
-
-    // ret = __wasi_environ_get(env, env_buf);
-    // if (ret != __WASI_ERRNO_SUCCESS) m3ApiReturn(ret);
-
-    // for (u32 i = 0; i < env_count; ++i) {
-    //     env[i] = m3ApiPtrToOffset (env[i]);
-    // }
-
     m3ApiReturn(0);
 }
 
@@ -445,8 +429,6 @@ m3ApiRawFunction(m3_wasi_generic_environ_sizes_get)
 
     *env_count = 0;
     *env_buf_size = 0;
-
-    uint32_t ret = 0; //__wasi_environ_sizes_get(env_count, env_buf_size);
 
     m3ApiReturn(0);
 }
