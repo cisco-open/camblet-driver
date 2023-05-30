@@ -79,13 +79,18 @@ wasm_vm *this_cpu_wasm_vm(void)
 {
     int cpu = get_cpu();
     put_cpu();
-    return vms[smp_processor_id()];
+    return vms[cpu];
 }
 
 wasm_vm *wasm_vm_for_cpu(unsigned cpu)
 {
     if (cpu >= nr_cpu_ids) return NULL;
     return vms[cpu];
+}
+
+const char *wasm_vm_last_error(wasm_vm *vm)
+{
+    return vm->_runtime->error_message;
 }
 
 wasm_vm_result wasm_vm_new_per_cpu(void)
@@ -185,7 +190,7 @@ wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char 
         wasm_bins[wasm_bins_qty++] = wasm;
     }
 
-    return (wasm_vm_result){.err = NULL};
+    return (wasm_vm_result){.data = {{.module = module}}, .err = NULL};
 
 on_error:
     m3_FreeModule(module);
@@ -262,9 +267,13 @@ wasm_vm_result wasm_vm_call_direct(wasm_vm *vm, wasm_vm_function *func, ...)
 
 wasm_vm_result wasm_vm_call(wasm_vm *vm, const char *module, const char *name, ...)
 {
-    wasm_vm_function *func = wasm_vm_get_function(vm, module, name);
-    if (!func)
-        return (wasm_vm_result){.err = m3Err_functionLookupFailed};
+    wasm_vm_result result = wasm_vm_get_function(vm, module, name);
+    if (result.err)
+    {
+        return result;
+    }
+
+    wasm_vm_function *func = result.data->function;
 
     va_list ap;
     va_start(ap, name);
@@ -400,6 +409,36 @@ m3ApiRawFunction(m3_ext_submit_metric)
     m3ApiReturn(i_size);
 }
 
+m3ApiRawFunction(m3_wasi_generic_environ_get)
+{
+    m3ApiReturnType  (uint32_t)
+    m3ApiGetArgMem   (uint32_t *           , env)
+    m3ApiGetArgMem   (char *               , env_buf)
+
+    m3ApiReturn(0);
+}
+
+m3ApiRawFunction(m3_wasi_generic_environ_sizes_get)
+{
+    m3ApiReturnType  (uint32_t)
+    m3ApiGetArgMem   (uint32_t *      , env_count)
+    m3ApiGetArgMem   (uint32_t *      , env_buf_size)
+
+    m3ApiCheckMem(env_count,    sizeof(uint32_t));
+    m3ApiCheckMem(env_buf_size, sizeof(uint32_t));
+
+    *env_count = 0;
+    *env_buf_size = 0;
+
+    m3ApiReturn(0);
+}
+
+m3ApiRawFunction(m3_wasi_generic_proc_exit)
+{
+    m3ApiGetArg   (i32, code)
+    m3ApiSuccess();
+}
+
 M3Result SuppressLookupFailure(M3Result i_result)
 {
     if (i_result == m3Err_functionLookupFailed)
@@ -424,6 +463,21 @@ _catch:
     return result;
 }
 
+// Some Wasi mockings only for proxy-wasm
+static M3Result m3_LinkWASIMocks(IM3Module module)
+{
+    M3Result result = m3Err_none;
+
+    const char *wasi = "wasi_snapshot_preview1";
+
+    _(SuppressLookupFailure (m3_LinkRawFunction (module, wasi, "environ_get",       "i(**)", m3_wasi_generic_environ_get)));
+    _(SuppressLookupFailure (m3_LinkRawFunction (module, wasi, "environ_sizes_get", "i(**)", m3_wasi_generic_environ_sizes_get)));
+    _(SuppressLookupFailure (m3_LinkRawFunction (module, wasi, "proc_exit",           "(i)", m3_wasi_generic_proc_exit)));
+
+_catch:
+    return result;
+}
+
 static M3Result m3_link_all(IM3Module module)
 {
     M3Result res = NULL;
@@ -435,11 +489,9 @@ static M3Result m3_link_all(IM3Module module)
     if (res)
         return res;
 
-#if defined(LINK_WASI)
-    res = m3_LinkWASI(module);
+    res = m3_LinkWASIMocks(module);
     if (res)
         return res;
-#endif
 
 #if defined(d_m3HasTracer)
     res = m3_LinkTracer(module);
@@ -482,13 +534,14 @@ static void *print_module_symbols(IM3Module module, void * i_info)
     }
     for (i = 0; i < module->numFunctions; i++)
     {
-        IM3Function f = & module->functions [i];
+        IM3Function f = &module->functions[i];
 
-        if (f->numNames > 1) {
-            printk("wasm:     function -> %s(%d) -> %d", f->names[0], f->funcType->numArgs, f->funcType->numRets);
+        if (f->export_name != NULL)
+        {
+            printk("wasm:     function -> %s(%d) -> %d", f->export_name, f->funcType->numArgs, f->funcType->numRets);
         }
     }
-    
+
     return NULL;
 }
 
@@ -508,19 +561,17 @@ void wasm_vm_unlock(wasm_vm *vm)
     spin_unlock_irqrestore(&vm->_lock, vm->_lock_flags);
 }
 
-wasm_vm_module *wasm_vm_get_module(wasm_vm *vm, const char *module)
+wasm_vm_result wasm_vm_get_module(wasm_vm *vm, const char *name)
 {
-    return (wasm_vm_module*) ForEachModule (vm->_runtime, (ModuleVisitor) v_FindModule, (void *) module);
+    wasm_vm_module *module = ForEachModule(vm->_runtime, (ModuleVisitor)v_FindModule, (void *)name);
+
+    return (wasm_vm_result){.data = {{.module = module}}};
 }
 
-wasm_vm_function *wasm_vm_get_function(wasm_vm *vm, const char *module, const char *name)
+wasm_vm_result wasm_vm_get_function(wasm_vm *vm, const char *module, const char *name)
 {
-    M3Result result = m3Err_none;
-    IM3Function func = NULL;
+    IM3Function function = NULL;
+    M3Result result = m3_FindFunctionInModule(&function, vm->_runtime, module, name);
 
-    result = m3_FindFunctionInModule(&func, vm->_runtime, module, name);
-    if (result)
-        return NULL;
-
-    return func;
+    return (wasm_vm_result){.data = {{.function = function}}, .err = result};
 }

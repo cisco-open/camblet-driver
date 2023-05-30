@@ -15,7 +15,7 @@
 
 #define OPA_MODULE "opa"
 
-wasm_vm_result init_opa_for(wasm_vm *vm);
+wasm_vm_result init_opa_for(wasm_vm *vm, wasm_vm_module *module);
 
 int this_cpu_opa_eval(const char *input);
 
