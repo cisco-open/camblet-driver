@@ -15,12 +15,6 @@ jobs:
       with:
         submodules: recursive
 
-    - uses: actions/checkout@v3
-      name: Checkout wasm-kernel-module-cli
-      with:
-        submodules: recursive
-        repository: cisco-open/wasm-kernel-module-cli
-
     - name: Install/setup prerequisites
       run: make setup-vm
 
@@ -33,14 +27,19 @@ jobs:
     - name: Build module
       run: make
 
-    - name: Build CLI
-      working-directory: wasm-kernel-module-cli
-      run: make build-cli
-
     - name: Run module
       run: |
         make insmod
         sudo dmesg -T
+
+    - uses: actions/checkout@v3
+      name: Checkout wasm-kernel-module-cli
+      with:
+        submodules: recursive
+        repository: cisco-open/wasm-kernel-module-cli
+
+    - name: Build CLI
+      run: make build-cli
 
     - name: Cleanup module
       run: |
