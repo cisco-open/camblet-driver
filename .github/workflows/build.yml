@@ -42,5 +42,6 @@ jobs:
       run: make build-cli
 
     - name: Cleanup module
+      working-directory: ../wasm-kernel-module
       run: |
         make rmmod
