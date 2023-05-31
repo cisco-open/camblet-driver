@@ -403,7 +403,11 @@ int wasm_recvmsg(struct sock *sock, struct msghdr *msg, size_t size,
 
 	// printk(KERN_INFO "inet_wasm_recvmsg -> br_sslio_read: %d bytes -> %.*s\n", ret, ret, dst);
 
-	copy_to_iter(data, ret, &msg->msg_iter);
+	len = copy_to_iter(data, ret, &msg->msg_iter);
+	if (len != ret)
+	{
+		return -ENOBUFS;
+	}
 
 bail:
 	// kfree(data);
