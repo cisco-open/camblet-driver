@@ -2,3 +2,7 @@
 	path = third-party/wasm3
 	url = git@github.com:bonifaido/wasm3.git
 	branch = linux-kernel
+[submodule "third-party/BearSSL"]
+	path = third-party/BearSSL
+	url = git@github.com:bonifaido/BearSSL.git
+	branch = linux-kernel
