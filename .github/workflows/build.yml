@@ -29,7 +29,7 @@ jobs:
     #     limit-access-to-actor: true
 
     - name: Build BearSSL
-      working-directory: third-party/BearSSL
+      working-directory: wasm-kernel-module/third-party/BearSSL
       run: make linux-km
 
     - name: Build the kernel module
