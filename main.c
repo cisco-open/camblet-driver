@@ -23,7 +23,7 @@
 #include "opa.h"
 #include "socket.h"
 
-MODULE_AUTHOR("Nandor Kracser");
+MODULE_AUTHOR("Cisco Systems");
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_DESCRIPTION("A kernel module that exposes a wasm VM");
 MODULE_VERSION("0.1");
