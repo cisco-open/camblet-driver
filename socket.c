@@ -124,7 +124,11 @@ static int recv_msg(struct sock *sock, char *buf, size_t size)
 
 	iov_iter_kvec(&hdr.msg_iter, READ, &iov, 1, size);
 
-    int received = tcp_recvmsg(sock, &hdr, size, 0, &addr_len);
+    int received = tcp_recvmsg(sock, &hdr, size,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
+							   0,
+#endif
+							   0, &addr_len);
 
 	printk("recv_msg -> received %d bytes, sock: %p", received, sock);
 
@@ -380,8 +384,14 @@ void dump_msghdr(struct msghdr *msg)
 	printk(KERN_INFO "iovoffset = %zd\n", msg->msg_iter.iov_offset);
 }
 
-int wasm_recvmsg(struct sock *sock, struct msghdr *msg, size_t size,
-					  int flags, int *addr_len)
+int wasm_recvmsg(struct sock *sock,
+				 struct msghdr *msg,
+				 size_t size,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
+				 int noblock,
+#endif
+				 int flags,
+				 int *addr_len)
 {
 	int ret, len;
 	char data[8192];
@@ -418,7 +428,11 @@ bail:
 int inet_wasm_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
 					  int flags)
 {
-	return wasm_recvmsg(sock->sk, msg, size, flags, 0);
+	return wasm_recvmsg(sock->sk, msg, size,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
+						0,
+#endif
+						flags, 0);
 }
 
 int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
