@@ -2,9 +2,9 @@
  * Copyright (c) 2023 Cisco and/or its affiliates. All rights reserved.
  *
  * SPDX-License-Identifier: MIT OR GPL-2.0-only
- * 
+ *
  * Licensed under the MIT license <LICENSE.MIT or https://opensource.org/licenses/MIT> or the GPLv2 license
- * <LICENSE.GPL or https://opensource.org/license/gpl-2-0>, at your option. This file may not be copied, 
+ * <LICENSE.GPL or https://opensource.org/license/gpl-2-0>, at your option. This file may not be copied,
  * modified, or distributed except according to those terms.
  */
 
@@ -51,9 +51,11 @@ static struct inet_protosw wasm_sw = {
 
 typedef struct
 {
-	union {
+	union
+	{
 		br_ssl_server_context *sc;
-		struct {
+		struct
+		{
 			br_ssl_client_context *cc;
 			br_x509_minimal_context *xc;
 			br_x509_trust_anchor *tas;
@@ -64,7 +66,7 @@ typedef struct
 	br_sslio_context *ioc;
 } ssl_socket_context;
 
-static ssl_socket_context* new_server_ssl_socket_context(void)
+static ssl_socket_context *new_server_ssl_socket_context(void)
 {
 	ssl_socket_context *sc = kmalloc(sizeof(ssl_socket_context), GFP_KERNEL);
 	sc->sc = kmalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
@@ -89,7 +91,7 @@ static void free_ssl_socket_context(ssl_socket_context *sc)
 	{
 		printk("free_ssl_socket_context: shutting down ssl io context: %p", sc->ioc);
 		// TODO we should call br_sslio_close here, but that hangs in non-typed socket mode
-		br_ssl_engine_close(sc->ioc->engine); 
+		br_ssl_engine_close(sc->ioc->engine);
 		// if (br_sslio_close(sc->ioc))
 		// {
 		// 	pr_err("br_sslio_close returned an error");
@@ -124,7 +126,7 @@ static int recv_msg(struct sock *sock, char *buf, size_t size)
 
 	iov_iter_kvec(&hdr.msg_iter, READ, &iov, 1, size);
 
-    int received = tcp_recvmsg(sock, &hdr, size,
+	int received = tcp_recvmsg(sock, &hdr, size,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
 							   0,
 #endif
@@ -141,21 +143,21 @@ static int recv_msg(struct sock *sock, char *buf, size_t size)
 static int
 sock_read(void *ctx, unsigned char *buf, size_t len)
 {
-    for (;;)
-    {
-        ssize_t rlen;
+	for (;;)
+	{
+		ssize_t rlen;
 
-        rlen = recv_msg((struct sock *)ctx, buf, len);
-        if (rlen <= 0)
-        {
-            if (rlen < 0)
-            {
-                continue;
-            }
-            return -1;
-        }
-        return (int)rlen;
-    }
+		rlen = recv_msg((struct sock *)ctx, buf, len);
+		if (rlen <= 0)
+		{
+			if (rlen < 0)
+			{
+				continue;
+			}
+			return -1;
+		}
+		return (int)rlen;
+	}
 }
 
 /*
@@ -164,21 +166,21 @@ sock_read(void *ctx, unsigned char *buf, size_t len)
 static int
 sock_write(void *ctx, const unsigned char *buf, size_t len)
 {
-    for (;;)
-    {
-        ssize_t wlen;
+	for (;;)
+	{
+		ssize_t wlen;
 
-        wlen = send_msg((struct sock *)ctx, buf, len);
-        if (wlen <= 0)
-        {
-            if (wlen < 0)
-            {
-                continue;
-            }
-            return -1;
-        }
-        return (int)wlen;
-    }
+		wlen = send_msg((struct sock *)ctx, buf, len);
+		if (wlen <= 0)
+		{
+			if (wlen < 0)
+			{
+				continue;
+			}
+			return -1;
+		}
+		return (int)wlen;
+	}
 }
 
 /* This is a copy of inet_listen, but uses SOCK_WASM instead of SOCK_STREAM
@@ -207,9 +209,10 @@ int inet_wasm_listen(struct socket *sock, int backlog)
 	{
 		err = inet_csk_listen_start(sk
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 17, 0)
-									, backlog
+									,
+									backlog
 #endif
-									);
+		);
 		if (err)
 			goto out;
 	}
@@ -232,18 +235,18 @@ int inet_wasm_accept(struct socket *sock, struct socket *newsock, int flags, boo
 		ssl_socket_context *sc = new_server_ssl_socket_context();
 
 		/*
-		* Initialise the context with the cipher suites and
-		* algorithms. This depends on the server key type
-		* (and, for EC keys, the signature algorithm used by
-		* the CA to sign the server's certificate).
-		*
-		* Depending on the defined macros, we may select one of
-		* the "minimal" profiles. Key exchange algorithm depends
-		* on the key type:
-		*   RSA key: RSA or ECDHE_RSA
-		*   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
-		*   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
-		*/
+		 * Initialise the context with the cipher suites and
+		 * algorithms. This depends on the server key type
+		 * (and, for EC keys, the signature algorithm used by
+		 * the CA to sign the server's certificate).
+		 *
+		 * Depending on the defined macros, we may select one of
+		 * the "minimal" profiles. Key exchange algorithm depends
+		 * on the key type:
+		 *   RSA key: RSA or ECDHE_RSA
+		 *   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
+		 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
+		 */
 #if !RSA_OR_EC
 		br_ssl_server_init_full_rsa(sc->sc, CHAIN, CHAIN_LEN, &RSA);
 #elif
@@ -274,7 +277,7 @@ int inet_wasm_accept(struct socket *sock, struct socket *newsock, int flags, boo
 		newsock->sk->sk_user_data = sc;
 
 		if (br_sslio_flush(sc->ioc) == 0)
-		{	
+		{
 			printk("inet_wasm_accept: TLS handshake done");
 		}
 	}
@@ -283,8 +286,8 @@ int inet_wasm_accept(struct socket *sock, struct socket *newsock, int flags, boo
 }
 
 int inet_wasm_connect(struct socket *sock,
-				      struct sockaddr *vaddr,
-				      int sockaddr_len, int flags)
+					  struct sockaddr *vaddr,
+					  int sockaddr_len, int flags)
 {
 	int ret = inet_stream_connect(sock, vaddr, sockaddr_len, flags);
 
@@ -295,18 +298,18 @@ int inet_wasm_connect(struct socket *sock,
 		ssl_socket_context *sc = new_client_ssl_socket_context();
 
 		/*
-		* Initialise the context with the cipher suites and
-		* algorithms. This depends on the server key type
-		* (and, for EC keys, the signature algorithm used by
-		* the CA to sign the server's certificate).
-		*
-		* Depending on the defined macros, we may select one of
-		* the "minimal" profiles. Key exchange algorithm depends
-		* on the key type:
-		*   RSA key: RSA or ECDHE_RSA
-		*   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
-		*   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
-		*/
+		 * Initialise the context with the cipher suites and
+		 * algorithms. This depends on the server key type
+		 * (and, for EC keys, the signature algorithm used by
+		 * the CA to sign the server's certificate).
+		 *
+		 * Depending on the defined macros, we may select one of
+		 * the "minimal" profiles. Key exchange algorithm depends
+		 * on the key type:
+		 *   RSA key: RSA or ECDHE_RSA
+		 *   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
+		 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
+		 */
 		br_ssl_client_init_full(sc->cc, sc->xc, TAs, TAs_NUM);
 
 		/*
@@ -330,9 +333,9 @@ int inet_wasm_connect(struct socket *sock,
 		}
 
 		/*
-		* Initialise the simplified I/O wrapper context, to use our
-		* SSL client context, and the two callbacks for socket I/O.
-		*/
+		 * Initialise the simplified I/O wrapper context, to use our
+		 * SSL client context, and the two callbacks for socket I/O.
+		 */
 		br_sslio_init(sc->ioc, &sc->cc->eng, sock_read, sock->sk, sock_write, sock->sk);
 
 		// We should save the ssl context here to the socket
@@ -485,15 +488,15 @@ void wasm_shutdown(struct sock *sk, int how)
 
 bool eval_connection(u16 port)
 {
-	//return port == 8000 || port == 8080;
+	// return port == 8000 || port == 8080;
 	return false; // TODO don't hardcode this, but currently we don't want to intercept any connections by mistake
 }
 
-struct sock* (*accept)(struct sock *sk, int flags, int *err, bool kern);
+struct sock *(*accept)(struct sock *sk, int flags, int *err, bool kern);
 
-int	         (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
+int (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 
-struct sock* wasm_accept(struct sock *sk, int flags, int *err, bool kern)
+struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 {
 	u16 port = (u16)(sk->sk_portpair >> 16);
 	printk("wasm_accept on port: %d", port);
@@ -505,18 +508,18 @@ struct sock* wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		ssl_socket_context *sc = new_server_ssl_socket_context();
 
 		/*
-		* Initialise the context with the cipher suites and
-		* algorithms. This depends on the server key type
-		* (and, for EC keys, the signature algorithm used by
-		* the CA to sign the server's certificate).
-		*
-		* Depending on the defined macros, we may select one of
-		* the "minimal" profiles. Key exchange algorithm depends
-		* on the key type:
-		*   RSA key: RSA or ECDHE_RSA
-		*   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
-		*   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
-		*/
+		 * Initialise the context with the cipher suites and
+		 * algorithms. This depends on the server key type
+		 * (and, for EC keys, the signature algorithm used by
+		 * the CA to sign the server's certificate).
+		 *
+		 * Depending on the defined macros, we may select one of
+		 * the "minimal" profiles. Key exchange algorithm depends
+		 * on the key type:
+		 *   RSA key: RSA or ECDHE_RSA
+		 *   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
+		 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
+		 */
 #if !RSA_OR_EC
 		br_ssl_server_init_full_rsa(sc->sc, CHAIN, CHAIN_LEN, &RSA);
 #elif
@@ -566,18 +569,18 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		ssl_socket_context *sc = new_client_ssl_socket_context();
 
 		/*
-		* Initialise the context with the cipher suites and
-		* algorithms. This depends on the server key type
-		* (and, for EC keys, the signature algorithm used by
-		* the CA to sign the server's certificate).
-		*
-		* Depending on the defined macros, we may select one of
-		* the "minimal" profiles. Key exchange algorithm depends
-		* on the key type:
-		*   RSA key: RSA or ECDHE_RSA
-		*   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
-		*   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
-		*/
+		 * Initialise the context with the cipher suites and
+		 * algorithms. This depends on the server key type
+		 * (and, for EC keys, the signature algorithm used by
+		 * the CA to sign the server's certificate).
+		 *
+		 * Depending on the defined macros, we may select one of
+		 * the "minimal" profiles. Key exchange algorithm depends
+		 * on the key type:
+		 *   RSA key: RSA or ECDHE_RSA
+		 *   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
+		 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
+		 */
 		br_ssl_client_init_full(sc->cc, sc->xc, TAs, TAs_NUM);
 
 		/*
@@ -601,9 +604,9 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		}
 
 		/*
-		* Initialise the simplified I/O wrapper context, to use our
-		* SSL client context, and the two callbacks for socket I/O.
-		*/
+		 * Initialise the simplified I/O wrapper context, to use our
+		 * SSL client context, and the two callbacks for socket I/O.
+		 */
 		br_sslio_init(sc->ioc, &sc->cc->eng, sock_read, sk, sock_write, sk);
 
 		// We should save the ssl context here to the socket
