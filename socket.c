@@ -485,7 +485,8 @@ void wasm_shutdown(struct sock *sk, int how)
 
 bool eval_connection(u16 port)
 {
-	return port == 8000 || port == 8080;
+	//return port == 8000 || port == 8080;
+	return false; // TODO don't hardcode this, but currently we don't want to intercept any connections by mistake
 }
 
 struct sock* (*accept)(struct sock *sk, int flags, int *err, bool kern);

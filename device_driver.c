@@ -50,16 +50,16 @@ int chardev_init(void)
 
     if (major < 0)
     {
-        pr_alert("wasm: Registering char device failed with %d\n", major);
+        pr_alert("wasm: Registering char device failed with %d", major);
         return major;
     }
 
-    pr_info("wasm: I was assigned major number %d.\n", major);
+    pr_info("wasm: I was assigned major number %d.", major);
 
     cls = class_create(THIS_MODULE, DEVICE_NAME);
     device_create(cls, NULL, MKDEV(major, 0), NULL, DEVICE_NAME);
 
-    pr_info("wasm: Device created on /dev/%s\n", DEVICE_NAME);
+    pr_info("wasm: Device created on /dev/%s", DEVICE_NAME);
 
     return SUCCESS;
 }
@@ -185,12 +185,12 @@ int parse_json_from_buffer(void)
         JSON_Object *root = json_value_get_object(json);
         char *command = json_object_get_string(root, "command");
 
-        printk("wasm: command %s\n", command);
+        printk("wasm: command %s", command);
 
         if (strcmp("load", command) == 0)
         {
             char *name = json_object_get_string(root, "name");
-            printk("wasm: loading module: %s\n", name);
+            printk("wasm: loading module: %s", name);
 
             char *code = json_object_get_string(root, "code");
             int length = base64_decode(device_buffer, DEVICE_BUFFER_SIZE, code, strlen(code));
@@ -279,7 +279,7 @@ cleanup:
 /* Called when a process closes the device file. */
 static int device_release(struct inode *inode, struct file *file)
 {
-    printk(KERN_INFO "wasm: device has been released\n");
+    printk(KERN_INFO "wasm: device has been released");
 
     int status = parse_json_from_buffer();
 
@@ -350,7 +350,7 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
         bytes_to_write = maxbytes;
 
     bytes_writen = bytes_to_write - copy_from_user(device_buffer + *offset, buffer, bytes_to_write);
-    printk(KERN_INFO "wasm: device has been written %d\n", bytes_writen);
+    printk(KERN_INFO "wasm: device has been written %d", bytes_writen);
     *offset += bytes_writen;
     device_buffer_size = *offset;
     return bytes_writen;
