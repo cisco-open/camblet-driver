@@ -9,6 +9,9 @@
  */
 
 // Generated with:
+//
+// git clone https://www.bearssl.org/git/BearSSL
+// cd BearSSL && make && mv build/brssl /usr/local/bin/
 // openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -sha256 -days 365 -nodes
 // brssl chain cert.pem
 // brssl skey -C key.pem
