@@ -205,9 +205,9 @@ int inet_wasm_listen(struct socket *sock, int backlog)
 	 */
 	if (old_state != TCP_LISTEN)
 	{
-		err = inet_csk_listen_start(sk,
+		err = inet_csk_listen_start(sk
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 17, 0)
-									backlog
+									, backlog
 #endif
 									);
 		if (err)

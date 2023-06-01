@@ -174,11 +174,8 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
     return result;
 }
 
-/* Called when a process closes the device file. */
-static int device_release(struct inode *inode, struct file *file)
+int parse_json_from_buffer(void)
 {
-    printk(KERN_INFO "wasm: device has been released\n");
-
     int status = SUCCESS;
     JSON_Value *json = NULL;
 
@@ -275,6 +272,16 @@ cleanup:
     {
         json_value_free(json);
     }
+
+    return status;
+}
+
+/* Called when a process closes the device file. */
+static int device_release(struct inode *inode, struct file *file)
+{
+    printk(KERN_INFO "wasm: device has been released\n");
+
+    int status = parse_json_from_buffer();
 
     device_buffer_size = 0;
 
