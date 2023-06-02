@@ -67,6 +67,7 @@ wasm-objs :=  third-party/wasm3/source/m3_api_libc.o \
 KBUILD=/lib/modules/$(shell uname -r)/build/
  
 default:
+	cd third-party/BearSSL && $(MAKE) linux-km
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) modules
 
 clean:

@@ -281,8 +281,6 @@ static int device_release(struct inode *inode, struct file *file)
 {
     printk(KERN_INFO "wasm: device has been released");
 
-    int status = parse_json_from_buffer();
-
     device_buffer_size = 0;
 
     /* We're now ready for our next caller */
@@ -293,7 +291,7 @@ static int device_release(struct inode *inode, struct file *file)
      */
     module_put(THIS_MODULE);
 
-    return status;
+    return 0;
 }
 
 /* Called when a process, which already opened the dev file, attempts to
@@ -340,9 +338,9 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
 /* called when somebody tries to write into our device file. */
 static ssize_t device_write(struct file *file, const char *buffer, size_t length, loff_t *offset)
 {
-    int maxbytes;       /* maximum bytes that can be read from offset to DEVICE_BUFFER_SIZE*/
-    int bytes_to_write; /* gives the number of bytes to write*/
-    int bytes_writen;   /* number of bytes actually writen*/
+    int maxbytes;       /* maximum bytes that can be read from offset to DEVICE_BUFFER_SIZE */
+    int bytes_to_write; /* gives the number of bytes to write */
+    int bytes_writen;   /* number of bytes actually written */
     maxbytes = DEVICE_BUFFER_SIZE - *offset;
     if (maxbytes > length)
         bytes_to_write = length;
@@ -353,5 +351,37 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
     printk(KERN_INFO "wasm: device has been written %d", bytes_writen);
     *offset += bytes_writen;
     device_buffer_size = *offset;
+
+    // search for the end of the string in device_buffer
+    for (;;) {
+        int i = 0;
+        for (; i < device_buffer_size; i++)
+        {
+            if (device_buffer[i] == '\0')
+            {
+                break;
+            }
+        }
+
+        if (i == device_buffer_size)
+        {
+            // no end of string found, we need to read more
+            return bytes_writen;
+        }
+
+        // parse the json
+        int status = parse_json_from_buffer();
+
+        printk("parsed json: %d", status);
+        
+        // shift back device_buffer by length of the string parsed
+        printk("shifting back: %d", i + 1);
+
+        memmove(device_buffer, device_buffer + i, i);
+        device_buffer_size -= i + 1;
+
+        printk("device_buffer_size: %d", device_buffer_size);
+    }
+
     return bytes_writen;
 }
