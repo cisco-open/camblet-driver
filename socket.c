@@ -64,32 +64,32 @@ typedef struct
 	};
 	unsigned char *iobuf;
 	br_sslio_context *ioc;
-} ssl_socket_context;
+} wasm_socket_context;
 
-static ssl_socket_context *new_server_ssl_socket_context(void)
+static wasm_socket_context *new_server_wasm_socket_context(void)
 {
-	ssl_socket_context *sc = kmalloc(sizeof(ssl_socket_context), GFP_KERNEL);
-	sc->sc = kmalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
-	sc->ioc = kmalloc(sizeof(br_sslio_context), GFP_KERNEL);
-	sc->iobuf = kmalloc(BR_SSL_BUFSIZE_BIDI, GFP_KERNEL);
-	return sc;
+	wasm_socket_context *c = kmalloc(sizeof(wasm_socket_context), GFP_KERNEL);
+	c->sc = kmalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
+	c->ioc = kmalloc(sizeof(br_sslio_context), GFP_KERNEL);
+	c->iobuf = kmalloc(BR_SSL_BUFSIZE_BIDI, GFP_KERNEL);
+	return c;
 }
 
-static ssl_socket_context *new_client_ssl_socket_context(void)
+static wasm_socket_context *new_client_wasm_socket_context(void)
 {
-	ssl_socket_context *sc = kmalloc(sizeof(ssl_socket_context), GFP_KERNEL);
-	sc->cc = kmalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
-	sc->xc = kmalloc(sizeof(br_x509_minimal_context), GFP_KERNEL);
-	sc->ioc = kmalloc(sizeof(br_sslio_context), GFP_KERNEL);
-	sc->iobuf = kmalloc(BR_SSL_BUFSIZE_BIDI, GFP_KERNEL);
-	return sc;
+	wasm_socket_context *c = kmalloc(sizeof(wasm_socket_context), GFP_KERNEL);
+	c->cc = kmalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
+	c->xc = kmalloc(sizeof(br_x509_minimal_context), GFP_KERNEL);
+	c->ioc = kmalloc(sizeof(br_sslio_context), GFP_KERNEL);
+	c->iobuf = kmalloc(BR_SSL_BUFSIZE_BIDI, GFP_KERNEL);
+	return c;
 }
 
-static void free_ssl_socket_context(ssl_socket_context *sc)
+static void free_wasm_socket_context(wasm_socket_context *sc)
 {
 	if (sc)
 	{
-		printk("free_ssl_socket_context: shutting down ssl io context: %p", sc->ioc);
+		printk("free_wasm_socket_context: shutting down ssl io context: %p", sc->ioc);
 		// TODO we should call br_sslio_close here, but that hangs in non-typed socket mode
 		br_ssl_engine_close(sc->ioc->engine);
 		// if (br_sslio_close(sc->ioc))
@@ -232,7 +232,7 @@ int inet_wasm_accept(struct socket *sock, struct socket *newsock, int flags, boo
 
 	if (ret == 0)
 	{
-		ssl_socket_context *sc = new_server_ssl_socket_context();
+		wasm_socket_context *sc = new_server_wasm_socket_context();
 
 		/*
 		 * Initialise the context with the cipher suites and
@@ -295,7 +295,7 @@ int inet_wasm_connect(struct socket *sock,
 	{
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
-		ssl_socket_context *sc = new_client_ssl_socket_context();
+		wasm_socket_context *sc = new_client_wasm_socket_context();
 
 		/*
 		 * Initialise the context with the cipher suites and
@@ -354,8 +354,8 @@ int inet_wasm_connect(struct socket *sock,
 
 int inet_wasm_shutdown(struct socket *sock, int how)
 {
-	ssl_socket_context *c = sock->sk->sk_user_data;
-	free_ssl_socket_context(c);
+	wasm_socket_context *c = sock->sk->sk_user_data;
+	free_wasm_socket_context(c);
 	sock->sk->sk_user_data = NULL;
 	return inet_shutdown(sock, how);
 }
@@ -404,7 +404,7 @@ int wasm_recvmsg(struct sock *sock,
 	char data[8192];
 	// void *data = kmalloc(size, GFP_KERNEL);
 
-	ssl_socket_context *sc = sock->sk_user_data;
+	wasm_socket_context *sc = sock->sk_user_data;
 
 	ret = br_sslio_read(sc->ioc, data, min(size, sizeof(data)));
 
@@ -446,7 +446,7 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 {
 	int ret, len;
 	char data[8192];
-	ssl_socket_context *sc = sock->sk_user_data;
+	wasm_socket_context *sc = sock->sk_user_data;
 
 	// dump_msghdr(msg);
 
@@ -478,8 +478,8 @@ int inet_wasm_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 void wasm_shutdown(struct sock *sk, int how)
 {
 	printk("wasm_shutdown is running for sk %p", sk);
-	ssl_socket_context *c = sk->sk_user_data;
-	free_ssl_socket_context(c);
+	wasm_socket_context *c = sk->sk_user_data;
+	free_wasm_socket_context(c);
 	sk->sk_user_data = NULL;
 	printk("wasm_shutdown -> tcp_shutdown is running for sk %p", sk);
 	tcp_shutdown(sk, how);
@@ -505,7 +505,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	if (client && eval_connection(port))
 	{
-		ssl_socket_context *sc = new_server_ssl_socket_context();
+		wasm_socket_context *sc = new_server_wasm_socket_context();
 
 		/*
 		 * Initialise the context with the cipher suites and
@@ -566,7 +566,7 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	{
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
-		ssl_socket_context *sc = new_client_ssl_socket_context();
+		wasm_socket_context *sc = new_client_wasm_socket_context();
 
 		/*
 		 * Initialise the context with the cipher suites and
