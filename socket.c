@@ -11,20 +11,13 @@
 #include <linux/module.h> /* Needed by all modules */
 #include <linux/kernel.h> /* Needed for KERN_INFO */
 #include <net/protocol.h>
-// #include <linux/file.h>
-// #include <linux/jiffies.h>
-#include <linux/syscalls.h>
-#include <linux/types.h>
 #include <linux/tcp.h>
 #include <linux/version.h>
-#include <net/inet_connection_sock.h>
 #include <net/tcp.h>
 #include <net/tcp_states.h>
 #include <net/inet_common.h>
-#include <net/inet_timewait_sock.h>
 #include <net/sock.h>
 #include <net/ip.h>
-#include <net/route.h>
 #include <linux/uaccess.h>
 
 #include "bearssl.h"
@@ -446,21 +439,21 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 {
 	int ret, len;
 	char data[8192];
-	wasm_socket_context *sc = sock->sk_user_data;
+	wasm_socket_context *c = sock->sk_user_data;
 
 	// dump_msghdr(msg);
 
 	len = copy_from_iter(data, min(size, sizeof(data)), &msg->msg_iter);
 	// printk("inet_wasm_sendmsg data %.*s len = %d", size, data, len);
 
-	ret = br_sslio_write_all(sc->ioc, data, len);
+	ret = br_sslio_write_all(c->ioc, data, len);
 	if (ret < 0)
 	{
 		pr_err("br_sslio_write_all returned an error");
 		return ret;
 	}
 
-	ret = br_sslio_flush(sc->ioc);
+	ret = br_sslio_flush(c->ioc);
 	if (ret < 0)
 	{
 		pr_err("br_sslio_flush returned an error");
@@ -488,8 +481,8 @@ void wasm_shutdown(struct sock *sk, int how)
 
 bool eval_connection(u16 port)
 {
-	// return port == 8000 || port == 8080;
-	return false; // TODO don't hardcode this, but currently we don't want to intercept any connections by mistake
+	return port == 8000 || port == 8080;
+	// return false; // TODO don't hardcode this, but currently we don't want to intercept any connections by mistake
 }
 
 struct sock *(*accept)(struct sock *sk, int flags, int *err, bool kern);
@@ -499,7 +492,7 @@ int (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 {
 	u16 port = (u16)(sk->sk_portpair >> 16);
-	printk("wasm_accept on port: %d", port);
+	printk("wasm_accept on in app %s port: %d", current->comm, port);
 
 	struct sock *client = accept(sk, flags, err, kern);
 
