@@ -33,7 +33,7 @@ enum
 static atomic_t already_open = ATOMIC_INIT(CDEV_NOT_USED);
 
 static char device_buffer[DEVICE_BUFFER_SIZE];
-static unsigned int device_buffer_size = 0;
+static size_t device_buffer_size = 0;
 
 static struct class *cls;
 
@@ -134,7 +134,7 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
             result = wasm_vm_call(vm, name, entrypoint);
             // if we can't find the implicit main entrypoint, that is not an issue
             if (result.err &&
-                !(result.err = m3Err_functionLookupFailed && strcmp(entrypoint, DEFAULT_MODULE_ENTRYPOINT) == 0))
+                !(result.err == m3Err_functionLookupFailed && strcmp(entrypoint, DEFAULT_MODULE_ENTRYPOINT) == 0))
             {
                 FATAL("wasm_vm_call: %s error: %s", result.err, wasm_vm_last_error(vm));
                 wasm_vm_unlock(vm);
@@ -381,7 +381,7 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
         memmove(device_buffer, device_buffer + i, device_buffer_size - i);
         device_buffer_size -= i + 1;
 
-        printk("device_buffer_size: %d", device_buffer_size);
+        printk("device_buffer_size: %lu", device_buffer_size);
     }
 
     return bytes_writen;
