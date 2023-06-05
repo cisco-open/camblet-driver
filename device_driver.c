@@ -2,9 +2,9 @@
  * Copyright (c) 2023 Cisco and/or its affiliates. All rights reserved.
  *
  * SPDX-License-Identifier: MIT OR GPL-2.0-only
- * 
+ *
  * Licensed under the MIT license <LICENSE.MIT or https://opensource.org/licenses/MIT> or the GPLv2 license
- * <LICENSE.GPL or https://opensource.org/license/gpl-2-0>, at your option. This file may not be copied, 
+ * <LICENSE.GPL or https://opensource.org/license/gpl-2-0>, at your option. This file may not be copied,
  * modified, or distributed except according to those terms.
  */
 
@@ -134,7 +134,7 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
             result = wasm_vm_call(vm, name, entrypoint);
             // if we can't find the implicit main entrypoint, that is not an issue
             if (result.err &&
-              !(result.err = m3Err_functionLookupFailed && strcmp(entrypoint, DEFAULT_MODULE_ENTRYPOINT) == 0))
+                !(result.err = m3Err_functionLookupFailed && strcmp(entrypoint, DEFAULT_MODULE_ENTRYPOINT) == 0))
             {
                 FATAL("wasm_vm_call: %s error: %s", result.err, wasm_vm_last_error(vm));
                 wasm_vm_unlock(vm);
@@ -255,7 +255,7 @@ int parse_json_from_buffer(void)
             result = proxy_on_downstream_data(proxywasm, 128, false);
             if (result.err)
             {
-                FATAL("proxy_on_downstream_data for module failed: %s",result.err)
+                FATAL("proxy_on_downstream_data for module failed: %s", result.err)
                 goto cleanup;
             }
         }
@@ -353,7 +353,8 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
     device_buffer_size = *offset;
 
     // search for the end of the string in device_buffer
-    for (;;) {
+    for (;;)
+    {
         int i = 0;
         for (; i < device_buffer_size; i++)
         {
@@ -373,11 +374,11 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
         int status = parse_json_from_buffer();
 
         printk("parsed json: %d", status);
-        
+
         // shift back device_buffer by length of the string parsed
         printk("shifting back: %d", i + 1);
 
-        memmove(device_buffer, device_buffer + i, i);
+        memmove(device_buffer, device_buffer + i, device_buffer_size - i);
         device_buffer_size -= i + 1;
 
         printk("device_buffer_size: %d", device_buffer_size);
