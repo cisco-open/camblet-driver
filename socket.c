@@ -443,6 +443,20 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	// dump_msghdr(msg);
 
+	// get the cipher suite from the context
+	const br_ssl_session_parameters *params = &c->sc->eng.session;
+	printk("wasm_accept cipher suite: %d version: %d", params->cipher_suite, params->version);
+
+	// // get the key from the context
+	// const br_x509_certificate *chain = br_ssl_engine_get_chain(&sc->sc->eng);
+	// const br_x509_pkey *pk = &chain->pkey;
+
+	// // get iv from the context
+	// const unsigned char *iv = br_ssl_engine_get_server_iv(&sc->sc->eng);
+
+	// // get the salt from the context
+	// const unsigned char *salt = br_ssl_engine_get_client_random(&sc->sc->eng);
+
 	len = copy_from_iter(data, min(size, sizeof(data)), &msg->msg_iter);
 	// printk("inet_wasm_sendmsg data %.*s len = %d", size, data, len);
 
@@ -479,10 +493,17 @@ void wasm_shutdown(struct sock *sk, int how)
 	printk("wasm_shutdown -> tcp_shutdown is done for sk %p", sk);
 }
 
-bool eval_connection(u16 port)
+// an enum for the direction
+typedef enum
 {
-	return port == 8000 || port == 8080;
-	// return false; // TODO don't hardcode this, but currently we don't want to intercept any connections by mistake
+	INPUT,
+	OUTPUT
+} direction;
+
+// a function to evaluate the connection if it should be intercepted
+bool eval_connection(u16 port, direction direction, const char *comm)
+{
+	return (port == 8000 || port == 8080) && direction == INPUT && strcmp(comm, "python3") == 0;
 }
 
 struct sock *(*accept)(struct sock *sk, int flags, int *err, bool kern);
@@ -496,7 +517,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	struct sock *client = accept(sk, flags, err, kern);
 
-	if (client && eval_connection(port))
+	if (client && eval_connection(port, INPUT, current->comm))
 	{
 		wasm_socket_context *sc = new_server_wasm_socket_context();
 
@@ -541,6 +562,8 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		// // We should save the ssl context here to the socket
 		client->sk_user_data = sc;
+
+		// and overwrite the socket protocol with our own
 		client->sk_prot = &wasm_prot;
 	}
 
@@ -555,7 +578,7 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	int ret = connect(sk, uaddr, addr_len);
 
-	if (ret == 0 && eval_connection(port))
+	if (ret == 0 && eval_connection(port, OUTPUT, current->comm))
 	{
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
