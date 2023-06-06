@@ -21,6 +21,7 @@
 #include <linux/uaccess.h>
 
 #include "bearssl.h"
+#include "proxywasm.h"
 #include "socket.h"
 
 #define RSA_OR_EC 0
@@ -57,6 +58,7 @@ typedef struct
 	};
 	unsigned char *iobuf;
 	br_sslio_context *ioc;
+	proxywasm_context *pc;
 } wasm_socket_context;
 
 static wasm_socket_context *new_server_wasm_socket_context(void)
@@ -97,7 +99,7 @@ static void free_wasm_socket_context(wasm_socket_context *sc)
 
 static int send_msg(struct sock *sock, void *msg, size_t len)
 {
-	printk("send_msg -> buf %p size %d bytes, sock: %p", msg, len, sock);
+	// printk("send_msg -> buf %p size %d bytes, sock: %p", msg, len, sock);
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = msg, .iov_len = len};
 
@@ -105,14 +107,14 @@ static int send_msg(struct sock *sock, void *msg, size_t len)
 
 	int sent = tcp_sendmsg(sock, &hdr, len);
 
-	printk("send_msg -> sent %d bytes, sock: %p", sent, sock);
+	// printk("send_msg -> sent %d bytes, sock: %p", sent, sock);
 
 	return sent;
 }
 
 static int recv_msg(struct sock *sock, char *buf, size_t size)
 {
-	printk("recv_msg -> buf %p size %d bytes, sock: %p", buf, size, sock);
+	// printk("recv_msg -> buf %p size %d bytes, sock: %p", buf, size, sock);
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = buf, .iov_len = size};
 	int addr_len = 0;
@@ -125,7 +127,7 @@ static int recv_msg(struct sock *sock, char *buf, size_t size)
 #endif
 							   0, &addr_len);
 
-	printk("recv_msg -> received %d bytes, sock: %p", received, sock);
+	// printk("recv_msg -> received %d bytes, sock: %p", received, sock);
 
 	return received;
 }
