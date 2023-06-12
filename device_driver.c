@@ -370,7 +370,9 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
             return -EFAULT;
         }
 
-        bytes_read = bytes_to_read;
+        put_user('\n', buffer + bytes_to_read);
+
+        bytes_read = bytes_to_read + 1;
         // *offset += bytes_to_read;
     }
 

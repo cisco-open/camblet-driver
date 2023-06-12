@@ -524,7 +524,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 	{
 		wasm_socket_context *sc = new_server_wasm_socket_context();
 
-		const char *command = "{\"command\": \"accept\", \"name\": \"8000\"}\n";
+		const char *command = "{\"command\": \"accept\", \"name\": \"8000\"}";
 		add_command(command, strlen(command));
 
 		/*
