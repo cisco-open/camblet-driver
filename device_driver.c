@@ -9,6 +9,7 @@
  */
 
 #include <linux/uaccess.h>
+#include <linux/delay.h>
 
 #include "base64.h"
 #include "device_driver.h"
@@ -31,6 +32,48 @@ enum
 
 /* Is device open? Used to prevent multiple access to device */
 static atomic_t already_open = ATOMIC_INIT(CDEV_NOT_USED);
+
+// create a linked list for outgoing commands
+typedef struct command
+{
+    struct list_head list;
+    char *data;
+    size_t size;
+};
+
+// protect the command list with a mutex
+static DEFINE_SPINLOCK(command_list_lock);
+static unsigned long command_list_lock_flags;
+static LIST_HEAD(command_list);
+
+// create a function to add a command to the list (called from the VM), locked with a spinlock
+void add_command(char *data, size_t size)
+{
+    struct command *cmd = kmalloc(sizeof(struct command), GFP_KERNEL);
+    cmd->data = kmalloc(size, GFP_KERNEL);
+    memcpy(cmd->data, data, size);
+    cmd->size = size;
+
+    spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
+    list_add_tail(&cmd->list, &command_list);
+    spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
+}
+
+// create a function to get a command from the list (called from the driver), locked with a mutex
+static struct command *get_command(void)
+{
+    struct command *cmd = NULL;
+
+    spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
+    if (!list_empty(&command_list))
+    {
+        cmd = list_first_entry(&command_list, struct command, list);
+        list_del(&cmd->list);
+    }
+    spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
+
+    return cmd;
+}
 
 static char device_buffer[DEVICE_BUFFER_SIZE];
 static size_t device_buffer_size = 0;
@@ -294,7 +337,8 @@ static int device_release(struct inode *inode, struct file *file)
     return 0;
 }
 
-/* Called when a process, which already opened the dev file, attempts to
+/*
+ * Called when a process, which already opened the dev file, attempts to
  * read from it.
  */
 static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
@@ -302,36 +346,41 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
                            size_t length,       /* length of the buffer     */
                            loff_t *offset)
 {
-    /* Number of bytes actually written to the buffer */
-    int bytes_read = 0;
-    const char *msg_ptr = device_buffer;
-
     printk("wasm: device_read: length: %lu offset: %llu", length, *offset);
 
-    if (!*(msg_ptr + *offset))
-    {                /* we are at the end of message */
-        *offset = 0; /* reset the offset */
-        return 0;    /* signify end of file */
-    }
-
-    msg_ptr += *offset;
-
-    /* Actually put the data into the buffer */
-    while (length && *msg_ptr)
+    struct command *c = get_command();
+    // wait until command is available
+    while (c == NULL)
     {
-        /* The buffer is in the user data segment, not the kernel
-         * segment so "*" assignment won't work.  We have to use
-         * put_user which copies data from the kernel data segment to
-         * the user data segment.
-         */
-        put_user(*(msg_ptr++), buffer++);
-        length--;
-        bytes_read++;
+        if (msleep_interruptible(1000) > 0)
+        {
+            return -EINTR;
+        }
+        c = get_command();
     }
 
-    *offset += bytes_read;
+    // copy the command to the buffer
+    int bytes_read = 0;
+    int bytes_to_read = c->size; //min(length, c->size - *offset);
+    if (bytes_to_read > 0)
+    {
+        // if (copy_to_user(buffer, c->data + *offset, bytes_to_read))
+        if (copy_to_user(buffer, c->data, bytes_to_read))
+        {
+            return -EFAULT;
+        }
 
-    /* Most read functions return the number of bytes put into the buffer. */
+        bytes_read = bytes_to_read;
+        // *offset += bytes_to_read;
+    }
+
+    // if (*offset >= c->size)
+    {
+        // free the command
+        kfree(c->data);
+        kfree(c);
+    }
+
     return bytes_read;
 }
 

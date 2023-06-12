@@ -21,6 +21,7 @@
 #include <linux/uaccess.h>
 
 #include "bearssl.h"
+#include "device_driver.h"
 #include "proxywasm.h"
 #include "socket.h"
 
@@ -522,6 +523,9 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 	if (client && eval_connection(port, INPUT, current->comm))
 	{
 		wasm_socket_context *sc = new_server_wasm_socket_context();
+
+		const char *command = "{\"command\": \"accept\", \"name\": \"8000\"}\n";
+		add_command(command, strlen(command));
 
 		/*
 		 * Initialise the context with the cipher suites and
