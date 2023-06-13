@@ -19,6 +19,8 @@ static int device_release(struct inode *, struct file *);
 static ssize_t device_read(struct file *, char __user *, size_t, loff_t *);
 static ssize_t device_write(struct file *, const char __user *, size_t, loff_t *);
 
+void add_command(char *data, size_t size);
+
 #define SUCCESS 0
 #define DEVICE_NAME "wasm"                 /* Dev name as it appears in /dev/devices   */
 #define DEVICE_BUFFER_SIZE 2 * 1024 * 1024 /* Max length of the message from the device */

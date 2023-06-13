@@ -26,11 +26,15 @@ jobs:
     #     ## limits ssh access and adds the ssh public key for the user which triggered the workflow
     #     limit-access-to-actor: true
 
-    - name: Build kernel module
+    - name: Build BearSSL
+      working-directory: wasm-kernel-module/third-party/BearSSL
+      run: make linux-km
+
+    - name: Build the kernel module
       working-directory: wasm-kernel-module
       run: make
 
-    - name: Run kernel module
+    - name: Run the kernel module
       working-directory: wasm-kernel-module
       run: |
         make insmod

@@ -20,7 +20,7 @@
 #define hash_add(hashtable, node, key, bits)						\
 	hlist_add_head(node, &hashtable[hash_min(key, bits)])
 
-#define hash_for_each_possible(name, obj, member, key, bits)			\
+#define hash_for_each_possible(name, obj, member, key, bits)		\
 	hlist_for_each_entry(obj, &name[hash_min(key, bits)], member)
 
 typedef struct property_h_node

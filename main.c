@@ -21,8 +21,9 @@
 #include "runtime.h"
 #include "worker_thread.h"
 #include "opa.h"
+#include "socket.h"
 
-MODULE_AUTHOR("Nandor Kracser");
+MODULE_AUTHOR("Cisco Systems");
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_DESCRIPTION("A kernel module that exposes a wasm VM");
 MODULE_VERSION("0.1");
@@ -73,6 +74,7 @@ static int __init wasm_init(void)
     ret += start_netfilter_submodule();
     ret += worker_thread_init();
     ret += chardev_init();
+    ret += wasm_socket_init();
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
     ret += register_btf_kfunc_id_set(BPF_PROG_TYPE_XDP, &bpf_opa_kfunc_set);
@@ -85,6 +87,7 @@ static int __init wasm_init(void)
 
 static void __exit wasm_exit(void)
 {
+    wasm_socket_exit();
     chardev_exit();
     stop_netfilter_submodule();
     worker_thread_exit();

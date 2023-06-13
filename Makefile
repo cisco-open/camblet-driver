@@ -5,6 +5,7 @@ EXTRA_CFLAGS := -foptimize-sibling-calls \
 				-DDEBUG=1 \
 				-Dd_m3HasFloat=$(EMULATE_FLOATS) \
 				-I$(PWD) \
+				-I$(PWD)/third-party/BearSSL/inc/ \
 				-I$(PWD)/third-party/wasm3/source/ \
 				-I$(PWD)/third-party/base64 \
 				-I$(PWD)/third-party/parson \
@@ -26,6 +27,8 @@ ifeq ($(ARCH), aarch64)
 # Anyhow, float emulation works only with this flag removed.
 	ccflags-remove-y += -mgeneral-regs-only
 endif
+
+KBUILD_EXTRA_SYMBOLS = $(PWD)/third-party/BearSSL/Module.symvers
 
 ccflags-remove-y += -Wdeclaration-after-statement
 
@@ -57,12 +60,14 @@ wasm-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  runtime.o \
 			  worker_thread.o \
 			  opa.o \
-			  proxywasm.o
+			  proxywasm.o \
+			  socket.o
 
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
  
 default:
+	cd third-party/BearSSL && $(MAKE) linux-km
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) modules
 
 clean:
@@ -75,11 +80,13 @@ logs:
 	sudo dmesg -T --follow
 
 insmod:
+	sudo insmod third-party/BearSSL/bearssl.ko
 	sudo insmod wasm.ko
 
 rmmod:
 	sudo rmmod wasm
 	sudo rm -f /run/wasm.socket
+	sudo rmmod bearssl
 
 setup-vm:
 	sudo apt update
