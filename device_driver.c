@@ -409,7 +409,7 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
         int i = 0;
         for (; i < device_buffer_size; i++)
         {
-            if (device_buffer[i] == '\0')
+            if (device_buffer[i] == '\n')
             {
                 break;
             }
@@ -423,16 +423,14 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
 
         // parse the json
         int status = parse_json_from_buffer();
-
-        printk("parsed json: %d", status);
-
-        // shift back device_buffer by length of the string parsed
-        printk("shifting back: %d", i + 1);
+        if (status != 0)
+        {
+            printk(KERN_ERR "wasm: parse_json_from_buffer failed: %d", status);
+            return -1;
+        }
 
         memmove(device_buffer, device_buffer + i, device_buffer_size - i);
         device_buffer_size -= i + 1;
-
-        printk("device_buffer_size: %lu", device_buffer_size);
     }
 
     return bytes_writen;
