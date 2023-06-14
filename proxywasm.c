@@ -382,8 +382,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
         {
             // TODO: this is only test data
             char empty_map[] = {0, 0, 0, 0};
-            char listener_direction[8];
-            sprintf(listener_direction, "%d", ListenerDirectionInbound);
+            i64 listener_direction = ListenerDirectionInbound;
             set_property_v(root_context, "node.id", "lima", strlen("lima"));
             set_property_v(root_context, "node.metadata.NAME", "catalog-v1-6578575465-lz5h2", strlen("catalog-v1-6578575465-lz5h2"));
             set_property_v(root_context, "node.metadata.NAMESPACE", "kube-system", strlen("kube-system"));
@@ -396,7 +395,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
             set_property_v(root_context, "node.metadata.PLATFORM_METADATA", empty_map, sizeof(empty_map));
             set_property_v(root_context, "node.metadata.APP_CONTAINERS", "catalog", strlen("catalog"));
             set_property_v(root_context, "node.metadata.INSTANCE_IPS", "10.20.160.34,fe80::84cb:9eff:feb7:941b", strlen("10.20.160.34,fe80::84cb:9eff:feb7:941b"));
-            set_property_v(root_context, "listener_direction", listener_direction, sizeof(listener_direction));
+            set_property_v(root_context, "listener_direction", (char*)&listener_direction, sizeof(listener_direction));
             set_property_v(root_context, "plugin_root_id", "0", strlen("0"));
         }
     }
