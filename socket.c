@@ -61,7 +61,7 @@ typedef struct
 	br_sslio_context *ioc;
 	proxywasm_context *pc;
 	proxywasm *p;
-	ListenerDirection direction;
+	i64 direction;
 } wasm_socket_context;
 
 static wasm_socket_context *new_server_wasm_socket_context(proxywasm *p)
@@ -79,6 +79,7 @@ static wasm_socket_context *new_server_wasm_socket_context(proxywasm *p)
 	c->pc = proxywasm_get_context(p);
 	c->p = p;
 	c->direction = ListenerDirectionInbound;
+	set_property_v(c->pc, "listener_direction", (char*)&c->direction, sizeof(c->direction));
 	return c;
 }
 
@@ -89,7 +90,16 @@ static wasm_socket_context *new_client_wasm_socket_context(void)
 	c->xc = kmalloc(sizeof(br_x509_minimal_context), GFP_KERNEL);
 	c->ioc = kmalloc(sizeof(br_sslio_context), GFP_KERNEL);
 	c->iobuf = kmalloc(BR_SSL_BUFSIZE_BIDI, GFP_KERNEL);
-	return c;
+	wasm_vm_result res = proxywasm_create_context(p);
+	if (res.err)
+	{
+		pr_err("new_client_wasm_socket_context: failed to create context: %s", res.err);
+		return NULL;
+	}
+	c->pc = proxywasm_get_context(p);
+	c->p = p;
+	c->direction = ListenerDirectionOutbound;
+	set_property_v(c->pc, "listener_direction", (char*)&c->direction, sizeof(c->direction));	return c;
 }
 
 static void free_wasm_socket_context(wasm_socket_context *sc)
