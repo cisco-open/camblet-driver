@@ -586,8 +586,8 @@ void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i
     switch (buffer_type)
     {
     case DownstreamData:
-        // *value = p->buffer + start;
-        // *value_len = max_size;
+        *value = p->buffer + start;
+        *value_len = max_size;
         break;
     case UpstreamData:
         break;

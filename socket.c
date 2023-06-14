@@ -418,8 +418,8 @@ int wasm_recvmsg(struct sock *sock,
 				 int *addr_len)
 {
 	int ret, len;
-	char data[8192];
-	// void *data = kmalloc(size, GFP_KERNEL);
+	// char data[8192];
+	void *data = kmalloc(size, GFP_KERNEL);
 
 	wasm_socket_context *c = sock->sk_user_data;
 
@@ -439,8 +439,8 @@ int wasm_recvmsg(struct sock *sock,
 
 	proxywasm_lock(c->p);
 	proxywasm_set_context(c->p, c->pc);
-	// c->pc->buffer = data;
-	// c->pc->buffer_size = ret;
+	c->pc->buffer = data;
+	c->pc->buffer_size = ret;
 	wasm_vm_result result;
 	switch (c->direction)
 	{
@@ -471,7 +471,7 @@ int wasm_recvmsg(struct sock *sock,
 	}
 
 bail:
-	// kfree(data);
+	kfree(data);
 
 	return ret;
 }
@@ -489,7 +489,8 @@ int inet_wasm_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
 int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 {
 	int ret, len;
-	char data[8192];
+	// char data[8192];
+	char *data = kmalloc(size, GFP_KERNEL);
 	wasm_socket_context *c = sock->sk_user_data;
 
 	// dump_msghdr(msg);
@@ -508,13 +509,15 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	// // get the salt from the context
 	// const unsigned char *salt = br_ssl_engine_get_client_random(&sc->sc->eng);
 
-	len = copy_from_iter(data, min(size, sizeof(data)), &msg->msg_iter);
+//	len = copy_from_iter(data, min(size, sizeof(data)), &msg->msg_iter);
+	len = copy_from_iter(data, size, &msg->msg_iter);
+
 	// printk("inet_wasm_sendmsg data %.*s len = %d", size, data, len);
 
 	proxywasm_lock(c->p);
 	proxywasm_set_context(c->p, c->pc);
-	// c->pc->buffer = data;
-	// c->pc->buffer_size = len;
+	c->pc->buffer = data;
+	c->pc->buffer_size = len;
 	wasm_vm_result result;
 	switch (c->direction)
 	{
@@ -530,7 +533,8 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	if (result.err)
 	{
 		pr_err("proxy_on_upstream/downstream_data returned an error: %s", result.err);
-		return -1;
+		ret = -1;
+		goto bail;
 	}
 	
 	ret = br_sslio_write_all(c->ioc, data, len);
@@ -544,10 +548,15 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	if (ret < 0)
 	{
 		pr_err("br_sslio_flush returned an error");
-		return ret;
+		goto bail;
 	}
 
-	return size;
+	ret = size;
+
+bail:
+	kfree(data);
+
+	return ret;
 }
 
 int inet_wasm_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
