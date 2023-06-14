@@ -91,6 +91,8 @@ typedef struct proxywasm_filter
 
     proxywasm *proxywasm;
 
+    char name[64];
+
 } proxywasm_filter;
 
 typedef struct proxywasm
@@ -190,7 +192,7 @@ m3ApiRawFunction(proxy_get_property)
 
     char *value = NULL;
     int value_len;
-    printk("wasm: calling proxy_get_property '%.*s' (%d) return values -> %p %p", property_path_size, property_path_data, property_path_size, return_property_value_data, return_property_value_size);
+    printk("wasm: calling proxy_get_property in %s '%.*s' (%d) return values -> %p %p", filter->name, property_path_size, property_path_data, property_path_size, return_property_value_data, return_property_value_size);
 
     get_property(filter->proxywasm->current_context, property_path_data, property_path_size, &value, &value_len);
 
@@ -380,7 +382,8 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
         {
             // TODO: this is only test data
             char empty_map[] = {0, 0, 0, 0};
-            u64 listener_direction = ListenerDirectionInbound;
+            char listener_direction[8];
+            sprintf(listener_direction, "%d", ListenerDirectionInbound);
             set_property_v(root_context, "node.id", "lima", strlen("lima"));
             set_property_v(root_context, "node.metadata.NAME", "catalog-v1-6578575465-lz5h2", strlen("catalog-v1-6578575465-lz5h2"));
             set_property_v(root_context, "node.metadata.NAMESPACE", "kube-system", strlen("kube-system"));
@@ -393,7 +396,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
             set_property_v(root_context, "node.metadata.PLATFORM_METADATA", empty_map, sizeof(empty_map));
             set_property_v(root_context, "node.metadata.APP_CONTAINERS", "catalog", strlen("catalog"));
             set_property_v(root_context, "node.metadata.INSTANCE_IPS", "10.20.160.34,fe80::84cb:9eff:feb7:941b", strlen("10.20.160.34,fe80::84cb:9eff:feb7:941b"));
-            set_property_v(root_context, "listener_direction", (char *)&listener_direction, sizeof(listener_direction));
+            set_property_v(root_context, "listener_direction", listener_direction, sizeof(listener_direction));
             set_property_v(root_context, "plugin_root_id", "0", strlen("0"));
         }
     }
@@ -408,6 +411,8 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
         kfree(proxywasm);
         return result;
     }
+
+    strcpy(filter->name, module->name);
 
     wasm_vm_try_get_function(filter->proxy_on_memory_allocate, wasm_vm_get_function(vm, module->name, "malloc")); // ???? proxy_on_memory_allocate?
     wasm_vm_try_get_function(filter->proxy_on_context_create, wasm_vm_get_function(vm, module->name, "proxy_on_context_create"));
@@ -479,9 +484,11 @@ error:
     proxywasm_filter *f; \
     for (f = p->filters; f != NULL; f = f->next) \
     { \
+        printk("wasm: Calling filter %s\n", f->name); \
         result = CALL; \
         if (result.err != NULL) \
         { \
+            printk("wasm: Calling filter %s errored\n", f->name, result.err); \
             return result; \
         } \
     } \
@@ -529,7 +536,7 @@ void set_property(proxywasm_context *p, const char *key, int key_len, const char
     struct property_h_node *cur, *node = kmalloc(sizeof(property_h_node), GFP_KERNEL);
     uint32_t key_i = xxh32(key, key_len, 0);
     print_property_key("set_property", key, key_len);
-    printk("wasm: set_property key hash %u, key len: %d", key_i, key_len);
+    printk("wasm: set_property key hash %u, key len: %d, value: %.*s", key_i, key_len, value_len, value);
 
     node->key_len = key_len;
     memcpy(node->key, key, key_len);
@@ -551,7 +558,7 @@ void get_property(proxywasm_context *p, const char *key, int key_len, char **val
     struct property_h_node *temp = NULL;
     uint32_t key_i = xxh32(key, key_len, 0);
     print_property_key("get_property", key, key_len);
-    printk("wasm: key hash %u, key len: %d key: '%.*s'", key_i, key_len, key_len, key);
+    printk("wasm: context [%d] key hash %u, key len: %d key: '%.*s'", p->id, key_i, key_len, key_len, key);
 
     hash_for_each_possible(p->properties, cur, node, key_i, HASHTABLE_BITS)
     {
