@@ -442,11 +442,11 @@ int wasm_recvmsg(struct sock *sock,
 	wasm_vm_result result;
 	switch (c->direction)
 	{
-	case ListenerDirectionInbound:
-	case ListenerDirectionUnspecified:
+	case ListenerDirectionOutbound:
 		result = proxy_on_upstream_data(c->p, ret, 0);
 		break;
-	case ListenerDirectionOutbound:
+	case ListenerDirectionInbound:
+	case ListenerDirectionUnspecified:
 		result = proxy_on_downstream_data(c->p, ret, 0);
 		break;
 	}
@@ -514,12 +514,11 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	wasm_vm_result result;
 	switch (c->direction)
 	{
-	case ListenerDirectionInbound:
-	case ListenerDirectionUnspecified:
-		result = proxy_on_upstream_data(c->p, len, 0);
-		break;
 	case ListenerDirectionOutbound:
 		result = proxy_on_downstream_data(c->p, len, 0);
+		break;
+	default:
+		result = proxy_on_upstream_data(c->p, len, 0);
 		break;
 	}
 	proxywasm_unlock(c->p);
