@@ -60,14 +60,25 @@ typedef struct
 	unsigned char *iobuf;
 	br_sslio_context *ioc;
 	proxywasm_context *pc;
+	proxywasm *p;
+	ListenerDirection direction;
 } wasm_socket_context;
 
-static wasm_socket_context *new_server_wasm_socket_context(void)
+static wasm_socket_context *new_server_wasm_socket_context(proxywasm *p)
 {
 	wasm_socket_context *c = kmalloc(sizeof(wasm_socket_context), GFP_KERNEL);
 	c->sc = kmalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
 	c->ioc = kmalloc(sizeof(br_sslio_context), GFP_KERNEL);
 	c->iobuf = kmalloc(BR_SSL_BUFSIZE_BIDI, GFP_KERNEL);
+	wasm_vm_result res = proxywasm_create_context(p);
+	if (res.err)
+	{
+		pr_err("new_server_wasm_socket_context: failed to create context: %s", res.err);
+		return NULL;
+	}
+	c->pc = proxywasm_get_context(p);
+	c->p = p;
+	c->direction = ListenerDirectionInbound;
 	return c;
 }
 
@@ -228,7 +239,7 @@ int inet_wasm_accept(struct socket *sock, struct socket *newsock, int flags, boo
 
 	if (ret == 0)
 	{
-		wasm_socket_context *sc = new_server_wasm_socket_context();
+		wasm_socket_context *sc = new_server_wasm_socket_context(NULL);
 
 		/*
 		 * Initialise the context with the cipher suites and
@@ -402,6 +413,10 @@ int wasm_recvmsg(struct sock *sock,
 
 	wasm_socket_context *sc = sock->sk_user_data;
 
+	int cpu = get_cpu();
+	printk("wasm_recvmsg: sk_incoming_cpu %d smp_processor_id %d", sock->sk_incoming_cpu, cpu);
+	put_cpu();
+
 	ret = br_sslio_read(sc->ioc, data, min(size, sizeof(data)));
 
 	if (ret <= 0)
@@ -448,7 +463,7 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	// get the cipher suite from the context
 	const br_ssl_session_parameters *params = &c->sc->eng.session;
-	printk("wasm_accept cipher suite: %d version: %d", params->cipher_suite, params->version);
+	printk("wasm_sendmsg cipher suite: %d version: %d", params->cipher_suite, params->version);
 
 	// // get the key from the context
 	// const br_x509_certificate *chain = br_ssl_engine_get_chain(&sc->sc->eng);
@@ -463,6 +478,28 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	len = copy_from_iter(data, min(size, sizeof(data)), &msg->msg_iter);
 	// printk("inet_wasm_sendmsg data %.*s len = %d", size, data, len);
 
+
+	proxywasm_lock(c->p);
+	proxywasm_set_context(c->p, c->pc);
+	wasm_vm_result result = proxy_on_upstream_data(c->p, len, 0);
+	switch (c->direction)
+	{
+	case ListenerDirectionInbound:
+	case ListenerDirectionUnspecified:
+		result = proxy_on_upstream_data(c->p, len, 0);
+		break;
+	case ListenerDirectionOutbound:
+		result = proxy_on_downstream_data(c->p, len, 0);
+		break;
+	}
+	proxywasm_unlock(c->p);
+
+	if (result.err)
+	{
+		pr_err("proxy_on_upstream/downstream_data returned an error: %s", result.err);
+		return -1;
+	}
+	
 	ret = br_sslio_write_all(c->ioc, data, len);
 	if (ret < 0)
 	{
@@ -522,7 +559,19 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	if (client && eval_connection(port, INPUT, current->comm))
 	{
-		wasm_socket_context *sc = new_server_wasm_socket_context();
+
+		proxywasm *p = this_cpu_proxywasm();
+		proxywasm_lock(p);
+
+		wasm_socket_context *sc = new_server_wasm_socket_context(p);
+
+		wasm_vm_result res = proxy_on_new_connection(p);
+		if (res.err)
+		{
+			pr_err("new_server_wasm_socket_context: failed to create context: %s", res.err);
+		}
+
+		proxywasm_unlock(p);
 
 		const char *command = "{\"command\": \"accept\", \"name\": \"8000\"}";
 		add_command(command, strlen(command));

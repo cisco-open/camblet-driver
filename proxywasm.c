@@ -124,6 +124,26 @@ proxywasm* this_cpu_proxywasm(void)
     return proxywasms[cpu];
 }
 
+void proxywasm_lock(proxywasm *p)
+{
+    wasm_vm_lock(p->vm);
+}
+
+void proxywasm_unlock(proxywasm *p)
+{
+    wasm_vm_unlock(p->vm);
+}
+
+proxywasm_context *proxywasm_get_context(proxywasm *p)
+{
+    return p->current_context;
+}
+
+void proxywasm_set_context(proxywasm *p, proxywasm_context *context)
+{
+    p->current_context = context;
+}
+
 m3ApiRawFunction(proxy_log)
 {
     m3ApiReturnType (i32)

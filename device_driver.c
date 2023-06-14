@@ -151,7 +151,7 @@ static wasm_vm_result reset_vms(void)
     return result;
 }
 
-static wasm_vm_result load_module(char *name, char *code, unsigned length, char *entrypoint)
+wasm_vm_result load_module(char *name, char *code, unsigned length, char *entrypoint)
 {
     wasm_vm_result result;
     unsigned cpu;
@@ -201,6 +201,7 @@ static wasm_vm_result load_module(char *name, char *code, unsigned length, char 
         }
         else if (strstr(name, "proxywasm") != NULL)
         {
+            printk("wasm: initializing proxywasm for %s", name);
             result = init_proxywasm_for(vm, module);
             if (result.err)
             {
