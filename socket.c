@@ -423,10 +423,6 @@ int wasm_recvmsg(struct sock *sock,
 
 	wasm_socket_context *c = sock->sk_user_data;
 
-	int cpu = get_cpu();
-	printk("wasm_recvmsg: sk_incoming_cpu %d smp_processor_id %d", sock->sk_incoming_cpu, cpu);
-	put_cpu();
-
 	ret = br_sslio_read(c->ioc, data, min(size, sizeof(data)));
 
 	if (ret <= 0)
@@ -437,8 +433,14 @@ int wasm_recvmsg(struct sock *sock,
 		goto bail;
 	}
 
+	int cpu = get_cpu();
+	printk("wasm_recvmsg: sk_incoming_cpu %d smp_processor_id %d, bytes read %d", sock->sk_incoming_cpu, cpu, ret);
+	put_cpu();
+
 	proxywasm_lock(c->p);
 	proxywasm_set_context(c->p, c->pc);
+	// c->pc->buffer = data;
+	// c->pc->buffer_size = ret;
 	wasm_vm_result result;
 	switch (c->direction)
 	{
@@ -511,6 +513,8 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	proxywasm_lock(c->p);
 	proxywasm_set_context(c->p, c->pc);
+	// c->pc->buffer = data;
+	// c->pc->buffer_size = len;
 	wasm_vm_result result;
 	switch (c->direction)
 	{

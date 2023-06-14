@@ -39,18 +39,6 @@ static int new_context_id(void)
     return atomic_inc_return(&context_id);
 }
 
-typedef struct proxywasm_context
-{
-    int id;
-
-    i32 tick_period;
-
-    //DECLARE_HASHTABLE(properties, 6);
-    struct hlist_head *properties;
-
-    struct proxywasm_context *parent;
-} proxywasm_context;
-
 proxywasm_context* new_proxywasm_context(proxywasm_context *parent)
 {
     proxywasm_context *context = kzalloc(sizeof(proxywasm_context), GFP_KERNEL);
@@ -589,7 +577,7 @@ void get_property(proxywasm_context *p, const char *key, int key_len, char **val
     *value_len = temp->value_len;
 }
 
-u32 magic_number = htonl(1025705063);
+//u32 magic_number = htonl(1025705063);
 
 void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i32 max_size, char **value, i32 *value_len)
 {
@@ -598,8 +586,10 @@ void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i
     switch (buffer_type)
     {
     case DownstreamData:
-        *value = (char *)&magic_number;
-        *value_len = sizeof(magic_number);
+        // *value = p->buffer + start;
+        // *value_len = max_size;
+        break;
+    case UpstreamData:
         break;
     default:
         break;

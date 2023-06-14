@@ -76,7 +76,22 @@ typedef enum
 } PeerType;
 
 typedef struct proxywasm proxywasm;
-typedef struct proxywasm_context proxywasm_context;
+typedef struct proxywasm_context
+{
+    int id;
+
+    i32 tick_period;
+
+    //DECLARE_HASHTABLE(properties, 6);
+    struct hlist_head *properties;
+
+    struct proxywasm_context *parent;
+
+    // buffer
+    char *buffer;
+    int buffer_size;
+
+} proxywasm_context;
 typedef struct proxywasm_filter proxywasm_filter;
 
 proxywasm *proxywasm_for_vm(wasm_vm *vm);
