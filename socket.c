@@ -33,6 +33,13 @@
 #include "certificate_ec.h"
 #endif
 
+const char *PROTOCOL_NAMES[] = {
+	"istio-peer-exchange",
+	"istio",
+};
+
+const size_t PROTOCOL_NAMES_LEN = 2;
+
 struct proto wasm_prot;
 struct proto inet_wasm_prot;
 struct proto_ops inet_wasm_ops;
@@ -60,25 +67,47 @@ typedef struct
 	unsigned char *iobuf;
 	br_sslio_context *ioc;
 	proxywasm_context *pc;
+	proxywasm *p;
+	i64 direction;
+	char *protocol;
 } wasm_socket_context;
 
-static wasm_socket_context *new_server_wasm_socket_context(void)
+static wasm_socket_context *new_server_wasm_socket_context(proxywasm *p)
 {
 	wasm_socket_context *c = kmalloc(sizeof(wasm_socket_context), GFP_KERNEL);
 	c->sc = kmalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
 	c->ioc = kmalloc(sizeof(br_sslio_context), GFP_KERNEL);
 	c->iobuf = kmalloc(BR_SSL_BUFSIZE_BIDI, GFP_KERNEL);
+	wasm_vm_result res = proxywasm_create_context(p);
+	if (res.err)
+	{
+		pr_err("new_server_wasm_socket_context: failed to create context: %s", res.err);
+		return NULL;
+	}
+	c->pc = proxywasm_get_context(p);
+	c->p = p;
+	c->direction = ListenerDirectionInbound;
+	set_property_v(c->pc, "listener_direction", (char*)&c->direction, sizeof(c->direction));
 	return c;
 }
 
-static wasm_socket_context *new_client_wasm_socket_context(void)
+static wasm_socket_context *new_client_wasm_socket_context(proxywasm *p)
 {
 	wasm_socket_context *c = kmalloc(sizeof(wasm_socket_context), GFP_KERNEL);
 	c->cc = kmalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
 	c->xc = kmalloc(sizeof(br_x509_minimal_context), GFP_KERNEL);
 	c->ioc = kmalloc(sizeof(br_sslio_context), GFP_KERNEL);
 	c->iobuf = kmalloc(BR_SSL_BUFSIZE_BIDI, GFP_KERNEL);
-	return c;
+	wasm_vm_result res = proxywasm_create_context(p);
+	if (res.err)
+	{
+		pr_err("new_client_wasm_socket_context: failed to create context: %s", res.err);
+		return NULL;
+	}
+	c->pc = proxywasm_get_context(p);
+	c->p = p;
+	c->direction = ListenerDirectionOutbound;
+	set_property_v(c->pc, "listener_direction", (char*)&c->direction, sizeof(c->direction));	return c;
 }
 
 static void free_wasm_socket_context(wasm_socket_context *sc)
@@ -228,7 +257,7 @@ int inet_wasm_accept(struct socket *sock, struct socket *newsock, int flags, boo
 
 	if (ret == 0)
 	{
-		wasm_socket_context *sc = new_server_wasm_socket_context();
+		wasm_socket_context *sc = new_server_wasm_socket_context(NULL);
 
 		/*
 		 * Initialise the context with the cipher suites and
@@ -291,7 +320,7 @@ int inet_wasm_connect(struct socket *sock,
 	{
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
-		wasm_socket_context *sc = new_client_wasm_socket_context();
+		wasm_socket_context *sc = new_client_wasm_socket_context(NULL);
 
 		/*
 		 * Initialise the context with the cipher suites and
@@ -397,19 +426,56 @@ int wasm_recvmsg(struct sock *sock,
 				 int *addr_len)
 {
 	int ret, len;
-	char data[8192];
-	// void *data = kmalloc(size, GFP_KERNEL);
+	// char data[8192];
+	void *data = kmalloc(size, GFP_KERNEL);
 
-	wasm_socket_context *sc = sock->sk_user_data;
+	wasm_socket_context *c = sock->sk_user_data;
 
-	ret = br_sslio_read(sc->ioc, data, min(size, sizeof(data)));
+	ret = br_sslio_read(c->ioc, data, min(size, sizeof(data)));
 
 	if (ret <= 0)
 	{
-		const br_ssl_engine_context *ec = sc->sc ? &sc->sc->eng : &sc->cc->eng;
+		const br_ssl_engine_context *ec = c->sc ? &c->sc->eng : &c->cc->eng;
 		if (br_ssl_engine_last_error(ec) == 0)
 			ret = 0;
 		goto bail;
+	}
+
+	if (c->protocol == NULL)
+	{
+		if (br_sslio_flush(c->ioc) == 0)
+		{
+			printk("wasm_recvmsg: TLS handshake done");
+		}
+
+		c->protocol = br_ssl_engine_get_selected_protocol(&c->sc->eng);
+
+		printk("wasm_recvmsg protocol name: %s", c->protocol);
+
+		set_property_v(c->pc, "upstream.negotiated_protocol", c->protocol, strlen(c->protocol));
+	}
+
+	proxywasm_lock(c->p);
+	proxywasm_set_context(c->p, c->pc);
+	c->pc->buffer = data;
+	c->pc->buffer_size = ret;
+	wasm_vm_result result;
+	switch (c->direction)
+	{
+	case ListenerDirectionOutbound:
+		result = proxy_on_upstream_data(c->p, ret, 0);
+		break;
+	case ListenerDirectionInbound:
+	case ListenerDirectionUnspecified:
+		result = proxy_on_downstream_data(c->p, ret, 0);
+		break;
+	}
+	proxywasm_unlock(c->p);
+
+	if (result.err)
+	{
+		pr_err("proxy_on_upstream/downstream_data returned an error: %s", result.err);
+		return -1;
 	}
 
 	// ret = br_sslio_read(sc->cc, msg->msg_iter.iov->iov_base, min(msg->msg_iter.iov->iov_len, size));
@@ -423,7 +489,7 @@ int wasm_recvmsg(struct sock *sock,
 	}
 
 bail:
-	// kfree(data);
+	kfree(data);
 
 	return ret;
 }
@@ -441,14 +507,30 @@ int inet_wasm_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
 int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 {
 	int ret, len;
-	char data[8192];
+	// char data[8192];
+	char *data = kmalloc(size, GFP_KERNEL);
 	wasm_socket_context *c = sock->sk_user_data;
 
 	// dump_msghdr(msg);
 
+	if (c->protocol == NULL)
+	{
+		if (br_sslio_flush(c->ioc) == 0)
+		{
+			printk("wasm_recvmsg: TLS handshake done");
+		}
+
+		c->protocol = br_ssl_engine_get_selected_protocol(&c->sc->eng);
+
+		printk("wasm_recvmsg protocol name: %s", c->protocol);
+
+		set_property_v(c->pc, "upstream.negotiated_protocol", c->protocol, strlen(c->protocol));
+	}
+
 	// get the cipher suite from the context
 	const br_ssl_session_parameters *params = &c->sc->eng.session;
-	printk("wasm_accept cipher suite: %d version: %d", params->cipher_suite, params->version);
+	// printk("wasm_sendmsg cipher suite: %d version: %d", params->cipher_suite, params->version);
+	printk("wasm_sendmsg protocol name: %s", br_ssl_engine_get_selected_protocol(&c->sc->eng));
 
 	// // get the key from the context
 	// const br_x509_certificate *chain = br_ssl_engine_get_chain(&sc->sc->eng);
@@ -460,9 +542,34 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	// // get the salt from the context
 	// const unsigned char *salt = br_ssl_engine_get_client_random(&sc->sc->eng);
 
-	len = copy_from_iter(data, min(size, sizeof(data)), &msg->msg_iter);
+//	len = copy_from_iter(data, min(size, sizeof(data)), &msg->msg_iter);
+	len = copy_from_iter(data, size, &msg->msg_iter);
+
 	// printk("inet_wasm_sendmsg data %.*s len = %d", size, data, len);
 
+	proxywasm_lock(c->p);
+	proxywasm_set_context(c->p, c->pc);
+	c->pc->buffer = data;
+	c->pc->buffer_size = len;
+	wasm_vm_result result;
+	switch (c->direction)
+	{
+	case ListenerDirectionOutbound:
+		result = proxy_on_downstream_data(c->p, len, 0);
+		break;
+	default:
+		result = proxy_on_upstream_data(c->p, len, 0);
+		break;
+	}
+	proxywasm_unlock(c->p);
+
+	if (result.err)
+	{
+		pr_err("proxy_on_upstream/downstream_data returned an error: %s", result.err);
+		ret = -1;
+		goto bail;
+	}
+	
 	ret = br_sslio_write_all(c->ioc, data, len);
 	if (ret < 0)
 	{
@@ -474,10 +581,15 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	if (ret < 0)
 	{
 		pr_err("br_sslio_flush returned an error");
-		return ret;
+		goto bail;
 	}
 
-	return size;
+	ret = size;
+
+bail:
+	kfree(data);
+
+	return ret;
 }
 
 int inet_wasm_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
@@ -506,7 +618,7 @@ typedef enum
 // a function to evaluate the connection if it should be intercepted
 bool eval_connection(u16 port, direction direction, const char *comm)
 {
-	return (port == 8000 || port == 8080) && direction == INPUT && strcmp(comm, "python3") == 0;
+	return (port == 8000 || port == 8080); //&& direction == INPUT && strcmp(comm, "python3") == 0;
 }
 
 struct sock *(*accept)(struct sock *sk, int flags, int *err, bool kern);
@@ -522,7 +634,19 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	if (client && eval_connection(port, INPUT, current->comm))
 	{
-		wasm_socket_context *sc = new_server_wasm_socket_context();
+
+		proxywasm *p = this_cpu_proxywasm();
+		proxywasm_lock(p);
+
+		wasm_socket_context *sc = new_server_wasm_socket_context(p);
+
+		wasm_vm_result res = proxy_on_new_connection(p);
+		if (res.err)
+		{
+			pr_err("new_server_wasm_socket_context: failed to create context: %s", res.err);
+		}
+
+		proxywasm_unlock(p);
 
 		const char *command = "{\"command\": \"accept\", \"name\": \"8000\"}";
 		add_command(command, strlen(command));
@@ -556,6 +680,8 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		 */
 		br_ssl_engine_set_buffer(&sc->sc->eng, sc->iobuf, BR_SSL_BUFSIZE_BIDI, true);
 
+		br_ssl_engine_set_protocol_names(&sc->sc->eng, PROTOCOL_NAMES, PROTOCOL_NAMES_LEN);
+
 		/*
 		 * Reset the server context, for a new handshake.
 		 */
@@ -588,7 +714,18 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	{
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
-		wasm_socket_context *sc = new_client_wasm_socket_context();
+		proxywasm *p = this_cpu_proxywasm();
+		proxywasm_lock(p);
+
+		wasm_socket_context *sc = new_client_wasm_socket_context(p);
+
+		wasm_vm_result res = proxy_on_new_connection(p);
+		if (res.err)
+		{
+			pr_err("new_client_wasm_socket_context: failed to create context: %s", res.err);
+		}
+
+		proxywasm_unlock(p);
 
 		/*
 		 * Initialise the context with the cipher suites and
@@ -614,6 +751,8 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		 * areas").
 		 */
 		br_ssl_engine_set_buffer(&sc->cc->eng, sc->iobuf, BR_SSL_BUFSIZE_BIDI, true);
+
+		br_ssl_engine_set_protocol_names(&sc->sc->eng, PROTOCOL_NAMES, PROTOCOL_NAMES_LEN);
 
 		/*
 		 * Reset the client context, for a new handshake. We provide the

@@ -76,11 +76,28 @@ typedef enum
 } PeerType;
 
 typedef struct proxywasm proxywasm;
-typedef struct proxywasm_context proxywasm_context;
+typedef struct proxywasm_context
+{
+    int id;
+
+    i32 tick_period;
+
+    //DECLARE_HASHTABLE(properties, 6);
+    struct hlist_head *properties;
+
+    struct proxywasm_context *parent;
+
+    // buffer
+    char *buffer;
+    int buffer_size;
+
+} proxywasm_context;
 typedef struct proxywasm_filter proxywasm_filter;
 
 proxywasm *proxywasm_for_vm(wasm_vm *vm);
 proxywasm *this_cpu_proxywasm(void);
+void proxywasm_lock(proxywasm *p);
+void proxywasm_unlock(proxywasm *p);
 
 wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module);
 
@@ -92,6 +109,8 @@ wasm_vm_result proxy_on_downstream_connection_close(proxywasm *p, PeerType peer_
 wasm_vm_result proxy_on_upstream_connection_close(proxywasm *p, PeerType peer_type);
 
 wasm_vm_result proxywasm_create_context(proxywasm *p);
+proxywasm_context *proxywasm_get_context(proxywasm *p);
+void proxywasm_set_context(proxywasm *p, proxywasm_context *context);
 
 // set_property_v is convenience funtion for setting a property on a context, with simple C string paths,
 // use the '.' as delimiter, those will be replaced to a '0' delimiter 
@@ -101,6 +120,6 @@ void set_property_v(proxywasm_context *p, const char *key, const void *value, co
 void get_property(proxywasm_context *p, const char *key, int key_len, char **value, int *value_len);
 void set_property(proxywasm_context *p, const char *key, int key_len, const char *value, int value_len);
 void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i32 max_size, char **value, i32 *value_len);
-void set_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i32 size, char *value, i32 value_len);
+WasmResult set_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i32 size, char *value, i32 value_len);
 
 #endif
