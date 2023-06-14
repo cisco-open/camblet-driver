@@ -83,7 +83,7 @@ static wasm_socket_context *new_server_wasm_socket_context(proxywasm *p)
 	return c;
 }
 
-static wasm_socket_context *new_client_wasm_socket_context(void)
+static wasm_socket_context *new_client_wasm_socket_context(proxywasm *p)
 {
 	wasm_socket_context *c = kmalloc(sizeof(wasm_socket_context), GFP_KERNEL);
 	c->cc = kmalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
@@ -312,7 +312,7 @@ int inet_wasm_connect(struct socket *sock,
 	{
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
-		wasm_socket_context *sc = new_client_wasm_socket_context();
+		wasm_socket_context *sc = new_client_wasm_socket_context(NULL);
 
 		/*
 		 * Initialise the context with the cipher suites and
@@ -421,20 +421,41 @@ int wasm_recvmsg(struct sock *sock,
 	char data[8192];
 	// void *data = kmalloc(size, GFP_KERNEL);
 
-	wasm_socket_context *sc = sock->sk_user_data;
+	wasm_socket_context *c = sock->sk_user_data;
 
 	int cpu = get_cpu();
 	printk("wasm_recvmsg: sk_incoming_cpu %d smp_processor_id %d", sock->sk_incoming_cpu, cpu);
 	put_cpu();
 
-	ret = br_sslio_read(sc->ioc, data, min(size, sizeof(data)));
+	ret = br_sslio_read(c->ioc, data, min(size, sizeof(data)));
 
 	if (ret <= 0)
 	{
-		const br_ssl_engine_context *ec = sc->sc ? &sc->sc->eng : &sc->cc->eng;
+		const br_ssl_engine_context *ec = c->sc ? &c->sc->eng : &c->cc->eng;
 		if (br_ssl_engine_last_error(ec) == 0)
 			ret = 0;
 		goto bail;
+	}
+
+	proxywasm_lock(c->p);
+	proxywasm_set_context(c->p, c->pc);
+	wasm_vm_result result;
+	switch (c->direction)
+	{
+	case ListenerDirectionInbound:
+	case ListenerDirectionUnspecified:
+		result = proxy_on_upstream_data(c->p, ret, 0);
+		break;
+	case ListenerDirectionOutbound:
+		result = proxy_on_downstream_data(c->p, ret, 0);
+		break;
+	}
+	proxywasm_unlock(c->p);
+
+	if (result.err)
+	{
+		pr_err("proxy_on_upstream/downstream_data returned an error: %s", result.err);
+		return -1;
 	}
 
 	// ret = br_sslio_read(sc->cc, msg->msg_iter.iov->iov_base, min(msg->msg_iter.iov->iov_len, size));
@@ -488,10 +509,9 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	len = copy_from_iter(data, min(size, sizeof(data)), &msg->msg_iter);
 	// printk("inet_wasm_sendmsg data %.*s len = %d", size, data, len);
 
-
 	proxywasm_lock(c->p);
 	proxywasm_set_context(c->p, c->pc);
-	wasm_vm_result result = proxy_on_upstream_data(c->p, len, 0);
+	wasm_vm_result result;
 	switch (c->direction)
 	{
 	case ListenerDirectionInbound:
@@ -647,7 +667,7 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	{
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
-		wasm_socket_context *sc = new_client_wasm_socket_context();
+		wasm_socket_context *sc = new_client_wasm_socket_context(NULL);
 
 		/*
 		 * Initialise the context with the cipher suites and
