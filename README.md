@@ -78,18 +78,18 @@ git clone --recurse-submodules git@github.com:cisco-open/wasm-kernel-module.git
 cd wasm-kernel-module
 ```
 
-Build the Wasm kernel module:
+Build the kernel modules(BearSSL and WASM):
 
 ```bash
 make
 ```
 
-Build the Wasm kernel module:
+Load the kernel modules(BearSSL and WASM):
 ```
 make insmod
 ```
 
-Build the Wasm kernel module:
+Unload the kernel modules(BearSSL and WASM):
 ```
 make rmmod
 ```
