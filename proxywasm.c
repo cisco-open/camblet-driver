@@ -23,6 +23,21 @@
 #define hash_for_each_possible(name, obj, member, key, bits)		\
 	hlist_for_each_entry(obj, &name[hash_min(key, bits)], member)
 
+#define FOR_ALL_FILTERS(CALL) \
+    wasm_vm_result result; \
+    proxywasm_filter *f; \
+    for (f = p->filters; f != NULL; f = f->next) \
+    { \
+        printk("wasm: Calling filter %s\n", f->name); \
+        result = CALL; \
+        if (result.err != NULL) \
+        { \
+            pr_err("wasm: Calling filter %s errored %s\n", f->name, result.err); \
+            return result; \
+        } \
+    } \
+    return result;
+
 typedef struct property_h_node
 {
     char key[256];
@@ -51,8 +66,6 @@ proxywasm_context* new_proxywasm_context(proxywasm_context *parent)
 
     return context;
 }
-
-// DEFINE_HASHTABLE(properties, 6);
 
 typedef struct proxywasm_filter
 {
@@ -299,9 +312,7 @@ m3ApiRawFunction(proxy_set_buffer_bytes)
 
     printk("wasm: calling proxy_set_buffer_bytes buffer_type '%d' (start: %d, size: %d)", buffer_type, start, size);
 
-    set_buffer_bytes(filter->proxywasm->current_context, buffer_type, start, size, buffer_data, buffer_size);
-
-    m3ApiReturn(WasmResult_Ok);
+    m3ApiReturn(set_buffer_bytes(filter->proxywasm->current_context, buffer_type, start, size, buffer_data, buffer_size));
 }
 
 static wasm_vm_result link_proxywasm_hostfunctions(proxywasm_filter *filter, wasm_vm_module *module)
@@ -466,21 +477,6 @@ error:
     return (wasm_vm_result){.err = NULL};
 }
 
-#define FOR_ALL_FILTERS(CALL) \
-    wasm_vm_result result; \
-    proxywasm_filter *f; \
-    for (f = p->filters; f != NULL; f = f->next) \
-    { \
-        printk("wasm: Calling filter %s\n", f->name); \
-        result = CALL; \
-        if (result.err != NULL) \
-        { \
-            printk("wasm: Calling filter %s errored\n", f->name, result.err); \
-            return result; \
-        } \
-    } \
-    return result;
-
 wasm_vm_result proxywasm_create_context(proxywasm *p)
 {
     proxywasm_context *context = new_proxywasm_context(p->root_context);
@@ -586,27 +582,46 @@ void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i
     switch (buffer_type)
     {
     case DownstreamData:
+    case UpstreamData:
         *value = p->buffer + start;
         *value_len = max_size;
         break;
-    case UpstreamData:
-        break;
     default:
+        pr_err("wasm: get_buffer_bytes: unknown buffer type %d", buffer_type);
         break;
     }
 }
 
-void set_buffer_bytes(struct proxywasm_context *p, BufferType buffer_type, i32 start, i32 size, char *value, i32 value_len)
+WasmResult set_buffer_bytes(struct proxywasm_context *p, BufferType buffer_type, i32 start, i32 size, char *value, i32 value_len)
 {
     printk("wasm: set_buffer_bytes BufferType: %d, start: %d, size: %d, value_len: %d", buffer_type, start, size, value_len);
+
+    WasmResult result = WasmResult_Ok;
 
     switch (buffer_type)
     {
     case DownstreamData:
-        break;
     case UpstreamData:
+        if (start == 0)
+        {
+            // prepend
+            memcpy(p->buffer + value_len, p->buffer, p->buffer_size);
+            memcpy(p->buffer, value, value_len);
+            p->buffer_size += value_len;
+        }
+        else if (start >= p->buffer_size)
+        {
+            memcpy(p->buffer + p->buffer_size, value, value_len);
+            p->buffer_size += value_len;
+        }
+        else
+            result = WasmResult_BadArgument;
         break;
     default:
+        pr_err("wasm: set_buffer_bytes: unknown buffer type %d", buffer_type);
+        result = WasmResult_NotFound;
         break;
     }
+
+    return result;
 }

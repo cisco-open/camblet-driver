@@ -120,6 +120,6 @@ void set_property_v(proxywasm_context *p, const char *key, const void *value, co
 void get_property(proxywasm_context *p, const char *key, int key_len, char **value, int *value_len);
 void set_property(proxywasm_context *p, const char *key, int key_len, const char *value, int value_len);
 void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i32 max_size, char **value, i32 *value_len);
-void set_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i32 size, char *value, i32 value_len);
+WasmResult set_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i32 size, char *value, i32 value_len);
 
 #endif
