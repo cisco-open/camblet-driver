@@ -24,6 +24,12 @@ Current restrictions for kernel-space wasm3:
 ## Development environment
 
 Our primary development environment is [Lima](https://lima-vm.io) since it supports x86_64 and ARM as well.
+As a first step checkout the code:
+
+```bash
+git clone --recurse-submodules git@github.com:cisco-open/wasm-kernel-module.git
+cd wasm-kernel-module
+```
 
 ### Lima
 
@@ -70,13 +76,6 @@ vagrant ssh
 ## Build and install
 
 *This assumes that you have created a development environment according to the previous section.*
-
-Checkout the code:
-
-```bash
-git clone --recurse-submodules git@github.com:cisco-open/wasm-kernel-module.git
-cd wasm-kernel-module
-```
 
 Build the Wasm kernel module:
 
