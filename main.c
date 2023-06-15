@@ -87,12 +87,12 @@ static int __init wasm_init(void)
         return -1;
     }
 
-    result = load_module("proxywasm_stats_filter", filter_stats, size_filter_stats, "_initialize");
-    if (result.err)
-    {
-        FATAL("load_module -> proxywasm_stats_filter: %s", result.err);
-        return -1;
-    }
+    // result = load_module("proxywasm_stats_filter", filter_stats, size_filter_stats, "_initialize");
+    // if (result.err)
+    // {
+    //     FATAL("load_module -> proxywasm_stats_filter: %s", result.err);
+    //     return -1;
+    // }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
     ret += register_btf_kfunc_id_set(BPF_PROG_TYPE_XDP, &bpf_opa_kfunc_set);

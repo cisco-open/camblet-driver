@@ -577,7 +577,7 @@ void get_property(proxywasm_context *p, const char *key, int key_len, char **val
 
 void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i32 max_size, char **value, i32 *value_len)
 {
-    printk("wasm: get_buffer_bytes BufferType: %d, start: %d, max_size: %d", buffer_type, start, max_size);
+    printk("wasm: [%d] get_buffer_bytes BufferType: %d, start: %d, max_size: %d", p->id, buffer_type, start, max_size);
 
     switch (buffer_type)
     {
@@ -594,7 +594,7 @@ void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i
 
 WasmResult set_buffer_bytes(struct proxywasm_context *p, BufferType buffer_type, i32 start, i32 size, char *value, i32 value_len)
 {
-    printk("wasm: set_buffer_bytes BufferType: %d, start: %d, size: %d, value_len: %d", buffer_type, start, size, value_len);
+    printk("wasm: [%d] set_buffer_bytes BufferType: %d, start: %d, size: %d, value_len: %d", p->id, buffer_type, start, size, value_len);
 
     WasmResult result = WasmResult_Ok;
 
@@ -605,7 +605,8 @@ WasmResult set_buffer_bytes(struct proxywasm_context *p, BufferType buffer_type,
         if (start == 0)
         {
             // prepend
-            memcpy(p->buffer + value_len, p->buffer, p->buffer_size);
+            memmove(p->buffer + value_len, p->buffer, p->buffer_size);
+//            memcpy(p->buffer + value_len, p->buffer, p->buffer_size);
             memcpy(p->buffer, value, value_len);
             p->buffer_size += value_len;
         }
