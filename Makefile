@@ -90,7 +90,7 @@ rmmod:
 
 setup-vm:
 	sudo apt update
-	sudo apt install clang libbpf-dev dwarves build-essential linux-tools-generic
+	sudo apt install -y clang libbpf-dev dwarves build-essential linux-tools-generic
 	sudo cp /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
 	sudo curl -L -o /usr/local/bin/opa https://openpolicyagent.org/downloads/v0.53.0/opa_linux_amd64_static
 	sudo chmod +x /usr/local/bin/opa
