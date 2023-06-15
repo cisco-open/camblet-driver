@@ -585,7 +585,7 @@ typedef enum
 // a function to evaluate the connection if it should be intercepted
 bool eval_connection(u16 port, direction direction, const char *comm)
 {
-	return (port == 8000 || port == 8080) && direction == INPUT && strcmp(comm, "python3") == 0;
+	return (port == 8000 || port == 8080); //&& direction == INPUT && strcmp(comm, "python3") == 0;
 }
 
 struct sock *(*accept)(struct sock *sk, int flags, int *err, bool kern);
@@ -679,7 +679,18 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	{
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
-		wasm_socket_context *sc = new_client_wasm_socket_context(NULL);
+		proxywasm *p = this_cpu_proxywasm();
+		proxywasm_lock(p);
+
+		wasm_socket_context *sc = new_client_wasm_socket_context(p);
+
+		wasm_vm_result res = proxy_on_new_connection(p);
+		if (res.err)
+		{
+			pr_err("new_client_wasm_socket_context: failed to create context: %s", res.err);
+		}
+
+		proxywasm_unlock(p);
 
 		/*
 		 * Initialise the context with the cipher suites and
