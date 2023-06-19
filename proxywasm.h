@@ -87,10 +87,14 @@ typedef struct proxywasm_context
 
     struct proxywasm_context *parent;
 
-    // buffer
-    char *buffer;
-    int buffer_size;
+    // plaintext proxywasm buffers
+    char *upstream_buffer;
+    int upstream_buffer_capacity;
+    int upstream_buffer_size;
 
+    char *downstream_buffer;
+    int downstream_buffer_capacity;
+    int downstream_buffer_size;
 } proxywasm_context;
 typedef struct proxywasm_filter proxywasm_filter;
 

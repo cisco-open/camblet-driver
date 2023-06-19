@@ -72,6 +72,138 @@ typedef struct
 	char *protocol;
 } wasm_socket_context;
 
+static char *get_direction(wasm_socket_context *c)
+{
+	if (c->direction == ListenerDirectionInbound)
+	{
+		return "server";
+	}
+	else
+	{
+		return "client";
+	}
+}
+
+static char *get_read_buffer(wasm_socket_context *c)
+{
+	if (c->direction == ListenerDirectionInbound)
+	{
+		return c->pc->downstream_buffer;
+	}
+	else
+	{
+		return c->pc->upstream_buffer;
+	}
+}
+
+static char *get_read_buffer_for_read(wasm_socket_context *c)
+{
+	if (c->direction == ListenerDirectionInbound)
+	{
+		return c->pc->downstream_buffer + c->pc->downstream_buffer_size;
+	}
+	else
+	{
+		return c->pc->upstream_buffer + c->pc->upstream_buffer_size;
+	}
+}
+
+static int get_read_buffer_capacity(wasm_socket_context *c)
+{
+	if (c->direction == ListenerDirectionInbound)
+	{
+		return c->pc->downstream_buffer_capacity - c->pc->downstream_buffer_size;
+	}
+	else
+	{
+		return c->pc->upstream_buffer_capacity - c->pc->upstream_buffer_size;
+	}
+}
+
+static int get_read_buffer_size(wasm_socket_context *c)
+{
+	if (c->direction == ListenerDirectionInbound)
+	{
+		return c->pc->downstream_buffer_size;
+	}
+	else
+	{
+		return c->pc->upstream_buffer_size;
+	}
+}
+
+static int set_read_buffer_size(wasm_socket_context *c, int size)
+{
+	if (c->direction == ListenerDirectionInbound)
+	{
+		return c->pc->downstream_buffer_size = size;
+	}
+	else
+	{
+		return c->pc->upstream_buffer_size = size;
+	}
+}
+
+static char *get_write_buffer(wasm_socket_context *c)
+{
+	if (c->direction == ListenerDirectionInbound)
+	{
+		return c->pc->upstream_buffer;
+	}
+	else
+	{
+		return c->pc->downstream_buffer;
+	}
+}
+
+static char *get_write_buffer_for_write(wasm_socket_context *c)
+{
+	if (c->direction == ListenerDirectionInbound)
+	{
+		return c->pc->upstream_buffer + c->pc->upstream_buffer_size;
+	}
+	else
+	{
+		return c->pc->downstream_buffer + c->pc->downstream_buffer_size;
+	}
+}
+
+static int get_write_buffer_capacity(wasm_socket_context *c)
+{
+	if (c->direction == ListenerDirectionInbound)
+	{
+		return c->pc->upstream_buffer_capacity - c->pc->upstream_buffer_size;
+	}
+	else
+	{
+		return c->pc->downstream_buffer_capacity - c->pc->downstream_buffer_size;
+	}
+}
+
+static int get_write_buffer_size(wasm_socket_context *c)
+{
+	if (c->direction == ListenerDirectionInbound)
+	{
+		return c->pc->upstream_buffer_size;
+	}
+	else
+	{
+		return c->pc->downstream_buffer_size;
+	}
+}
+
+static int set_write_buffer_size(wasm_socket_context *c, int size)
+{
+	if (c->direction == ListenerDirectionInbound)
+	{
+		return c->pc->upstream_buffer_size = size;
+	}
+	else
+	{
+		return c->pc->downstream_buffer_size = size;
+	}
+}
+
 static wasm_socket_context *new_server_wasm_socket_context(proxywasm *p)
 {
 	wasm_socket_context *c = kmalloc(sizeof(wasm_socket_context), GFP_KERNEL);
@@ -123,6 +255,9 @@ static void free_wasm_socket_context(wasm_socket_context *sc)
 		// }
 		kfree(sc->ioc);
 		kfree(sc->iobuf);
+
+		// TODO free the proxywasm context
+
 		kfree(sc);
 	}
 }
@@ -426,20 +561,25 @@ int wasm_recvmsg(struct sock *sock,
 				 int *addr_len)
 {
 	int ret, len;
-	// char data[8192];
-	void *data = kmalloc(size, GFP_KERNEL);
 
 	wasm_socket_context *c = sock->sk_user_data;
 
-	ret = br_sslio_read(c->ioc, data, min(size, sizeof(data)));
+	len = min(size, get_read_buffer_capacity(c));
+	// printk("wasm_recvmsg: %s br_sslio_read trying to read %d bytes", get_direction(c), len);
+	ret = br_sslio_read(c->ioc, get_read_buffer_for_read(c), len);
 
 	if (ret <= 0)
 	{
 		const br_ssl_engine_context *ec = c->sc ? &c->sc->eng : &c->cc->eng;
 		if (br_ssl_engine_last_error(ec) == 0)
 			ret = 0;
+		pr_err("wasm_recvmsg: %s br_sslio_read error %d", get_direction(c), ret);
 		goto bail;
 	}
+
+	// printk("wasm_recvmsg: br_sslio_read read %d bytes", ret);
+
+	set_read_buffer_size(c, get_read_buffer_size(c) + ret);
 
 	if (c->protocol == NULL)
 	{
@@ -450,15 +590,13 @@ int wasm_recvmsg(struct sock *sock,
 
 		c->protocol = br_ssl_engine_get_selected_protocol(&c->sc->eng);
 
-		printk("wasm_recvmsg protocol name: %s", c->protocol);
+		printk("wasm_recvmsg: protocol name: %s", c->protocol);
 
 		set_property_v(c->pc, "upstream.negotiated_protocol", c->protocol, strlen(c->protocol));
 	}
 
 	proxywasm_lock(c->p);
 	proxywasm_set_context(c->p, c->pc);
-	c->pc->buffer = data;
-	c->pc->buffer_size = ret;
 	wasm_vm_result result;
 	switch (c->direction)
 	{
@@ -474,7 +612,7 @@ int wasm_recvmsg(struct sock *sock,
 
 	if (result.err)
 	{
-		pr_err("proxy_on_upstream/downstream_data returned an error: %s", result.err);
+		pr_err("wasm_recvmsg: proxy_on_upstream/downstream_data returned an error: %s", result.err);
 		return -1;
 	}
 
@@ -482,14 +620,20 @@ int wasm_recvmsg(struct sock *sock,
 
 	// printk(KERN_INFO "inet_wasm_recvmsg -> br_sslio_read: %d bytes -> %.*s\n", ret, ret, dst);
 
-	len = copy_to_iter(data, ret, &msg->msg_iter);
-	if (len != ret)
+	int read_buffer_size = get_read_buffer_size(c);
+
+	len = copy_to_iter(get_read_buffer(c), read_buffer_size, &msg->msg_iter);
+	if (len < read_buffer_size)
 	{
-		return -ENOBUFS;
+		pr_warn("wasm_recvmsg: copy_to_iter copied less than requested");
+		//return -ENOBUFS;
 	}
 
+	set_read_buffer_size(c, read_buffer_size - len);
+
+	ret = len;
+
 bail:
-	kfree(data);
 
 	return ret;
 }
@@ -507,8 +651,7 @@ int inet_wasm_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
 int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 {
 	int ret, len;
-	// char data[8192];
-	char *data = kmalloc(size, GFP_KERNEL);
+
 	wasm_socket_context *c = sock->sk_user_data;
 
 	// dump_msghdr(msg);
@@ -517,20 +660,19 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	{
 		if (br_sslio_flush(c->ioc) == 0)
 		{
-			printk("wasm_recvmsg: TLS handshake done");
+			printk("wasm_sendmsg: TLS handshake done");
 		}
 
 		c->protocol = br_ssl_engine_get_selected_protocol(&c->sc->eng);
 
-		printk("wasm_recvmsg protocol name: %s", c->protocol);
+		printk("wasm_sendmsg: protocol name: %s", c->protocol);
 
 		set_property_v(c->pc, "upstream.negotiated_protocol", c->protocol, strlen(c->protocol));
 	}
 
 	// get the cipher suite from the context
-	const br_ssl_session_parameters *params = &c->sc->eng.session;
+	// const br_ssl_session_parameters *params = &c->sc->eng.session;
 	// printk("wasm_sendmsg cipher suite: %d version: %d", params->cipher_suite, params->version);
-	printk("wasm_sendmsg protocol name: %s", br_ssl_engine_get_selected_protocol(&c->sc->eng));
 
 	// // get the key from the context
 	// const br_x509_certificate *chain = br_ssl_engine_get_chain(&sc->sc->eng);
@@ -543,14 +685,14 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	// const unsigned char *salt = br_ssl_engine_get_client_random(&sc->sc->eng);
 
 //	len = copy_from_iter(data, min(size, sizeof(data)), &msg->msg_iter);
-	len = copy_from_iter(data, size, &msg->msg_iter);
+	len = copy_from_iter(get_write_buffer_for_write(c), min(size, get_write_buffer_capacity(c)), &msg->msg_iter);
 
 	// printk("inet_wasm_sendmsg data %.*s len = %d", size, data, len);
 
+	set_write_buffer_size(c, get_write_buffer_size(c) + len);
+
 	proxywasm_lock(c->p);
 	proxywasm_set_context(c->p, c->pc);
-	c->pc->buffer = data;
-	c->pc->buffer_size = len;
 	wasm_vm_result result;
 	switch (c->direction)
 	{
@@ -565,29 +707,37 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	if (result.err)
 	{
-		pr_err("proxy_on_upstream/downstream_data returned an error: %s", result.err);
+		pr_err("wasm_sendmsg: proxy_on_upstream/downstream_data returned an error: %s", result.err);
 		ret = -1;
 		goto bail;
 	}
+
+	// a realloc might have happened
+	//data = c->pc->write_buffer;
 	
-	ret = br_sslio_write_all(c->ioc, data, len);
+	// printk("wasm_sendmsg: %s br_sslio_write_all get_write_buffer_size = %d", get_direction(c), get_write_buffer_size(c));
+
+	ret = br_sslio_write_all(c->ioc, get_write_buffer(c), get_write_buffer_size(c));
 	if (ret < 0)
 	{
 		pr_err("br_sslio_write_all returned an error");
 		return ret;
 	}
 
+	// printk("wasm_sendmsg: finished %s br_sslio_write_all wrote = %d bytes", get_direction(c), get_write_buffer_size(c));
+
+	set_write_buffer_size(c, 0);
+
 	ret = br_sslio_flush(c->ioc);
 	if (ret < 0)
 	{
-		pr_err("br_sslio_flush returned an error");
+		pr_err("wasm_sendmsg: br_sslio_flush returned an error");
 		goto bail;
 	}
 
 	ret = size;
 
 bail:
-	kfree(data);
 
 	return ret;
 }

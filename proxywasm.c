@@ -64,6 +64,13 @@ proxywasm_context* new_proxywasm_context(proxywasm_context *parent)
     context->id = new_context_id();
     context->parent = parent;
 
+    context->upstream_buffer_capacity = 16 * 1024;
+	context->upstream_buffer_size = 0;
+	context->upstream_buffer = kmalloc(context->upstream_buffer_capacity, GFP_KERNEL);
+	context->downstream_buffer_capacity = 16 * 1024;
+	context->downstream_buffer_size = 0;
+	context->downstream_buffer = kmalloc(context->downstream_buffer_capacity, GFP_KERNEL);
+
     return context;
 }
 
@@ -310,8 +317,6 @@ m3ApiRawFunction(proxy_set_buffer_bytes)
 
     proxywasm_filter *filter = _ctx->userdata;
 
-    printk("wasm: calling proxy_set_buffer_bytes buffer_type '%d' (start: %d, size: %d)", buffer_type, start, size);
-
     m3ApiReturn(set_buffer_bytes(filter->proxywasm->current_context, buffer_type, start, size, buffer_data, buffer_size));
 }
 
@@ -519,7 +524,7 @@ void set_property(proxywasm_context *p, const char *key, int key_len, const char
     struct property_h_node *cur, *node = kmalloc(sizeof(property_h_node), GFP_KERNEL);
     uint32_t key_i = xxh32(key, key_len, 0);
     print_property_key("set_property", key, key_len);
-    printk("wasm: set_property key hash %u, key len: %d, value: %.*s", key_i, key_len, value_len, value);
+    printk("wasm: set_property key hash %u, key len: %d, value: '%.*s'", key_i, key_len, value_len, value);
 
     node->key_len = key_len;
     memcpy(node->key, key, key_len);
@@ -527,7 +532,6 @@ void set_property(proxywasm_context *p, const char *key, int key_len, const char
     node->value = (char *)kmalloc(value_len, GFP_KERNEL);
     memcpy(node->value, value, value_len);
 
-    printk("wasm: adding new bucket to hashtable");
     hash_add(p->properties, &node->node, key_i, HASHTABLE_BITS);
 
     // printk("wasm: listing all possible entries under key %lu", key_i);
@@ -582,9 +586,12 @@ void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i
     switch (buffer_type)
     {
     case DownstreamData:
+        *value = p->downstream_buffer + start;
+        *value_len = min(max_size, p->downstream_buffer_size - start);
+        break;
     case UpstreamData:
-        *value = p->buffer + start;
-        *value_len = max_size;
+        *value = p->upstream_buffer + start;
+        *value_len = min(max_size, p->upstream_buffer_size - start);
         break;
     default:
         pr_err("wasm: get_buffer_bytes: unknown buffer type %d", buffer_type);
@@ -594,29 +601,91 @@ void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i
 
 WasmResult set_buffer_bytes(struct proxywasm_context *p, BufferType buffer_type, i32 start, i32 size, char *value, i32 value_len)
 {
-    printk("wasm: [%d] set_buffer_bytes BufferType: %d, start: %d, size: %d, value_len: %d", p->id, buffer_type, start, size, value_len);
-
     WasmResult result = WasmResult_Ok;
 
     switch (buffer_type)
     {
     case DownstreamData:
-    case UpstreamData:
+        printk("wasm: [%d] set_buffer_bytes BufferType: %d, start: %d, size: %d, value_len: %d, buffer_size: %d", p->id, buffer_type, start, size, value_len, p->downstream_buffer_size);
+
         if (start == 0)
         {
-            // prepend
-            memmove(p->buffer + value_len, p->buffer, p->buffer_size);
-//            memcpy(p->buffer + value_len, p->buffer, p->buffer_size);
-            memcpy(p->buffer, value, value_len);
-            p->buffer_size += value_len;
+            if (size == 0) {
+                // realloc if needed
+                // if (p->buffer_size + value_len > p->buffer_size)
+                // {
+                //     p->buffer = krealloc(p->buffer, p->buffer_size + value_len, GFP_KERNEL);
+                // }
+
+                // prepend
+                memmove(p->downstream_buffer + value_len, p->downstream_buffer, p->downstream_buffer_size);
+                memcpy(p->downstream_buffer, value, value_len);
+                p->downstream_buffer_size += value_len;
+            } else {
+                // // realloc if needed
+                // if (value_len > p->buffer_size)
+                // {
+                //     p->buffer = krealloc(p->buffer, value_len, GFP_KERNEL);
+                // }
+
+                memcpy(p->downstream_buffer, value, value_len);
+                p->downstream_buffer_size = value_len;
+            }
         }
-        else if (start >= p->buffer_size)
+        else if (start >= p->downstream_buffer_size)
         {
-            memcpy(p->buffer + p->buffer_size, value, value_len);
-            p->buffer_size += value_len;
+            // TODO handle realloc here
+            memcpy(p->downstream_buffer + p->downstream_buffer_size, value, value_len);
+            p->downstream_buffer_size += value_len;
         }
         else
+        {
             result = WasmResult_BadArgument;
+        }
+        
+        printk("wasm: [%d] set_buffer_bytes: done downstream buffer size: %d", p->id, p->downstream_buffer_size);
+        
+        break;
+    case UpstreamData:
+        printk("wasm: [%d] set_buffer_bytes BufferType: %d, start: %d, size: %d, value_len: %d, buffer_size: %d", p->id, buffer_type, start, size, value_len, p->upstream_buffer_size);
+
+        if (start == 0)
+        {
+            if (size == 0) {
+                // realloc if needed
+                // if (p->buffer_size + value_len > p->buffer_size)
+                // {
+                //     p->buffer = krealloc(p->buffer, p->buffer_size + value_len, GFP_KERNEL);
+                // }
+
+                // prepend
+                memmove(p->upstream_buffer + value_len, p->upstream_buffer, p->upstream_buffer_size);
+                memcpy(p->upstream_buffer, value, value_len);
+                p->upstream_buffer_size += value_len;
+            } else {
+                // // realloc if needed
+                // if (value_len > p->buffer_size)
+                // {
+                //     p->buffer = krealloc(p->buffer, value_len, GFP_KERNEL);
+                // }
+
+                memcpy(p->upstream_buffer, value, value_len);
+                p->upstream_buffer_size = value_len;
+            }
+        }
+        else if (start >= p->upstream_buffer_size)
+        {
+            // TODO handle realloc here
+            memcpy(p->upstream_buffer + p->upstream_buffer_size, value, value_len);
+            p->upstream_buffer_size += value_len;
+        }
+        else
+        {
+            result = WasmResult_BadArgument;
+        }
+        
+        printk("wasm: [%d] set_buffer_bytes: done upstream buffer size: %d", p->id, p->upstream_buffer_size);
+        
         break;
     default:
         pr_err("wasm: set_buffer_bytes: unknown buffer type %d", buffer_type);
