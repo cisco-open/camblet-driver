@@ -778,13 +778,12 @@ int (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 {
 	u16 port = (u16)(sk->sk_portpair >> 16);
-	printk("wasm_accept on in app %s port: %d", current->comm, port);
+	printk("wasm_accept in app: %s on port: %d", current->comm, port);
 
 	struct sock *client = accept(sk, flags, err, kern);
 
 	if (client && eval_connection(port, INPUT, current->comm))
 	{
-
 		proxywasm *p = this_cpu_proxywasm();
 		proxywasm_lock(p);
 

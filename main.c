@@ -98,7 +98,7 @@ static int __init wasm_init(void)
 #else
     pr_warn("%s: your kernel version (<5.18) doesn't support BTF kfuncs, can't register them", THIS_MODULE->name);
 #endif
- 
+
     return ret;
 }
 

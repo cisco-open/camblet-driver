@@ -35,6 +35,7 @@
             pr_err("wasm: Calling filter %s errored %s\n", f->name, result.err); \
             return result; \
         } \
+        printk("wasm: result of calling filter %s -> %d\n", f->name, result.data->i32); \
     } \
     return result;
 
@@ -270,7 +271,7 @@ m3ApiRawFunction(proxy_get_buffer_bytes)
 
     char *value = NULL;
     int value_len = 0;
-    printk("wasm: calling proxy_get_buffer_bytes buffer_type '%d' (start: %d, max_size: %d)", buffer_type, start, max_size);
+    // printk("wasm: calling proxy_get_buffer_bytes buffer_type '%d' (start: %d, max_size: %d)", buffer_type, start, max_size);
 
     get_buffer_bytes(filter->proxywasm->current_context, buffer_type, start, max_size, &value, &value_len);
 
@@ -283,7 +284,7 @@ m3ApiRawFunction(proxy_get_buffer_bytes)
             return m3Err_mallocFailed;
         }
 
-        printk("wasm: proxy_on_memory_allocate returned %d, value points to %p, size -> %d", result.data->i32, value, value_len);
+        // printk("wasm: proxy_on_memory_allocate returned %d, value points to %p, size -> %d", result.data->i32, value, value_len);
 
         int wasm_ptr = result.data->i32;
 
@@ -293,12 +294,13 @@ m3ApiRawFunction(proxy_get_buffer_bytes)
         *return_buffer_data = wasm_ptr;
         *return_buffer_size = value_len;
 
-        printk("wasm: get_buffer_bytes ready, value_len: %d, return_buffer_data -> %d", value_len, *return_buffer_data);
+        // printk("wasm: get_buffer_bytes ready, value_len: %d, return_buffer_data -> %d", value_len, *return_buffer_data);
 
         m3ApiReturn(WasmResult_Ok);
     }
 
-    printk("wasm: get_buffer_bytes WasmResult_NotFound");
+    printk("wasm: [%d] calling proxy_get_buffer_bytes buffer_type '%d'", filter->proxywasm->current_context->id, buffer_type);
+
     m3ApiReturn(WasmResult_NotFound);
 }
 
@@ -533,10 +535,6 @@ void set_property(proxywasm_context *p, const char *key, int key_len, const char
     memcpy(node->value, value, value_len);
 
     hash_add(p->properties, &node->node, key_i, HASHTABLE_BITS);
-
-    // printk("wasm: listing all possible entries under key %lu", key_i);
-    // hash_for_each_possible(p->properties, cur, node, key_i, HASHTABLE_BITS)
-    //     pr_info("wasm:   match for key %lu: data = '%.*s'\n", key_i, cur->value_len, cur->value);
 }
 
 void get_property(proxywasm_context *p, const char *key, int key_len, char **value, int *value_len)
@@ -571,17 +569,15 @@ void get_property(proxywasm_context *p, const char *key, int key_len, char **val
         return;
     }
 
-    printk("wasm: '%.*s' key found, value: %.*s", key_len, key, temp->value_len, temp->value);
+    // printk("wasm: '%.*s' key found, value: %.*s", key_len, key, temp->value_len, temp->value);
 
     *value = temp->value;
     *value_len = temp->value_len;
 }
 
-//u32 magic_number = htonl(1025705063);
-
 void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i32 max_size, char **value, i32 *value_len)
 {
-    printk("wasm: [%d] get_buffer_bytes BufferType: %d, start: %d, max_size: %d", p->id, buffer_type, start, max_size);
+    // printk("wasm: [%d] get_buffer_bytes BufferType: %d, start: %d, max_size: %d", p->id, buffer_type, start, max_size);
 
     switch (buffer_type)
     {
@@ -606,7 +602,7 @@ WasmResult set_buffer_bytes(struct proxywasm_context *p, BufferType buffer_type,
     switch (buffer_type)
     {
     case DownstreamData:
-        printk("wasm: [%d] set_buffer_bytes BufferType: %d, start: %d, size: %d, value_len: %d, buffer_size: %d", p->id, buffer_type, start, size, value_len, p->downstream_buffer_size);
+        // printk("wasm: [%d] set_buffer_bytes BufferType: %d, start: %d, size: %d, value_len: %d, buffer_size: %d", p->id, buffer_type, start, size, value_len, p->downstream_buffer_size);
 
         if (start == 0)
         {
@@ -643,11 +639,11 @@ WasmResult set_buffer_bytes(struct proxywasm_context *p, BufferType buffer_type,
             result = WasmResult_BadArgument;
         }
         
-        printk("wasm: [%d] set_buffer_bytes: done downstream buffer size: %d", p->id, p->downstream_buffer_size);
+        // printk("wasm: [%d] set_buffer_bytes: done downstream buffer size: %d", p->id, p->downstream_buffer_size);
         
         break;
     case UpstreamData:
-        printk("wasm: [%d] set_buffer_bytes BufferType: %d, start: %d, size: %d, value_len: %d, buffer_size: %d", p->id, buffer_type, start, size, value_len, p->upstream_buffer_size);
+        // printk("wasm: [%d] set_buffer_bytes BufferType: %d, start: %d, size: %d, value_len: %d, buffer_size: %d", p->id, buffer_type, start, size, value_len, p->upstream_buffer_size);
 
         if (start == 0)
         {
@@ -684,7 +680,7 @@ WasmResult set_buffer_bytes(struct proxywasm_context *p, BufferType buffer_type,
             result = WasmResult_BadArgument;
         }
         
-        printk("wasm: [%d] set_buffer_bytes: done upstream buffer size: %d", p->id, p->upstream_buffer_size);
+        // printk("wasm: [%d] set_buffer_bytes: done upstream buffer size: %d", p->id, p->upstream_buffer_size);
         
         break;
     default:
