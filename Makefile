@@ -86,7 +86,7 @@ insmod: insmod-bearssl
 	sudo insmod wasm.ko
 
 insmod-no-proxywasm: insmod-bearssl
-	sudo insmod wasm.ko proxywasm_modules=false
+	sudo insmod wasm.ko proxywasm_modules=0
 
 rmmod:
 	sudo rmmod wasm
