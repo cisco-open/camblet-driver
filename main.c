@@ -31,6 +31,10 @@ MODULE_LICENSE("Dual MIT/GPL");
 MODULE_DESCRIPTION("A kernel module that exposes a wasm VM");
 MODULE_VERSION("0.1");
 
+static bool proxywasm_modules = true;
+module_param(proxywasm_modules, bool, 0644);
+MODULE_PARM_DESC(proxywasm_modules, "Enable/disable the proxywasm modules");
+
 int bpf_opa_eval(const char *input)
 {
     int res = this_cpu_opa_eval(input);
@@ -79,18 +83,21 @@ static int __init wasm_init(void)
     ret += chardev_init();
     ret += wasm_socket_init();
 
-    result = load_module("proxywasm_tcp_metadata_filter", filter_tcp_metadata, size_filter_tcp_metadata, "_start");
-    if (result.err)
+    if (proxywasm_modules)
     {
-        FATAL("load_module -> proxywasm_tcp_metadata_filter: %s", result.err);
-        return -1;
-    }
+        result = load_module("proxywasm_tcp_metadata_filter", filter_tcp_metadata, size_filter_tcp_metadata, "_start");
+        if (result.err)
+        {
+            FATAL("load_module -> proxywasm_tcp_metadata_filter: %s", result.err);
+            return -1;
+        }
 
-    result = load_module("proxywasm_stats_filter", filter_stats, size_filter_stats, "_initialize");
-    if (result.err)
-    {
-        FATAL("load_module -> proxywasm_stats_filter: %s", result.err);
-        return -1;
+        result = load_module("proxywasm_stats_filter", filter_stats, size_filter_stats, "_initialize");
+        if (result.err)
+        {
+            FATAL("load_module -> proxywasm_stats_filter: %s", result.err);
+            return -1;
+        }
     }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)

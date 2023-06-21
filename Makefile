@@ -79,9 +79,14 @@ help:
 logs:
 	sudo dmesg -T --follow
 
-insmod:
+insmod-bearssl:
 	sudo insmod third-party/BearSSL/bearssl.ko
+
+insmod: insmod-bearssl
 	sudo insmod wasm.ko
+
+insmod-no-proxywasm: insmod-bearssl
+	sudo insmod wasm.ko proxywasm_modules=false
 
 rmmod:
 	sudo rmmod wasm
