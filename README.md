@@ -113,3 +113,35 @@ cd wasm-kernel-module-cli
 ```
 
 Then follow the instructions [here](https://github.com/cisco-open/wasm-kernel-module-cli#cli).
+
+
+## TLS Certificates for testing
+
+You will need `cfssl` for this (`brew install cfssl` on macOS):
+
+```bash
+# Create the CA certificate
+cfssl gencert -initca ca.json | cfssljson -bare ca
+
+# Create the client/server certificate
+cfssl gencert \
+  -ca=ca.pem \
+  -ca-key=ca-key.pem \
+  -config=server.json \
+  -profile=server \
+  server.json | cfssljson -bare server
+```
+
+
+Generate the static C resources of these certificates with the BearSSL's `brssl` CLI and copy these into the given [certificate_rsa.h](certificate_rsa.h) header file:
+
+```bash
+# Trust anchor (CA)
+brssl ta ca.pem
+
+# Server certificate
+brssl chain server.pem
+
+# Server private key
+brssl skey -C server-key.pem
+```

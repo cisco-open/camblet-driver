@@ -208,6 +208,7 @@ static wasm_socket_context *new_server_wasm_socket_context(proxywasm *p)
 {
 	wasm_socket_context *c = kmalloc(sizeof(wasm_socket_context), GFP_KERNEL);
 	c->sc = kmalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
+	c->xc = kmalloc(sizeof(br_x509_minimal_context), GFP_KERNEL);
 	c->ioc = kmalloc(sizeof(br_sslio_context), GFP_KERNEL);
 	c->iobuf = kmalloc(BR_SSL_BUFSIZE_BIDI, GFP_KERNEL);
 	wasm_vm_result res = proxywasm_create_context(p);
@@ -564,6 +565,24 @@ int wasm_recvmsg(struct sock *sock,
 
 	wasm_socket_context *c = sock->sk_user_data;
 
+	if (c->protocol == NULL)
+	{
+		if (br_sslio_flush(c->ioc) == 0)
+		{
+			printk("wasm_recvmsg: TLS handshake done");
+		}
+		else
+		{
+			pr_err("wasm_recvmsg: %s TLS handshake error %d", get_direction(c), br_ssl_engine_last_error(&c->sc->eng));
+		}
+
+		c->protocol = br_ssl_engine_get_selected_protocol(&c->sc->eng);
+
+		printk("wasm_recvmsg: %s protocol name: %s", get_direction(c), c->protocol);
+
+		set_property_v(c->pc, "upstream.negotiated_protocol", c->protocol, strlen(c->protocol));
+	}
+
 	len = min(size, get_read_buffer_capacity(c));
 	// printk("wasm_recvmsg: %s br_sslio_read trying to read %d bytes", get_direction(c), len);
 	ret = br_sslio_read(c->ioc, get_read_buffer_for_read(c), len);
@@ -573,27 +592,13 @@ int wasm_recvmsg(struct sock *sock,
 		const br_ssl_engine_context *ec = c->sc ? &c->sc->eng : &c->cc->eng;
 		if (br_ssl_engine_last_error(ec) == 0)
 			ret = 0;
-		pr_err("wasm_recvmsg: %s br_sslio_read error %d", get_direction(c), ret);
+		pr_err("wasm_recvmsg: %s br_sslio_read error %d", get_direction(c), br_ssl_engine_last_error(ec));
 		goto bail;
 	}
 
 	// printk("wasm_recvmsg: br_sslio_read read %d bytes", ret);
 
 	set_read_buffer_size(c, get_read_buffer_size(c) + ret);
-
-	if (c->protocol == NULL)
-	{
-		if (br_sslio_flush(c->ioc) == 0)
-		{
-			printk("wasm_recvmsg: TLS handshake done");
-		}
-
-		c->protocol = br_ssl_engine_get_selected_protocol(&c->sc->eng);
-
-		printk("wasm_recvmsg: protocol name: %s", c->protocol);
-
-		set_property_v(c->pc, "upstream.negotiated_protocol", c->protocol, strlen(c->protocol));
-	}
 
 	proxywasm_lock(c->p);
 	proxywasm_set_context(c->p, c->pc);
@@ -662,10 +667,14 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 		{
 			printk("wasm_sendmsg: TLS handshake done");
 		}
+		else
+		{
+			pr_err("wasm_sendmsg: %s TLS handshake error %d", get_direction(c), br_ssl_engine_last_error(&c->sc->eng));
+		}
 
 		c->protocol = br_ssl_engine_get_selected_protocol(&c->sc->eng);
 
-		printk("wasm_sendmsg: protocol name: %s", c->protocol);
+		printk("wasm_sendmsg: %s protocol name: %s", get_direction(c), c->protocol);
 
 		set_property_v(c->pc, "upstream.negotiated_protocol", c->protocol, strlen(c->protocol));
 	}
@@ -720,7 +729,8 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	ret = br_sslio_write_all(c->ioc, get_write_buffer(c), get_write_buffer_size(c));
 	if (ret < 0)
 	{
-		pr_err("br_sslio_write_all returned an error");
+		const br_ssl_engine_context *ec = c->sc ? &c->sc->eng : &c->cc->eng;
+		pr_err("wasm_sendmsg: %s br_sslio_write_all error %d", get_direction(c), br_ssl_engine_last_error(ec));
 		return ret;
 	}
 
@@ -815,6 +825,11 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		 */
 #if !RSA_OR_EC
 		br_ssl_server_init_full_rsa(sc->sc, CHAIN, CHAIN_LEN, &RSA);
+
+		br_x509_minimal_init_full(sc->xc, TAs, TAs_NUM);
+
+		br_ssl_engine_set_default_rsavrfy(&sc->sc->eng);
+		br_ssl_engine_set_x509(&sc->sc->eng, &sc->xc->vtable);
 #elif
 		br_ssl_server_init_full_ec(sc->sc, CHAIN, CHAIN_LEN, BR_KEYTYPE_EC, &EC);
 #endif
@@ -830,6 +845,8 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		br_ssl_engine_set_buffer(&sc->sc->eng, sc->iobuf, BR_SSL_BUFSIZE_BIDI, true);
 
 		br_ssl_engine_set_protocol_names(&sc->sc->eng, PROTOCOL_NAMES, PROTOCOL_NAMES_LEN);
+
+		br_ssl_server_set_trust_anchor_names_alt(sc->sc, TAs, TAs_NUM);
 
 		/*
 		 * Reset the server context, for a new handshake.
@@ -891,6 +908,11 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		 */
 		br_ssl_client_init_full(sc->cc, sc->xc, TAs, TAs_NUM);
 
+		br_x509_minimal_init_full(sc->xc, TAs, TAs_NUM);
+		br_ssl_engine_set_x509(&sc->cc->eng, &sc->xc->vtable);
+
+		br_ssl_client_set_single_rsa(sc->cc, CHAIN, CHAIN_LEN, &RSA, br_rsa_pkcs1_sign_get_default());
+
 		/*
 		 * Set the I/O buffer to the provided array. We
 		 * allocated a buffer large enough for full-duplex
@@ -901,14 +923,14 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		 */
 		br_ssl_engine_set_buffer(&sc->cc->eng, sc->iobuf, BR_SSL_BUFSIZE_BIDI, true);
 
-		br_ssl_engine_set_protocol_names(&sc->sc->eng, PROTOCOL_NAMES, PROTOCOL_NAMES_LEN);
+		br_ssl_engine_set_protocol_names(&sc->cc->eng, PROTOCOL_NAMES, PROTOCOL_NAMES_LEN);
 
 		/*
 		 * Reset the client context, for a new handshake. We provide the
 		 * target host name: it will be used for the SNI extension. The
 		 * last parameter is 0: we are not trying to resume a session.
 		 */
-		if (br_ssl_client_reset(sc->cc, server_name, 0) != 1)
+		if (br_ssl_client_reset(sc->cc, server_name, false) != 1)
 		{
 			pr_err("br_ssl_client_reset returned an error");
 		}
