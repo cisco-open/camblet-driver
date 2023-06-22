@@ -752,13 +752,22 @@ int inet_wasm_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 
 void wasm_shutdown(struct sock *sk, int how)
 {
-	printk("wasm_shutdown is running for sk %p", sk);
+	printk("wasm_shutdown: running for sk %p", sk);
 	wasm_socket_context *c = sk->sk_user_data;
 	free_wasm_socket_context(c);
 	sk->sk_user_data = NULL;
-	printk("wasm_shutdown -> tcp_shutdown is running for sk %p", sk);
+	printk("wasm_shutdown: tcp_shutdown is running for sk %p", sk);
 	tcp_shutdown(sk, how);
-	printk("wasm_shutdown -> tcp_shutdown is done for sk %p", sk);
+	printk("wasm_shutdown: tcp_shutdown is done for sk %p", sk);
+}
+
+void wasm_destroy(struct sock *sk)
+{
+	printk("wasm_destroy: running for sk %p", sk);
+	wasm_socket_context *c = sk->sk_user_data;
+	free_wasm_socket_context(c);
+	sk->sk_user_data = NULL;
+	tcp_prot.destroy(sk);
 }
 
 // an enum for the direction
@@ -988,6 +997,7 @@ int wasm_socket_init(void)
 	wasm_prot.recvmsg = wasm_recvmsg;
 	wasm_prot.sendmsg = wasm_sendmsg;
 	wasm_prot.shutdown = wasm_shutdown;
+	wasm_prot.destroy = wasm_destroy;
 
 	printk(KERN_INFO "WASM socket support loaded.");
 
