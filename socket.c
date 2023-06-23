@@ -8,8 +8,8 @@
  * modified, or distributed except according to those terms.
  */
 
-#include <linux/module.h> /* Needed by all modules */
-#include <linux/kernel.h> /* Needed for KERN_INFO */
+#include <linux/module.h>
+#include <linux/kernel.h>
 #include <net/protocol.h>
 #include <linux/tcp.h>
 #include <linux/version.h>
@@ -214,7 +214,7 @@ static wasm_socket_context *new_server_wasm_socket_context(proxywasm *p)
 	c->pc = proxywasm_get_context(p);
 	c->p = p;
 	c->direction = ListenerDirectionInbound;
-	set_property_v(c->pc, "listener_direction", (char*)&c->direction, sizeof(c->direction));
+	set_property_v(c->pc, "listener_direction", (char *)&c->direction, sizeof(c->direction));
 	return c;
 }
 
@@ -231,7 +231,8 @@ static wasm_socket_context *new_client_wasm_socket_context(proxywasm *p)
 	c->pc = proxywasm_get_context(p);
 	c->p = p;
 	c->direction = ListenerDirectionOutbound;
-	set_property_v(c->pc, "listener_direction", (char*)&c->direction, sizeof(c->direction));	return c;
+	set_property_v(c->pc, "listener_direction", (char *)&c->direction, sizeof(c->direction));
+	return c;
 }
 
 static void free_wasm_socket_context(wasm_socket_context *sc)
@@ -614,8 +615,6 @@ int wasm_recvmsg(struct sock *sock,
 		return -1;
 	}
 
-	// ret = br_sslio_read(sc->cc, msg->msg_iter.iov->iov_base, min(msg->msg_iter.iov->iov_len, size));
-
 	// printk(KERN_INFO "inet_wasm_recvmsg -> br_sslio_read: %d bytes -> %.*s\n", ret, ret, dst);
 
 	int read_buffer_size = get_read_buffer_size(c);
@@ -624,7 +623,6 @@ int wasm_recvmsg(struct sock *sock,
 	if (len < read_buffer_size)
 	{
 		pr_warn("wasm_recvmsg: copy_to_iter copied less than requested");
-		//return -ENOBUFS;
 	}
 
 	set_read_buffer_size(c, read_buffer_size - len);
@@ -686,7 +684,7 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	// // get the salt from the context
 	// const unsigned char *salt = br_ssl_engine_get_client_random(&sc->sc->eng);
 
-//	len = copy_from_iter(data, min(size, sizeof(data)), &msg->msg_iter);
+	//	len = copy_from_iter(data, min(size, sizeof(data)), &msg->msg_iter);
 	len = copy_from_iter(get_write_buffer_for_write(c), min(size, get_write_buffer_capacity(c)), &msg->msg_iter);
 
 	// printk("inet_wasm_sendmsg data %.*s len = %d", size, data, len);
@@ -715,8 +713,8 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	}
 
 	// a realloc might have happened
-	//data = c->pc->write_buffer;
-	
+	// data = c->pc->write_buffer;
+
 	// printk("wasm_sendmsg: %s br_sslio_write_all get_write_buffer_size = %d", get_direction(c), get_write_buffer_size(c));
 
 	ret = br_sslio_write_all(&c->ioc, get_write_buffer(c), get_write_buffer_size(c));
@@ -790,7 +788,7 @@ int (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 {
 	u16 port = (u16)(sk->sk_portpair >> 16);
-	printk("wasm_accept in app: %s on port: %d", current->comm, port);
+	printk("wasm_accept: app: %s on port: %d", current->comm, port);
 
 	struct sock *client = accept(sk, flags, err, kern);
 
