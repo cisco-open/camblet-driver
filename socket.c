@@ -807,8 +807,9 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		proxywasm_unlock(p);
 
+		// Sample how to send a command to the userspace agent
 		const char *command = "{\"command\": \"accept\", \"name\": \"8000\"}";
-		add_command(command, strlen(command));
+		send_command(command, strlen(command));
 
 		/*
 		 * Initialise the context with the cipher suites and

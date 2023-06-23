@@ -47,7 +47,7 @@ static unsigned long command_list_lock_flags;
 static LIST_HEAD(command_list);
 
 // create a function to add a command to the list (called from the VM), locked with a spinlock
-void add_command(char *data, size_t size)
+void send_command(char *data, size_t size)
 {
     struct command *cmd = kmalloc(sizeof(struct command), GFP_KERNEL);
     cmd->data = kmalloc(size, GFP_KERNEL);

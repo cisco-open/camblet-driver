@@ -145,3 +145,20 @@ brssl chain server.pem
 # Server private key
 brssl skey -C server-key.pem
 ```
+
+## Test mTLS
+
+The kernel module offers TLS termination on certain ports selected by a rule-set:
+
+```bash
+# Build and insert the module, then follow the logs
+make
+make insmod
+make logs
+
+# In another terminal start a server
+lima python3 -m http.server
+
+# In another terminal connect to the server (over plaintext, will be TLS terminated by the kernel)
+lima curl -v http://localhost:8000
+```
