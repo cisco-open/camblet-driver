@@ -753,6 +753,38 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	return ret;
 }
 
+static size_t
+hextobin(unsigned char *dst, const char *src)
+{
+	size_t num;
+	unsigned acc;
+	int z;
+
+	num = 0;
+	z = 0;
+	acc = 0;
+	while (*src != 0) {
+		int c = *src ++;
+		if (c >= '0' && c <= '9') {
+			c -= '0';
+		} else if (c >= 'A' && c <= 'F') {
+			c -= ('A' - 10);
+		} else if (c >= 'a' && c <= 'f') {
+			c -= ('a' - 10);
+		} else {
+			continue;
+		}
+		if (z) {
+			*dst ++ = (acc << 4) + c;
+			num ++;
+		} else {
+			acc = c;
+		}
+		z = !z;
+	}
+	return num;
+}
+
 int wasm_socket_init(void)
 {
 	// let's overwrite tcp_port with our own implementation
@@ -767,6 +799,43 @@ int wasm_socket_init(void)
 	wasm_prot.sendmsg = wasm_sendmsg;
 	wasm_prot.shutdown = wasm_shutdown;
 	wasm_prot.destroy = wasm_destroy;
+
+	br_hmac_drbg_context ctx;
+	unsigned char seed[42];
+	size_t seed_len;
+
+	seed_len = hextobin(seed,
+		"009A4D6792295A7F730FC3F2B49CBC0F62E862272F"
+		"01795EDF0D54DB760F156D0DAC04C0322B3A204224");
+	br_hmac_drbg_init(&ctx, &br_sha256_vtable, seed, seed_len);
+
+
+	br_rsa_keygen rsa_keygen = br_rsa_keygen_get_default();
+
+	br_rsa_private_key* rsa_priv = kmalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
+	void* raw_priv_key = kmalloc(sizeof(void*), GFP_KERNEL);
+
+	br_rsa_public_key* rsa_pub = kmalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
+	void* raw_pub_key = kmalloc(sizeof(void*), GFP_KERNEL);
+
+
+	uint32_t result = rsa_keygen(&ctx.vtable, rsa_priv, raw_priv_key, rsa_pub, raw_pub_key, 2048, 3);
+	if (result == 1) {
+		printk("RSA keys are successfully generated.");
+	}
+
+	printk("Generating private exponent");
+	br_rsa_compute_privexp rsa_priv_exp_comp = br_rsa_compute_privexp_get_default();
+	void* priv_exponent = kmalloc(sizeof(void*), GFP_KERNEL);
+	size_t priv_exponent_size = rsa_priv_exp_comp(priv_exponent, rsa_priv, 3);
+
+	printk("Private exponent generated");
+
+	void* priv_key_in_der = kmalloc(sizeof(void*), GFP_KERNEL);
+
+	size_t enc_key_length = br_encode_rsa_raw_der(priv_key_in_der, rsa_priv, rsa_pub, priv_exponent, priv_exponent_size);
+	printk("Private key encoded to raw der format");
+
 
 	printk(KERN_INFO "WASM socket support loaded.");
 
