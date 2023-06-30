@@ -16,6 +16,9 @@
 #include <net/tcp.h>
 #include <net/sock.h>
 #include <net/ip.h>
+
+#include <linux/fs.h>
+#include <linux/slab.h>
 #include <linux/uaccess.h>
 
 #include "bearssl.h"
@@ -753,6 +756,28 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	return ret;
 }
 
+int write_to_file(const char *name, const void *data, size_t len)
+{
+	struct file *filp;
+	ssize_t ret;
+
+	filp = filp_open(name, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (IS_ERR(filp)) {
+		printk(KERN_ERR "ERROR: cannot open file '%s' for writing\n", name);
+		return 0;
+	}
+
+	ret = kernel_write(filp, data, len, &filp->f_pos);
+	if (ret != len) {
+		printk(KERN_ERR "ERROR: cannot write to file '%s'\n", name);
+		filp_close(filp, NULL);
+		return 0;
+	}
+
+	filp_close(filp, NULL);
+	return 1;
+}
+
 int wasm_socket_init(void)
 {
 	// let's overwrite tcp_port with our own implementation
@@ -769,8 +794,14 @@ int wasm_socket_init(void)
 	wasm_prot.destroy = wasm_destroy;
 
 	br_hmac_drbg_context ctx;
-	br_hmac_drbg_init(&ctx, &br_sha256_vtable, "RSA keygen seed", 15);
+	br_prng_seeder seeder;
 
+	seeder = br_prng_seeder_system(NULL);
+
+	br_hmac_drbg_init(&ctx, &br_sha256_vtable, NULL, 0);
+	if (!seeder(&ctx.vtable)) {
+		printk("ERROR: system source of randomness failed");
+	}
 
 	br_rsa_keygen rsa_keygen = br_rsa_keygen_get_default();
 
@@ -805,7 +836,7 @@ int wasm_socket_init(void)
 	unsigned char *pem = kmalloc(pem_len+1, GFP_KERNEL);
 	br_pem_encode(pem, encoded_rsa, len, "RSA PRIVATE KEY", 0);
 
-	printk("%s", pem);
+	write_to_file("almafa", pem, pem_len);
 
 	printk(KERN_INFO "WASM socket support loaded.");
 
