@@ -786,12 +786,26 @@ int wasm_socket_init(void)
 		printk("RSA keys are successfully generated.");
 	}
 
-	size_t pem_len = br_pem_encode(NULL, NULL, BR_RSA_KBUF_PRIV_SIZE(2048), "RSA PRIVATE KEY", 0);
+	printk("Generating private exponent");
+ 	br_rsa_compute_privexp rsa_priv_exp_comp = br_rsa_compute_privexp_get_default();
+ 	unsigned char priv_exponent[256];
+ 	size_t priv_exponent_size = rsa_priv_exp_comp(priv_exponent, &rsa_priv, 3);
+ 	if (rsa_pub.nlen != priv_exponent_size) {
+ 		printk("Error happened during priv_exponent generation");
+ 	}
 
-	void *pem = kmalloc(pem_len+1, GFP_KERNEL);
-	br_pem_encode(pem, raw_priv_key, BR_RSA_KBUF_PRIV_SIZE(2048), "RSA PRIVATE KEY", 0);
+	size_t len = br_encode_rsa_raw_der(NULL, &rsa_priv, &rsa_pub, priv_exponent, priv_exponent_size);
 
-	printk("%s ", &pem[1]);
+	unsigned char* encoded_rsa = kmalloc(len, GFP_KERNEL);
+	br_encode_rsa_raw_der(encoded_rsa, &rsa_priv, &rsa_pub, priv_exponent, priv_exponent_size);
+
+
+	size_t pem_len = br_pem_encode(NULL, NULL, len, "RSA PRIVATE KEY", 0);
+
+	unsigned char *pem = kmalloc(pem_len+1, GFP_KERNEL);
+	br_pem_encode(pem, encoded_rsa, len, "RSA PRIVATE KEY", 0);
+
+	printk("%s", pem);
 
 	printk(KERN_INFO "WASM socket support loaded.");
 
