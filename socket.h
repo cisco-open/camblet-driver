@@ -11,8 +11,6 @@
 #ifndef _WASM_H
 #define _WASM_H
 
-#define SOCK_WASM 9 /* new protocol */
-
 int wasm_socket_init(void);
 void wasm_socket_exit(void);
 
