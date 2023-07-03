@@ -23,11 +23,12 @@ Current restrictions for kernel-space wasm3:
 
 ## Development environment
 
-Our primary development environment is [Lima](https://lima-vm.io) since it supports x86_64 and ARM as well.
+Our primary development environment is [Lima](https://lima-vm.io) since it supports x86_64 and ARM as well. The module was tested on Ubuntu and Arch Linux and requires kernel version 5.19 and upwards.
+
 As a first step checkout the code:
 
 ```bash
-git clone --recurse-submodules git@github.com:cisco-open/wasm-kernel-module.git
+git clone --recurse-submodules https://github.com/cisco-open/wasm-kernel-module.git
 cd wasm-kernel-module
 ```
 
@@ -108,7 +109,7 @@ make logs
 Install the [CLI](https://github.com/cisco-open/wasm-kernel-module-cli) for the kernel module:
 
 ```bash
-git clone git@github.com:cisco-open/wasm-kernel-module-cli.git
+git clone https://github.com/cisco-open/wasm-kernel-module-cli.git
 cd wasm-kernel-module-cli
 ```
 
