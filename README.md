@@ -88,7 +88,8 @@ cd wasm-kernel-module
 Build the kernel modules(BearSSL and WASM):
 
 ```bash
-make
+# Build on all CPU cores parallelly
+make -j$(nproc)
 ```
 
 Load the kernel modules(BearSSL and WASM):

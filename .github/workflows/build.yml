@@ -28,7 +28,7 @@ jobs:
 
     - name: Build the kernel module
       working-directory: wasm-kernel-module
-      run: make
+      run: make -j$(nproc)
 
     # Proxywasm module loading freezes the kernel on the GitHub Actions VM
     - name: Run the kernel module
