@@ -116,7 +116,7 @@ typedef struct proxywasm
     proxywasm_context *current_context;
 } proxywasm;
 
-static proxywasm *proxywasms[NR_CPUS] = {0};
+static proxywasm *proxywasms[NR_CPUS];
 
 wasm_vm_result proxy_on_memory_allocate(proxywasm_filter *filter, i32 size)
 {
