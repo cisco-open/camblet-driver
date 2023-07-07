@@ -24,6 +24,7 @@
 #include "bearssl.h"
 #include "device_driver.h"
 #include "proxywasm.h"
+#include "csr.h"
 #include "socket.h"
 
 #define RSA_OR_EC 0
@@ -43,6 +44,8 @@ const size_t ALPNs_NUM = sizeof(ALPNs) / sizeof(ALPNs[0]);
 
 static struct proto wasm_prot;
 
+static br_hmac_drbg_context hmac_drbg_ctx;
+
 typedef struct
 {
 	union
@@ -54,6 +57,10 @@ typedef struct
 	unsigned char iobuf[BR_SSL_BUFSIZE_BIDI];
 	br_sslio_context ioc;
 	br_x509_minimal_context xc;
+
+	br_rsa_private_key *rsa_priv;
+	br_rsa_public_key *rsa_pub;
+	br_x509_certificate *cert;
 
 	proxywasm_context *pc;
 	proxywasm *p;
@@ -564,6 +571,20 @@ void wasm_destroy(struct sock *sk)
 	tcp_v4_destroy_sock(sk);
 }
 
+//BearSSL RSA Keygen related functions
+//Initialize BearSSL random number generator with a unix getrandom backed seeder
+void init_rnd_gen(void) {
+
+	br_prng_seeder seeder;
+
+	seeder = br_prng_seeder_system(NULL);
+
+	br_hmac_drbg_init(&hmac_drbg_ctx, &br_sha256_vtable, NULL, 0);
+	if (!seeder(&hmac_drbg_ctx.vtable)) {
+		printk(KERN_ERR "system source of randomness failed");
+	}
+}
+
 // an enum for the direction
 typedef enum
 {
@@ -581,6 +602,57 @@ struct sock *(*accept)(struct sock *sk, int flags, int *err, bool kern);
 
 int (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 
+int	(*bind)(struct sock *sk,struct sockaddr *addr, int addr_len);
+
+int	wasm_bind(struct sock *sk,struct sockaddr *addr, int addr_len) {
+	u16 port = (u16)(sk->sk_portpair >> 16);
+	int ret = bind(sk, addr, addr_len);
+	if (ret == 0 && eval_connection(port, INPUT, current->comm)){
+
+		proxywasm *p = this_cpu_proxywasm();
+		proxywasm_lock(p);
+		wasm_socket_context *sc = new_server_wasm_socket_context(p);
+		proxywasm_unlock(p);
+		
+		br_rsa_keygen rsa_keygen = br_rsa_keygen_get_default();
+
+		unsigned char raw_priv_key[BR_RSA_KBUF_PRIV_SIZE(2048)];
+		unsigned char raw_pub_key[BR_RSA_KBUF_PUB_SIZE(2048)];
+
+
+		uint32_t result = rsa_keygen(&hmac_drbg_ctx.vtable, sc->rsa_priv, raw_priv_key, sc->rsa_pub, raw_pub_key, 2048, 3);
+		if (result == 1) {
+			printk("RSA keys are successfully generated.");
+		}
+
+		printk("Generating private exponent");
+		br_rsa_compute_privexp rsa_priv_exp_comp = br_rsa_compute_privexp_get_default();
+		unsigned char priv_exponent[256];
+		size_t priv_exponent_size = rsa_priv_exp_comp(priv_exponent, sc->rsa_priv, 3);
+		if (sc->rsa_pub->nlen != priv_exponent_size) {
+			printk("Error happened during priv_exponent generation");
+		}
+
+		size_t len = br_encode_rsa_raw_der(NULL, sc->rsa_priv, sc->rsa_pub, priv_exponent, priv_exponent_size);
+
+		unsigned char* encoded_rsa = kmalloc(len, GFP_KERNEL);
+		br_encode_rsa_raw_der(encoded_rsa, sc->rsa_priv, sc->rsa_pub, priv_exponent, priv_exponent_size);
+
+
+		size_t pem_len = br_pem_encode(NULL, NULL, len, "RSA PRIVATE KEY", 0);
+
+		unsigned char *pem = kmalloc(pem_len+1, GFP_KERNEL);
+		br_pem_encode(pem, encoded_rsa, len, "RSA PRIVATE KEY", 0);
+
+		proxywasm_lock(p);
+		wasm_vm_result res = gen_csr(p->vm, pem, len);
+		proxywasm_unlock(p);
+
+	}
+
+	return ret;
+}
+
 struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 {
 	u16 port = (u16)(sk->sk_portpair >> 16);
@@ -593,7 +665,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		proxywasm *p = this_cpu_proxywasm();
 		proxywasm_lock(p);
 
-		wasm_socket_context *sc = new_server_wasm_socket_context(p);
+		wasm_socket_context *sc = sock->sk_user_data;
 
 		wasm_vm_result res = proxy_on_new_connection(p);
 		if (res.err)
@@ -756,36 +828,16 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	return ret;
 }
 
-int write_to_file(const char *name, const void *data, size_t len)
-{
-	struct file *filp;
-	ssize_t ret;
-
-	filp = filp_open(name, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-	if (IS_ERR(filp)) {
-		printk(KERN_ERR "ERROR: cannot open file '%s' for writing\n", name);
-		return 0;
-	}
-
-	ret = kernel_write(filp, data, len, &filp->f_pos);
-	if (ret != len) {
-		printk(KERN_ERR "ERROR: cannot write to file '%s'\n", name);
-		filp_close(filp, NULL);
-		return 0;
-	}
-
-	filp_close(filp, NULL);
-	return 1;
-}
-
 int wasm_socket_init(void)
 {
 	// let's overwrite tcp_port with our own implementation
 	accept = tcp_prot.accept;
 	connect = tcp_prot.connect;
+	bind = tcp_prot.bind;
 
 	tcp_prot.accept = wasm_accept;
 	tcp_prot.connect = wasm_connect;
+	tcp_prot.bind = wasm_bind;
 
 	memcpy(&wasm_prot, &tcp_prot, sizeof(wasm_prot));
 	wasm_prot.recvmsg = wasm_recvmsg;
@@ -793,50 +845,8 @@ int wasm_socket_init(void)
 	wasm_prot.shutdown = wasm_shutdown;
 	wasm_prot.destroy = wasm_destroy;
 
-	br_hmac_drbg_context ctx;
-	br_prng_seeder seeder;
-
-	seeder = br_prng_seeder_system(NULL);
-
-	br_hmac_drbg_init(&ctx, &br_sha256_vtable, NULL, 0);
-	if (!seeder(&ctx.vtable)) {
-		printk("ERROR: system source of randomness failed");
-	}
-
-	br_rsa_keygen rsa_keygen = br_rsa_keygen_get_default();
-
-	br_rsa_private_key rsa_priv;
-	unsigned char raw_priv_key[BR_RSA_KBUF_PRIV_SIZE(2048)];
-
-	br_rsa_public_key rsa_pub;
-	unsigned char raw_pub_key[BR_RSA_KBUF_PUB_SIZE(2048)];
-
-
-	uint32_t result = rsa_keygen(&ctx.vtable, &rsa_priv, raw_priv_key, &rsa_pub, raw_pub_key, 2048, 3);
-	if (result == 1) {
-		printk("RSA keys are successfully generated.");
-	}
-
-	printk("Generating private exponent");
- 	br_rsa_compute_privexp rsa_priv_exp_comp = br_rsa_compute_privexp_get_default();
- 	unsigned char priv_exponent[256];
- 	size_t priv_exponent_size = rsa_priv_exp_comp(priv_exponent, &rsa_priv, 3);
- 	if (rsa_pub.nlen != priv_exponent_size) {
- 		printk("Error happened during priv_exponent generation");
- 	}
-
-	size_t len = br_encode_rsa_raw_der(NULL, &rsa_priv, &rsa_pub, priv_exponent, priv_exponent_size);
-
-	unsigned char* encoded_rsa = kmalloc(len, GFP_KERNEL);
-	br_encode_rsa_raw_der(encoded_rsa, &rsa_priv, &rsa_pub, priv_exponent, priv_exponent_size);
-
-
-	size_t pem_len = br_pem_encode(NULL, NULL, len, "RSA PRIVATE KEY", 0);
-
-	unsigned char *pem = kmalloc(pem_len+1, GFP_KERNEL);
-	br_pem_encode(pem, encoded_rsa, len, "RSA PRIVATE KEY", 0);
-
-	write_to_file("almafa", pem, pem_len);
+	//Initialize BearSSL random number generator
+	init_rnd_gen();
 
 	printk(KERN_INFO "WASM socket support loaded.");
 

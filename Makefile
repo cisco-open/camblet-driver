@@ -58,6 +58,7 @@ wasm-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  main.o \
 			  netfilter.o \
 			  hashtable.o \
+			  csr.o \
 			  runtime.o \
 			  worker_thread.o \
 			  opa.o \

@@ -24,6 +24,7 @@
 #include "socket.h"
 
 #include "filter_stats.h"
+#include "module_csr.h"
 #include "filter_tcp_metadata.h"
 
 MODULE_AUTHOR("Cisco Systems");
@@ -96,6 +97,13 @@ static int __init wasm_init(void)
         if (result.err)
         {
             FATAL("load_module -> proxywasm_stats_filter: %s", result.err);
+            return -1;
+        }
+
+        result = load_module("csr_module", module_csr, size_module_csr, "_start");
+        if (result.err)
+        {
+            FATAL("load_module -> csr_gen_filter: %s", result.err);
             return -1;
         }
     }
