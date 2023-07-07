@@ -78,8 +78,8 @@ static int __init wasm_init(void)
 
     int ret = 0;
 
-    ret += start_netfilter_submodule();
-    ret += worker_thread_init();
+    // ret += start_netfilter_submodule();
+    // ret += worker_thread_init();
     ret += chardev_init();
     ret += wasm_socket_init();
 
@@ -92,12 +92,13 @@ static int __init wasm_init(void)
             return -1;
         }
 
-        result = load_module("proxywasm_stats_filter", filter_stats, size_filter_stats, "_initialize");
-        if (result.err)
-        {
-            FATAL("load_module -> proxywasm_stats_filter: %s", result.err);
-            return -1;
-        }
+        // TODO fix the stats filter, it does nasty things on x86_64
+        // result = load_module("proxywasm_stats_filter", filter_stats, size_filter_stats, "_initialize");
+        // if (result.err)
+        // {
+        //     FATAL("load_module -> proxywasm_stats_filter: %s", result.err);
+        //     return -1;
+        // }
     }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
@@ -113,8 +114,8 @@ static void __exit wasm_exit(void)
 {
     wasm_socket_exit();
     chardev_exit();
-    stop_netfilter_submodule();
-    worker_thread_exit();
+    // stop_netfilter_submodule();
+    // worker_thread_exit();
     wasm_vm_destroy_per_cpu();
 
     pr_info("%s: module unloaded from 0x%p", THIS_MODULE->name, wasm_exit);

@@ -17,8 +17,9 @@ ifeq ($(ARCH), x86_64)
 	ifeq ($(EMULATE_FLOATS), 1)
 		ccflags-remove-y += -mno-sse -mno-sse2
 	endif
-# TODO: Otherwise __popcountdi2 is undefined.
-# https://stackoverflow.com/questions/52161596/why-is-builtin-popcount-slower-than-my-own-bit-counting-function
+
+	# TODO: Otherwise __popcountdi2 is undefined.
+	# https://stackoverflow.com/questions/52161596/why-is-builtin-popcount-slower-than-my-own-bit-counting-function
 	# EXTRA_CFLAGS += -march=native
 endif
 ifeq ($(ARCH), aarch64)
