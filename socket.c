@@ -613,6 +613,8 @@ int	wasm_bind(struct sock *sk,struct sockaddr *addr, int addr_len) {
 		proxywasm_lock(p);
 		wasm_socket_context *sc = new_server_wasm_socket_context(p);
 		proxywasm_unlock(p);
+
+		csr_module *csr = this_cpu_csr();
 		
 		br_rsa_keygen rsa_keygen = br_rsa_keygen_get_default();
 
@@ -644,9 +646,8 @@ int	wasm_bind(struct sock *sk,struct sockaddr *addr, int addr_len) {
 		unsigned char *pem = kmalloc(pem_len+1, GFP_KERNEL);
 		br_pem_encode(pem, encoded_rsa, len, "RSA PRIVATE KEY", 0);
 
-		proxywasm_lock(p);
-		wasm_vm_result res = gen_csr(p->vm, pem, len);
-		proxywasm_unlock(p);
+		
+		wasm_vm_result res = gen_csr(csr, pem, len);
 
 	}
 
@@ -665,7 +666,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		proxywasm *p = this_cpu_proxywasm();
 		proxywasm_lock(p);
 
-		wasm_socket_context *sc = sock->sk_user_data;
+		wasm_socket_context *sc = sk->sk_user_data;
 
 		wasm_vm_result res = proxy_on_new_connection(p);
 		if (res.err)
