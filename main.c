@@ -92,7 +92,6 @@ static int __init wasm_init(void)
             return -1;
         }
 
-        // TODO fix the stats filter, it does nasty things on x86_64
         result = load_module("proxywasm_stats_filter", filter_stats, size_filter_stats, "_initialize");
         if (result.err)
         {
