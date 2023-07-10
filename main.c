@@ -93,12 +93,12 @@ static int __init wasm_init(void)
         }
 
         // TODO fix the stats filter, it does nasty things on x86_64
-        // result = load_module("proxywasm_stats_filter", filter_stats, size_filter_stats, "_initialize");
-        // if (result.err)
-        // {
-        //     FATAL("load_module -> proxywasm_stats_filter: %s", result.err);
-        //     return -1;
-        // }
+        result = load_module("proxywasm_stats_filter", filter_stats, size_filter_stats, "_initialize");
+        if (result.err)
+        {
+            FATAL("load_module -> proxywasm_stats_filter: %s", result.err);
+            return -1;
+        }
     }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
