@@ -78,8 +78,8 @@ static int __init wasm_init(void)
 
     int ret = 0;
 
-    ret += start_netfilter_submodule();
-    ret += worker_thread_init();
+    // ret += start_netfilter_submodule();
+    // ret += worker_thread_init();
     ret += chardev_init();
     ret += wasm_socket_init();
 
@@ -113,8 +113,8 @@ static void __exit wasm_exit(void)
 {
     wasm_socket_exit();
     chardev_exit();
-    stop_netfilter_submodule();
-    worker_thread_exit();
+    // stop_netfilter_submodule();
+    // worker_thread_exit();
     wasm_vm_destroy_per_cpu();
 
     pr_info("%s: module unloaded from 0x%p", THIS_MODULE->name, wasm_exit);

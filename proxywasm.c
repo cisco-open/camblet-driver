@@ -57,7 +57,7 @@ static int new_context_id(void)
 
 proxywasm_context* new_proxywasm_context(proxywasm_context *parent)
 {
-    proxywasm_context *context = kzalloc(sizeof(proxywasm_context), GFP_KERNEL);
+    proxywasm_context *context = kzalloc(sizeof(struct proxywasm_context), GFP_KERNEL);
 
     context->properties = kzalloc((1 << HASHTABLE_BITS) * sizeof(struct hlist_head), GFP_KERNEL);
     __hash_init(context->properties, 1 << HASHTABLE_BITS);
@@ -375,7 +375,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
 
     if (proxywasm == NULL)
     {
-        proxywasm = kzalloc(sizeof(proxywasm), GFP_KERNEL);
+        proxywasm = kzalloc(sizeof(struct proxywasm), GFP_KERNEL);
         proxywasm->vm = vm;
         proxywasms[vm->cpu] = proxywasm;
 
@@ -406,7 +406,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
         }
     }
 
-    proxywasm_filter *filter = kzalloc(sizeof(proxywasm_filter), GFP_KERNEL);
+    proxywasm_filter *filter = kzalloc(sizeof(struct proxywasm_filter), GFP_KERNEL);
     filter->proxywasm = proxywasm;
 
     wasm_vm_result result;
@@ -523,7 +523,7 @@ wasm_vm_result proxy_on_upstream_connection_close(proxywasm *p, PeerType peer_ty
 
 void set_property(proxywasm_context *p, const char *key, int key_len, const char *value, int value_len)
 {
-    struct property_h_node *cur, *node = kmalloc(sizeof(property_h_node), GFP_KERNEL);
+    struct property_h_node *cur, *node = kmalloc(sizeof(struct property_h_node), GFP_KERNEL);
     uint32_t key_i = xxh32(key, key_len, 0);
     print_property_key("set_property", key, key_len);
     printk("wasm: set_property key hash %u, key len: %d, value: '%.*s'", key_i, key_len, value_len, value);

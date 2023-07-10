@@ -165,7 +165,7 @@ wasm_vm_result init_opa_for(wasm_vm *vm, wasm_vm_module *module)
     wasm_vm_result result;
     wasm_vm_function *builtinsFunc;
 
-    opa_wrapper *opa = kmalloc(sizeof(opa_wrapper), GFP_KERNEL);
+    opa_wrapper *opa = kmalloc(sizeof(struct opa_wrapper), GFP_KERNEL);
     wasm_vm_try_get_function(opa->malloc, wasm_vm_get_function(vm, OPA_MODULE, "opa_malloc"));
     wasm_vm_try_get_function(opa->free, wasm_vm_get_function(vm, OPA_MODULE, "opa_free"));
     wasm_vm_try_get_function(opa->eval, wasm_vm_get_function(vm, OPA_MODULE, "opa_eval"));

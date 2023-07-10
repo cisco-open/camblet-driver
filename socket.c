@@ -555,7 +555,7 @@ void wasm_destroy(struct sock *sk)
 	wasm_socket_context *c = sk->sk_user_data;
 	free_wasm_socket_context(c);
 	sk->sk_user_data = NULL;
-	tcp_prot.destroy(sk);
+	tcp_v4_destroy_sock(sk);
 }
 
 // an enum for the direction

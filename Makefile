@@ -1,25 +1,26 @@
 # OPA requires floats
 EMULATE_FLOATS := 1
-EXTRA_CFLAGS := -foptimize-sibling-calls \
-				-Dd_m3RecordBacktraces=1 \
-				-DDEBUG=1 \
-				-Dd_m3HasFloat=$(EMULATE_FLOATS) \
-				-I$(PWD) \
-				-I$(PWD)/third-party/BearSSL/inc/ \
-				-I$(PWD)/third-party/wasm3/source/ \
-				-I$(PWD)/third-party/base64 \
-				-I$(PWD)/third-party/parson \
-				#-Dd_m3LogCompile=1
+ccflags-y += -foptimize-sibling-calls \
+			 -Dd_m3RecordBacktraces=1 \
+			 -DDEBUG=1 \
+			 -Dd_m3HasFloat=$(EMULATE_FLOATS) \
+			 -I$(PWD) \
+			 -I$(PWD)/third-party/BearSSL/inc/ \
+			 -I$(PWD)/third-party/wasm3/source/ \
+			 -I$(PWD)/third-party/base64 \
+			 -I$(PWD)/third-party/parson \
+			 #-Dd_m3LogCompile=1
 
 # Enable floating point arithmetic
 ARCH := $(shell uname -m)
 ifeq ($(ARCH), x86_64)
 	ifeq ($(EMULATE_FLOATS), 1)
-		EXTRA_CFLAGS += -msse4
+		ccflags-remove-y += -mno-sse -mno-sse2
 	endif
-# TODO: Otherwise __popcountdi2 is undefined.
-# https://stackoverflow.com/questions/52161596/why-is-builtin-popcount-slower-than-my-own-bit-counting-function
-	# EXTRA_CFLAGS += -march=native
+
+	# TODO: Otherwise __popcountdi2 is undefined.
+	# https://stackoverflow.com/questions/52161596/why-is-builtin-popcount-slower-than-my-own-bit-counting-function
+	# ccflags-y += -march=native
 endif
 ifeq ($(ARCH), aarch64)
 # TODO: Otherwise __popcountdi2 is undefined.
@@ -95,7 +96,7 @@ rmmod:
 
 setup-vm:
 	sudo apt update
-	sudo apt install -y clang libbpf-dev dwarves build-essential linux-tools-generic
+	sudo apt install -y clang libbpf-dev dwarves build-essential linux-tools-generic golang
 	sudo cp /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
 	sudo curl -L -o /usr/local/bin/opa https://openpolicyagent.org/downloads/v0.53.0/opa_linux_amd64_static
 	sudo chmod +x /usr/local/bin/opa
