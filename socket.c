@@ -602,20 +602,20 @@ struct sock *(*accept)(struct sock *sk, int flags, int *err, bool kern);
 
 int (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 
-int	(*bind)(struct sock *sk,struct sockaddr *addr, int addr_len);
+// int	(*bind)(struct sock *sk, struct sockaddr *addr, int addr_len);
 
-int	wasm_bind(struct sock *sk,struct sockaddr *addr, int addr_len) {
-	printk("WASM BIND WAS CALLED");
-	u16 port = (u16)(sk->sk_portpair >> 16);
-	int ret = bind(sk, addr, addr_len);
-	if (ret == 0 && eval_connection(port, INPUT, current->comm)){
+// int	wasm_bind(struct sock *sk,struct sockaddr *addr, int addr_len) {
+// 	printk("WASM BIND WAS CALLED");
+// 	u16 port = (u16)(sk->sk_portpair >> 16);
+// 	int ret = bind(sk, addr, addr_len);
+// 	if (ret == 0 && eval_connection(port, INPUT, current->comm)){
 
-		proxywasm *p = this_cpu_proxywasm();
-		proxywasm_lock(p);
-		wasm_socket_context *sc = new_server_wasm_socket_context(p);
-		proxywasm_unlock(p);
+// 		proxywasm *p = this_cpu_proxywasm();
+// 		proxywasm_lock(p);
+// 		wasm_socket_context *sc = new_server_wasm_socket_context(p);
+// 		proxywasm_unlock(p);
 
-		sk->sk_user_data = sc;
+// 		sk->sk_user_data = sc;
 
 		// csr_module *csr = this_cpu_csr();
 		
@@ -652,10 +652,10 @@ int	wasm_bind(struct sock *sk,struct sockaddr *addr, int addr_len) {
 		
 		// wasm_vm_result res = gen_csr(csr, pem, len);
 
-	}
+// 	}
 
-	return ret;
-}
+// 	return ret;
+// }
 
 struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 {
@@ -670,7 +670,9 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		proxywasm *p = this_cpu_proxywasm();
 		proxywasm_lock(p);
 
-		wasm_socket_context *sc = sk->sk_user_data;
+		wasm_socket_context *sc = new_server_wasm_socket_context(p);
+
+		// wasm_socket_context *sc = sk->sk_user_data;
 
 		wasm_vm_result res = proxy_on_new_connection(p);
 		if (res.err)
@@ -741,6 +743,9 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		 * Initialise the simplified I/O wrapper context.
 		 */
 		br_sslio_init(&sc->ioc, &sc->sc->eng, sock_read, client, sock_write, client);
+
+		// We should save the ssl context here to the socket
+		sk->sk_user_data = sc;
 
 		// // We should save the ssl context here to the socket
 		client->sk_user_data = sc;
@@ -835,23 +840,23 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 int wasm_socket_init(void)
 {
+	//Initialize BearSSL random number generator
+	init_rnd_gen();
+
 	// let's overwrite tcp_port with our own implementation
 	accept = tcp_prot.accept;
 	connect = tcp_prot.connect;
-	bind = tcp_prot.bind;
+	// bind = tcp_prot.bind;
 
 	tcp_prot.accept = wasm_accept;
 	tcp_prot.connect = wasm_connect;
-	tcp_prot.bind = wasm_bind;
+	// tcp_prot.bind = wasm_bind;
 
 	memcpy(&wasm_prot, &tcp_prot, sizeof(wasm_prot));
 	wasm_prot.recvmsg = wasm_recvmsg;
 	wasm_prot.sendmsg = wasm_sendmsg;
 	wasm_prot.shutdown = wasm_shutdown;
 	wasm_prot.destroy = wasm_destroy;
-
-	//Initialize BearSSL random number generator
-	init_rnd_gen();
 
 	printk(KERN_INFO "WASM socket support loaded.");
 
