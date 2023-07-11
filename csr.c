@@ -22,7 +22,7 @@ wasm_vm_result init_csr_for(wasm_vm *vm, wasm_vm_module *module)
 {
     csr_module *csr = csr_modules[vm->cpu];
     if (csr == NULL) {
-        csr_module *csr = kzalloc(sizeof(struct csr_module), GFP_KERNEL);
+        csr = kzalloc(sizeof(struct csr_module), GFP_KERNEL);
         csr->vm = vm;
         csr_modules[vm->cpu] = csr;
     }
