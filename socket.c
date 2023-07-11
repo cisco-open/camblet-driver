@@ -605,6 +605,7 @@ int (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 int	(*bind)(struct sock *sk,struct sockaddr *addr, int addr_len);
 
 int	wasm_bind(struct sock *sk,struct sockaddr *addr, int addr_len) {
+	printk("WASM BIND WAS CALLED");
 	u16 port = (u16)(sk->sk_portpair >> 16);
 	int ret = bind(sk, addr, addr_len);
 	if (ret == 0 && eval_connection(port, INPUT, current->comm)){
@@ -614,40 +615,42 @@ int	wasm_bind(struct sock *sk,struct sockaddr *addr, int addr_len) {
 		wasm_socket_context *sc = new_server_wasm_socket_context(p);
 		proxywasm_unlock(p);
 
-		csr_module *csr = this_cpu_csr();
+		sk->sk_user_data = sc;
+
+		// csr_module *csr = this_cpu_csr();
 		
-		br_rsa_keygen rsa_keygen = br_rsa_keygen_get_default();
+		// br_rsa_keygen rsa_keygen = br_rsa_keygen_get_default();
 
-		unsigned char raw_priv_key[BR_RSA_KBUF_PRIV_SIZE(2048)];
-		unsigned char raw_pub_key[BR_RSA_KBUF_PUB_SIZE(2048)];
-
-
-		uint32_t result = rsa_keygen(&hmac_drbg_ctx.vtable, sc->rsa_priv, raw_priv_key, sc->rsa_pub, raw_pub_key, 2048, 3);
-		if (result == 1) {
-			printk("RSA keys are successfully generated.");
-		}
-
-		printk("Generating private exponent");
-		br_rsa_compute_privexp rsa_priv_exp_comp = br_rsa_compute_privexp_get_default();
-		unsigned char priv_exponent[256];
-		size_t priv_exponent_size = rsa_priv_exp_comp(priv_exponent, sc->rsa_priv, 3);
-		if (sc->rsa_pub->nlen != priv_exponent_size) {
-			printk("Error happened during priv_exponent generation");
-		}
-
-		size_t len = br_encode_rsa_raw_der(NULL, sc->rsa_priv, sc->rsa_pub, priv_exponent, priv_exponent_size);
-
-		unsigned char* encoded_rsa = kmalloc(len, GFP_KERNEL);
-		br_encode_rsa_raw_der(encoded_rsa, sc->rsa_priv, sc->rsa_pub, priv_exponent, priv_exponent_size);
+		// unsigned char raw_priv_key[BR_RSA_KBUF_PRIV_SIZE(2048)];
+		// unsigned char raw_pub_key[BR_RSA_KBUF_PUB_SIZE(2048)];
 
 
-		size_t pem_len = br_pem_encode(NULL, NULL, len, "RSA PRIVATE KEY", 0);
+		// uint32_t result = rsa_keygen(&hmac_drbg_ctx.vtable, sc->rsa_priv, raw_priv_key, sc->rsa_pub, raw_pub_key, 2048, 3);
+		// if (result == 1) {
+		// 	printk("RSA keys are successfully generated.");
+		// }
 
-		unsigned char *pem = kmalloc(pem_len+1, GFP_KERNEL);
-		br_pem_encode(pem, encoded_rsa, len, "RSA PRIVATE KEY", 0);
+		// printk("Generating private exponent");
+		// br_rsa_compute_privexp rsa_priv_exp_comp = br_rsa_compute_privexp_get_default();
+		// unsigned char priv_exponent[256];
+		// size_t priv_exponent_size = rsa_priv_exp_comp(priv_exponent, sc->rsa_priv, 3);
+		// if (sc->rsa_pub->nlen != priv_exponent_size) {
+		// 	printk("Error happened during priv_exponent generation");
+		// }
+
+		// size_t len = br_encode_rsa_raw_der(NULL, sc->rsa_priv, sc->rsa_pub, priv_exponent, priv_exponent_size);
+
+		// unsigned char* encoded_rsa = kmalloc(len, GFP_KERNEL);
+		// br_encode_rsa_raw_der(encoded_rsa, sc->rsa_priv, sc->rsa_pub, priv_exponent, priv_exponent_size);
+
+
+		// size_t pem_len = br_pem_encode(NULL, NULL, len, "RSA PRIVATE KEY", 0);
+
+		// unsigned char *pem = kmalloc(pem_len+1, GFP_KERNEL);
+		// br_pem_encode(pem, encoded_rsa, len, "RSA PRIVATE KEY", 0);
 
 		
-		wasm_vm_result res = gen_csr(csr, pem, len);
+		// wasm_vm_result res = gen_csr(csr, pem, len);
 
 	}
 
@@ -656,6 +659,7 @@ int	wasm_bind(struct sock *sk,struct sockaddr *addr, int addr_len) {
 
 struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 {
+	printk("WASM ACCEPT WAS CALLED");
 	u16 port = (u16)(sk->sk_portpair >> 16);
 	printk("wasm_accept: app: %s on port: %d", current->comm, port);
 
