@@ -42,6 +42,9 @@ brew install lima
 Launch the default VM which is an Ubuntu and matches the host's architecture by default:
 ```bash
 limactl start
+
+# You may also start the VM with your user home mounted as writable with this one-liner:
+limactl start --set '.mounts[0].writable=true' --tty=false
 ```
 
 Setup the required dependencies in the VM:
