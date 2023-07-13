@@ -17,8 +17,6 @@
 #include <net/sock.h>
 #include <net/ip.h>
 
-#include <linux/fs.h>
-#include <linux/slab.h>
 #include <linux/uaccess.h>
 
 #include "bearssl.h"
@@ -743,9 +741,6 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		 * Initialise the simplified I/O wrapper context.
 		 */
 		br_sslio_init(&sc->ioc, &sc->sc->eng, sock_read, client, sock_write, client);
-
-		// We should save the ssl context here to the socket
-		sk->sk_user_data = sc;
 
 		// // We should save the ssl context here to the socket
 		client->sk_user_data = sc;

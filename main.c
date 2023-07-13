@@ -100,7 +100,7 @@ static int __init wasm_init(void)
             return -1;
         }
 
-        result = load_module("csr_module", module_csr, size_module_csr, NULL);
+        result = load_module("csr_module", module_csr, size_module_csr, "_start");
         if (result.err)
         {
             FATAL("load_module -> csr_gen_filter: %s", result.err);

@@ -1,4 +1,3 @@
-#include <linux/slab.h>
 #include "csr.h"
 
 typedef struct csr_module
