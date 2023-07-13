@@ -47,14 +47,6 @@ wasm_vm *wasm_vm_new(int cpu)
         return NULL;
     }
 
-    vm->_runtime = m3_NewRuntime(vm->_env, STACK_SIZE_BYTES, NULL);
-    if (vm->_runtime == NULL)
-    {
-        m3_FreeEnvironment(vm->_env);
-        kfree(vm);
-        return NULL;
-    }
-
     spin_lock_init(&vm->_lock);
 
     return vm;
@@ -69,8 +61,13 @@ static void *free_module_name(IM3Module module, void * i_info)
 
 void wasm_vm_destroy(wasm_vm *vm)
 {
-    ForEachModule(vm->_runtime, free_module_name, NULL);
-    m3_FreeRuntime(vm->_runtime);
+    int i;
+    for (i = 0; i < vm->_num_runtimes; i++)
+    {
+        IM3Runtime runtime = vm->_runtimes[i];
+        ForEachModule(runtime, free_module_name, NULL);
+        m3_FreeRuntime(runtime);
+    }
     m3_FreeEnvironment(vm->_env);
     kfree(vm);
 }
@@ -88,9 +85,9 @@ wasm_vm *wasm_vm_for_cpu(unsigned cpu)
     return vms[cpu];
 }
 
-const char *wasm_vm_last_error(wasm_vm *vm)
+const char *wasm_vm_last_error(wasm_vm_module *module)
 {
-    return vm->_runtime->error_message;
+    return module->runtime->error_message;
 }
 
 wasm_vm_result wasm_vm_new_per_cpu(void)
@@ -125,9 +122,9 @@ wasm_vm_result wasm_vm_destroy_per_cpu(void)
     return (wasm_vm_result){.err = NULL};
 }
 
-static void wasm_vm_print_backtrace(wasm_vm *vm)
+static void wasm_vm_print_backtrace(wasm_vm_function *func)
 {
-    IM3BacktraceInfo info = m3_GetBacktrace(vm->_runtime);
+    IM3BacktraceInfo info = m3_GetBacktrace(func->module->runtime);
     if (!info)
     {
         return;
@@ -173,7 +170,17 @@ wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char 
     if (result)
         goto on_error;
 
-    result = m3_LoadModule(vm->_runtime, module);
+
+    IM3Runtime runtime = m3_NewRuntime(vm->_env, STACK_SIZE_BYTES, NULL);
+    if (runtime == NULL)
+    {
+        m3_FreeEnvironment(vm->_env);
+        kfree(vm);
+        result = "cannot allocate memory for wasm runtime";
+        goto on_error;
+    }
+
+    result = m3_LoadModule(runtime, module);
     if (result)
         goto on_error;
 
@@ -189,6 +196,8 @@ wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char 
     {
         wasm_bins[wasm_bins_qty++] = wasm;
     }
+
+    vm->_runtimes[vm->_num_runtimes++] = runtime;
 
     return (wasm_vm_result){.data = {{.module = module}}, .err = NULL};
 
@@ -208,7 +217,7 @@ wasm_vm_result wasm_vm_call_direct_v(wasm_vm *vm, wasm_vm_function *func, va_lis
     M3Result result = m3_CallVL(func, args);
     if (result)
     {
-        wasm_vm_print_backtrace(vm);
+        wasm_vm_print_backtrace(func);
         return (wasm_vm_result){.err = result};
     }
 
@@ -281,19 +290,19 @@ wasm_vm_result wasm_vm_call(wasm_vm *vm, const char *module, const char *name, .
     va_end(ap);
 }
 
-uint8_t *wasm_vm_memory(wasm_vm *vm)
+uint8_t *wasm_vm_memory(wasm_vm_module *module)
 {
     uint32_t len;
-    if (!vm->_runtime->memory.mallocated)
+    if (!module->runtime->memory.mallocated)
     {
         return 0;
     }
-    return m3_GetMemory(vm->_runtime, &len, 0);
+    return m3_GetMemory(module->runtime, &len, 0);
 }
 
-wasm_vm_result wasm_vm_global(wasm_vm *vm, const char *name)
+wasm_vm_result wasm_vm_global(wasm_vm_module *module, const char *name)
 {
-    IM3Global g = m3_FindGlobal(vm->_runtime->modules, name);
+    IM3Global g = m3_FindGlobal(module, name);
 
     M3TaggedValue tagged;
     M3Result result = m3_GetGlobal(g, &tagged);
@@ -357,7 +366,7 @@ m3ApiRawFunction(m3_ext_table_get)
     void* data_ptr = NULL;
     i32 data_len = 0;
 
-    get_from_module_hashtable(_ctx->function->module->name, key, &data_ptr, &data_len);
+    get_from_module_hashtable(_ctx->function->module->name, key, &data_ptr, &data_len, _mem);
 
     if (!data_ptr)
     {
@@ -379,7 +388,7 @@ m3ApiRawFunction(m3_ext_table_keys)
     void* data_ptr;
     i32 data_len;
 
-    keys_from_module_hashtable(_ctx->function->module->name, &data_ptr, &data_len);
+    keys_from_module_hashtable(_ctx->function->module->name, &data_ptr, &data_len, _mem);
 
     m3ApiMultiValueReturn(len, (i32)data_len);
     m3ApiMultiValueReturn(ptr, (i32)data_ptr);
@@ -548,7 +557,9 @@ static void *print_module_symbols(IM3Module module, void * i_info)
 void wasm_vm_dump_symbols(wasm_vm *vm)
 {
     printk("wasm: vm for cpu = %d\n", vm->cpu);
-    ForEachModule(vm->_runtime, print_module_symbols, NULL);
+    int i;
+    for (i = 0; i < vm->_num_runtimes; i++)
+        ForEachModule(vm->_runtimes[i], print_module_symbols, NULL);
 }
 
 void wasm_vm_lock(wasm_vm *vm)
@@ -563,7 +574,13 @@ void wasm_vm_unlock(wasm_vm *vm)
 
 wasm_vm_result wasm_vm_get_module(wasm_vm *vm, const char *name)
 {
-    wasm_vm_module *module = ForEachModule(vm->_runtime, (ModuleVisitor)v_FindModule, (void *)name);
+    wasm_vm_module *module = NULL;
+    int i;
+    for (i = 0; i < vm->_num_runtimes; i++)
+    {
+        module = ForEachModule(vm->_runtimes[i], (ModuleVisitor)v_FindModule, (void *)name);
+        if (module) break;
+    }
 
     return (wasm_vm_result){.data = {{.module = module}}};
 }
@@ -571,7 +588,15 @@ wasm_vm_result wasm_vm_get_module(wasm_vm *vm, const char *name)
 wasm_vm_result wasm_vm_get_function(wasm_vm *vm, const char *module, const char *name)
 {
     IM3Function function = NULL;
-    M3Result result = m3_FindFunctionInModule(&function, vm->_runtime, module, name);
+    M3Result result = m3Err_functionLookupFailed;
+
+    int i;
+    for (i = 0; i < vm->_num_runtimes; i++)
+    {
+        result = m3_FindFunctionInModule(&function, vm->_runtimes[i], module, name);
+
+        if (function) break;
+    }
 
     return (wasm_vm_result){.data = {{.function = function}}, .err = result};
 }

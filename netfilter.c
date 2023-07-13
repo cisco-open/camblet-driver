@@ -32,23 +32,22 @@ unsigned int hook_func_out(void *priv, struct sk_buff *skb, const struct nf_hook
     wasm_vm *vm = this_cpu_wasm_vm();
     wasm_vm_lock(vm);
 
-    // printk("wasm: skb_is_nonlinear %s (len: %d, data_len: %d)", skb_is_nonlinear(skb) ? "true" : "false", skb->len, skb->data_len);
-
-    // Get the VM memory if there is at least one module loaded,
-    // if not, accept the packet regardless.
-    uint8_t *mem = wasm_vm_memory(vm);
-    if (!mem)
-    {
-        goto accept;
-    }
-
     wasm_vm_result result = wasm_vm_get_module(vm, DNS_MODULE); // TODO this we could use a module cache here, this is an expensive lookup
     if (result.err)
     {
         FATAL("netfilter wasm_vm_get_module error: %s", result.err);
         goto accept;
     }
-    if (!result.data->module)
+
+    wasm_vm_module *dns_module = result.data->module;
+
+    if (!dns_module)
+    {
+        goto accept;
+    }
+
+    uint8_t *mem = wasm_vm_memory(dns_module);
+    if (!mem)
     {
         goto accept;
     }
@@ -97,21 +96,22 @@ unsigned int hook_func_in(void *priv, struct sk_buff *skb, const struct nf_hook_
     wasm_vm *vm = this_cpu_wasm_vm();
     wasm_vm_lock(vm);
 
-    // Get the VM memory if there is at least one module loaded,
-    // if not, accept the packet regardless.
-    uint8_t *mem = wasm_vm_memory(vm);
-    if (!mem)
-    {
-        goto accept;
-    }
-
     wasm_vm_result result = wasm_vm_get_module(vm, DNS_MODULE); // TODO this we could use a module cache here, this is an expensive lookup
     if (result.err)
     {
         FATAL("netfilter wasm_vm_get_module error: %s", result.err);
         goto accept;
     }
-    if (!result.data->module)
+
+    wasm_vm_module *dns_module = result.data->module;
+
+    if (!dns_module)
+    {
+        goto accept;
+    }
+
+    uint8_t *mem = wasm_vm_memory(dns_module);
+    if (!mem)
     {
         goto accept;
     }

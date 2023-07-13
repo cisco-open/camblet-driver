@@ -179,7 +179,7 @@ wasm_vm_result load_module(char *name, char *code, unsigned length, char *entryp
             if (result.err &&
                 !(result.err == m3Err_functionLookupFailed && strcmp(entrypoint, DEFAULT_MODULE_ENTRYPOINT) == 0))
             {
-                FATAL("wasm_vm_call: %s error: %s", result.err, wasm_vm_last_error(vm));
+                FATAL("wasm_vm_call: %s error: %s", result.err, wasm_vm_last_error(module));
                 wasm_vm_unlock(vm);
                 return result;
             }

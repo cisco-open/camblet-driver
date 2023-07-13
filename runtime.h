@@ -21,6 +21,8 @@
         printk(KERN_CRIT "wasm: Error: [Fatal] " msg "\n", ##__VA_ARGS__); \
     }
 
+#define MAX_MODULES_PER_VM 8
+
 // MAX_RETURN_VALUES defines the amount of return values.
 #define MAX_RETURN_VALUES 3
 
@@ -31,7 +33,9 @@ typedef struct wasm_vm
     int cpu;
 
     IM3Environment _env;
-    IM3Runtime _runtime;
+    IM3Runtime _runtimes[MAX_MODULES_PER_VM];
+
+    int _num_runtimes;
 } wasm_vm;
 
 typedef M3Module wasm_vm_module;
@@ -62,8 +66,8 @@ void wasm_vm_destroy(wasm_vm *vm);
 wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char code[], unsigned code_size);
 wasm_vm_result wasm_vm_call(wasm_vm *vm, const char *module, const char *name, ...);
 wasm_vm_result wasm_vm_call_direct(wasm_vm *vm, wasm_vm_function *func, ...);
-uint8_t *wasm_vm_memory(wasm_vm *vm);
-wasm_vm_result wasm_vm_global(wasm_vm *vm, const char *name);
+uint8_t *wasm_vm_memory(wasm_vm_module *module);
+wasm_vm_result wasm_vm_global(wasm_vm_module *module, const char *name);
 wasm_vm_result wasm_vm_malloc(wasm_vm *vm, const char *module, unsigned size);
 wasm_vm_result wasm_vm_free(wasm_vm *vm, const char *module, i32 ptr, unsigned size);
 void wasm_vm_set_userdata(wasm_vm *vm, void *userdata);
@@ -72,7 +76,7 @@ void wasm_vm_lock(wasm_vm *vm);
 void wasm_vm_unlock(wasm_vm *vm);
 wasm_vm_result wasm_vm_get_module(wasm_vm *vm, const char *module);
 wasm_vm_result wasm_vm_get_function(wasm_vm *vm, const char *module, const char *function);
-const char *wasm_vm_last_error(wasm_vm *vm);
+const char *wasm_vm_last_error(wasm_vm_module *module);
 
 M3Result SuppressLookupFailure(M3Result i_result);
 

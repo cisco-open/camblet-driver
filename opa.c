@@ -51,7 +51,7 @@ i32 time_now_ns(opa_wrapper *opa)
         return 0;
     }
 
-    uint8_t *mem = wasm_vm_memory(opa->vm);
+    uint8_t *mem = wasm_vm_memory(opa->eval->module);
     i32 addr = result.data->i32;
 
     memcpy(mem + addr, &now, sizeof(now));
@@ -186,7 +186,7 @@ error:
         return result;
     }
 
-    uint8_t *memory = wasm_vm_memory(vm);
+    uint8_t *memory = wasm_vm_memory(opa->eval->module);
     i32 builtinsJson = result.data->i32;
 
     // parse and link
@@ -244,7 +244,7 @@ int this_cpu_opa_eval(const char *input)
         goto cleanup;
     }
 
-    uint8_t *mem = wasm_vm_memory(vm);
+    uint8_t *mem = wasm_vm_memory(opa->eval->module);
 
     inputAddr = result.data->i32;
     memcpy(mem + inputAddr, input, inputLen);
