@@ -74,11 +74,11 @@ static char *get_read_buffer(wasm_socket_context *c)
 {
 	if (c->direction == ListenerDirectionInbound)
 	{
-		return c->pc->downstream_buffer;
+		return pw_get_downstream_buffer(c->pc);
 	}
 	else
 	{
-		return c->pc->upstream_buffer;
+		return pw_get_upstream_buffer(c->pc);
 	}
 }
 
@@ -86,11 +86,11 @@ static char *get_read_buffer_for_read(wasm_socket_context *c)
 {
 	if (c->direction == ListenerDirectionInbound)
 	{
-		return c->pc->downstream_buffer + c->pc->downstream_buffer_size;
+		return pw_get_downstream_buffer(c->pc) + pw_get_downstream_buffer_size(c->pc);
 	}
 	else
 	{
-		return c->pc->upstream_buffer + c->pc->upstream_buffer_size;
+		return pw_get_upstream_buffer(c->pc) + pw_get_upstream_buffer_size(c->pc);
 	}
 }
 
@@ -98,11 +98,11 @@ static int get_read_buffer_capacity(wasm_socket_context *c)
 {
 	if (c->direction == ListenerDirectionInbound)
 	{
-		return c->pc->downstream_buffer_capacity - c->pc->downstream_buffer_size;
+		return pw_get_downstream_buffer_capacity(c->pc) - pw_get_downstream_buffer_size(c->pc);
 	}
 	else
 	{
-		return c->pc->upstream_buffer_capacity - c->pc->upstream_buffer_size;
+		return pw_get_upstream_buffer_capacity(c->pc) - pw_get_upstream_buffer_size(c->pc);
 	}
 }
 
@@ -110,23 +110,23 @@ static int get_read_buffer_size(wasm_socket_context *c)
 {
 	if (c->direction == ListenerDirectionInbound)
 	{
-		return c->pc->downstream_buffer_size;
+		return pw_get_downstream_buffer_size(c->pc);
 	}
 	else
 	{
-		return c->pc->upstream_buffer_size;
+		return pw_get_upstream_buffer_size(c->pc);
 	}
 }
 
-static int set_read_buffer_size(wasm_socket_context *c, int size)
+static void set_read_buffer_size(wasm_socket_context *c, int size)
 {
 	if (c->direction == ListenerDirectionInbound)
 	{
-		return c->pc->downstream_buffer_size = size;
+		pw_set_downstream_buffer_size(c->pc, size);
 	}
 	else
 	{
-		return c->pc->upstream_buffer_size = size;
+		pw_set_upstream_buffer_size(c->pc, size);
 	}
 }
 
@@ -134,11 +134,11 @@ static char *get_write_buffer(wasm_socket_context *c)
 {
 	if (c->direction == ListenerDirectionInbound)
 	{
-		return c->pc->upstream_buffer;
+		return pw_get_upstream_buffer(c->pc);
 	}
 	else
 	{
-		return c->pc->downstream_buffer;
+		return pw_get_downstream_buffer(c->pc);
 	}
 }
 
@@ -146,11 +146,11 @@ static char *get_write_buffer_for_write(wasm_socket_context *c)
 {
 	if (c->direction == ListenerDirectionInbound)
 	{
-		return c->pc->upstream_buffer + c->pc->upstream_buffer_size;
+		return pw_get_upstream_buffer(c->pc) + pw_get_upstream_buffer_size(c->pc);
 	}
 	else
 	{
-		return c->pc->downstream_buffer + c->pc->downstream_buffer_size;
+		return pw_get_downstream_buffer(c->pc) + pw_get_downstream_buffer_size(c->pc);
 	}
 }
 
@@ -158,11 +158,11 @@ static int get_write_buffer_capacity(wasm_socket_context *c)
 {
 	if (c->direction == ListenerDirectionInbound)
 	{
-		return c->pc->upstream_buffer_capacity - c->pc->upstream_buffer_size;
+		return pw_get_upstream_buffer_capacity(c->pc) - pw_get_upstream_buffer_size(c->pc);
 	}
 	else
 	{
-		return c->pc->downstream_buffer_capacity - c->pc->downstream_buffer_size;
+		return pw_get_downstream_buffer_capacity(c->pc) - pw_get_downstream_buffer_size(c->pc);
 	}
 }
 
@@ -170,23 +170,23 @@ static int get_write_buffer_size(wasm_socket_context *c)
 {
 	if (c->direction == ListenerDirectionInbound)
 	{
-		return c->pc->upstream_buffer_size;
+		return pw_get_upstream_buffer_size(c->pc);
 	}
 	else
 	{
-		return c->pc->downstream_buffer_size;
+		return pw_get_downstream_buffer_size(c->pc);
 	}
 }
 
-static int set_write_buffer_size(wasm_socket_context *c, int size)
+static void set_write_buffer_size(wasm_socket_context *c, int size)
 {
 	if (c->direction == ListenerDirectionInbound)
 	{
-		return c->pc->upstream_buffer_size = size;
+		pw_set_upstream_buffer_size(c->pc, size);
 	}
 	else
 	{
-		return c->pc->downstream_buffer_size = size;
+		pw_set_downstream_buffer_size(c->pc, size);
 	}
 }
 
@@ -228,7 +228,7 @@ static void free_wasm_socket_context(wasm_socket_context *sc)
 {
 	if (sc)
 	{
-		printk("free_wasm_socket_context: shutting down wasm_socket_context of context id: %d", sc->pc->id);
+		printk("free_wasm_socket_context: shutting down wasm_socket_context of context id: %p", sc->pc);
 		// TODO we should call br_sslio_close here, but that hangs in non-typed socket mode
 		br_ssl_engine_close(sc->ioc.engine);
 		// if (br_sslio_close(sc->ioc))
