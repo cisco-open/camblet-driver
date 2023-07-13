@@ -94,6 +94,8 @@ wasm_vm_result proxy_on_downstream_connection_close(proxywasm *p, PeerType peer_
 wasm_vm_result proxy_on_upstream_connection_close(proxywasm *p, PeerType peer_type);
 
 wasm_vm_result proxywasm_create_context(proxywasm *p);
+wasm_vm_result proxywasm_destroy_context(proxywasm *p);
+
 proxywasm_context *proxywasm_get_context(proxywasm *p);
 void proxywasm_set_context(proxywasm *p, proxywasm_context *context);
 

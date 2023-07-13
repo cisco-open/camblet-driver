@@ -87,12 +87,20 @@ proxywasm_context *new_proxywasm_context(proxywasm_context *parent)
 
     context->upstream_buffer_capacity = 16 * 1024;
     context->upstream_buffer_size = 0;
-    context->upstream_buffer = kmalloc(context->upstream_buffer_capacity, GFP_KERNEL);
+    context->upstream_buffer = kzalloc(context->upstream_buffer_capacity, GFP_KERNEL);
     context->downstream_buffer_capacity = 16 * 1024;
     context->downstream_buffer_size = 0;
-    context->downstream_buffer = kmalloc(context->downstream_buffer_capacity, GFP_KERNEL);
+    context->downstream_buffer = kzalloc(context->downstream_buffer_capacity, GFP_KERNEL);
 
     return context;
+}
+
+void free_proxywasm_context(proxywasm_context *context)
+{
+    kfree(context->properties);
+    kfree(context->upstream_buffer);
+    kfree(context->downstream_buffer);
+    kfree(context);
 }
 
 typedef struct proxywasm_filter
@@ -509,6 +517,12 @@ wasm_vm_result proxywasm_create_context(proxywasm *p)
     proxywasm_context *context = new_proxywasm_context(p->root_context);
     p->current_context = context;
     FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_context_create, p->current_context->id, p->root_context->id));
+}
+
+wasm_vm_result proxywasm_destroy_context(proxywasm *p)
+{
+    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_delete, p->current_context->id));
+    free_proxywasm_context(p->current_context); # TODO this never gets called
 }
 
 wasm_vm_result proxy_on_context_create(proxywasm *p, i32 context_id, i32 root_context_id)
