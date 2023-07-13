@@ -61,7 +61,8 @@ static void *free_module_name(IM3Module module, void * i_info)
 
 void wasm_vm_destroy(wasm_vm *vm)
 {
-    for (int i = 0; i < vm->_num_runtimes; i++)
+    int i;
+    for (i = 0; i < vm->_num_runtimes; i++)
     {
         IM3Runtime runtime = vm->_runtimes[i];
         ForEachModule(runtime, free_module_name, NULL);
@@ -556,7 +557,8 @@ static void *print_module_symbols(IM3Module module, void * i_info)
 void wasm_vm_dump_symbols(wasm_vm *vm)
 {
     printk("wasm: vm for cpu = %d\n", vm->cpu);
-    for (int i = 0; i < vm->_num_runtimes; i++)
+    int i;
+    for (i = 0; i < vm->_num_runtimes; i++)
         ForEachModule(vm->_runtimes[i], print_module_symbols, NULL);
 }
 
@@ -573,7 +575,8 @@ void wasm_vm_unlock(wasm_vm *vm)
 wasm_vm_result wasm_vm_get_module(wasm_vm *vm, const char *name)
 {
     wasm_vm_module *module = NULL;
-    for (int i = 0; i < vm->_num_runtimes; i++)
+    int i;
+    for (i = 0; i < vm->_num_runtimes; i++)
     {
         module = ForEachModule(vm->_runtimes[i], (ModuleVisitor)v_FindModule, (void *)name);
         if (module) break;
@@ -587,7 +590,8 @@ wasm_vm_result wasm_vm_get_function(wasm_vm *vm, const char *module, const char 
     IM3Function function = NULL;
     M3Result result = m3Err_functionLookupFailed;
 
-    for (int i = 0; i < vm->_num_runtimes; i++)
+    int i;
+    for (i = 0; i < vm->_num_runtimes; i++)
     {
         result = m3_FindFunctionInModule(&function, vm->_runtimes[i], module, name);
 
