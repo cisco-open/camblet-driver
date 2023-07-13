@@ -293,7 +293,7 @@ wasm_vm_result wasm_vm_call(wasm_vm *vm, const char *module, const char *name, .
 uint8_t *wasm_vm_memory(wasm_vm_module *module)
 {
     uint32_t len;
-    if (module->runtime->memory.mallocated)
+    if (!module->runtime->memory.mallocated)
     {
         return 0;
     }
