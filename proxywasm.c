@@ -435,7 +435,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
 error:
     if (result.err)
     {
-        FATAL("proxywasm function lookups failed for module %s failed: %s -> %s", module->name, result.err, wasm_vm_last_error(vm));
+        FATAL("proxywasm function lookups failed for module %s failed: %s -> %s", module->name, result.err, wasm_vm_last_error(module));
         kfree(proxywasm);
         return result;
     }
@@ -444,7 +444,7 @@ error:
     result = wasm_vm_call_direct(vm, filter->proxy_on_context_create, proxywasm->root_context->id, 0);
     if (result.err)
     {
-        FATAL("proxy_on_context_create for module %s failed: %s -> %s", module->name, result.err, wasm_vm_last_error(vm));
+        FATAL("proxy_on_context_create for module %s failed: %s -> %s", module->name, result.err, wasm_vm_last_error(module));
         kfree(proxywasm);
         return result;
     }
