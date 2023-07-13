@@ -31,7 +31,7 @@ wasm_vm_result init_csr_for(wasm_vm *vm, wasm_vm_module *module)
 error:
     if (result.err)
     {
-        FATAL("csr_module function lookups failed for module %s failed: %s -> %s", module->name, result.err, wasm_vm_last_error(vm));
+        FATAL("csr_module function lookups failed for module %s failed: %s -> %s", module->name, result.err, wasm_vm_last_error(module));
         return result;
     }
 
