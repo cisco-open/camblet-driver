@@ -2,9 +2,9 @@
  * Copyright (c) 2023 Cisco and/or its affiliates. All rights reserved.
  *
  * SPDX-License-Identifier: MIT OR GPL-2.0-only
- * 
+ *
  * Licensed under the MIT license <LICENSE.MIT or https://opensource.org/licenses/MIT> or the GPLv2 license
- * <LICENSE.GPL or https://opensource.org/license/gpl-2-0>, at your option. This file may not be copied, 
+ * <LICENSE.GPL or https://opensource.org/license/gpl-2-0>, at your option. This file may not be copied,
  * modified, or distributed except according to those terms.
  */
 
@@ -16,27 +16,22 @@
 #include "m3_exception.h"
 #include "wasm3.h"
 
-#define FATAL(msg, ...)                                    \
-    {                                                      \
+#define FATAL(msg, ...)                                                    \
+    {                                                                      \
         printk(KERN_CRIT "wasm: Error: [Fatal] " msg "\n", ##__VA_ARGS__); \
     }
 
-#define MAX_MODULES_PER_VM 8
+#define PRIi32 "i"
+#define PRIi64 "lli"
+
+#define MAX_MODULES_PER_VM 16
 
 // MAX_RETURN_VALUES defines the amount of return values.
 #define MAX_RETURN_VALUES 3
 
-typedef struct wasm_vm
-{
-    spinlock_t _lock;
-    unsigned long _lock_flags;
-    int cpu;
+#define STACK_SIZE_BYTES 256 * 1024
 
-    IM3Environment _env;
-    IM3Runtime _runtimes[MAX_MODULES_PER_VM];
-
-    int _num_runtimes;
-} wasm_vm;
+typedef struct wasm_vm wasm_vm;
 
 typedef M3Module wasm_vm_module;
 typedef M3Function wasm_vm_function;
@@ -55,7 +50,13 @@ typedef struct wasm_vm_result
     const char *err;
 } wasm_vm_result;
 
-#define wasm_vm_try_get_function(VAR, CALL) { result = CALL; if (result.err) goto error; VAR = result.data->function; }
+#define wasm_vm_try_get_function(VAR, CALL) \
+    {                                       \
+        result = CALL;                      \
+        if (result.err)                     \
+            goto error;                     \
+        VAR = result.data->function;        \
+    }
 
 wasm_vm *wasm_vm_for_cpu(unsigned cpu);
 wasm_vm *this_cpu_wasm_vm(void);
@@ -63,6 +64,7 @@ wasm_vm_result wasm_vm_new_per_cpu(void);
 wasm_vm_result wasm_vm_destroy_per_cpu(void);
 wasm_vm *wasm_vm_new(int cpu);
 void wasm_vm_destroy(wasm_vm *vm);
+int wasm_vm_cpu(wasm_vm *vm);
 wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char code[], unsigned code_size);
 wasm_vm_result wasm_vm_call(wasm_vm *vm, const char *module, const char *name, ...);
 wasm_vm_result wasm_vm_call_direct(wasm_vm *vm, wasm_vm_function *func, ...);

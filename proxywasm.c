@@ -125,7 +125,7 @@ wasm_vm_result proxy_on_memory_allocate(proxywasm_filter *filter, i32 size)
 
 proxywasm *proxywasm_for_vm(wasm_vm *vm)
 {
-    return proxywasms[vm->cpu];
+    return proxywasms[wasm_vm_cpu(vm)];
 }
 
 proxywasm* this_cpu_proxywasm(void)
@@ -371,13 +371,13 @@ void print_property_key(const char *func, const char *key, int key_len)
 
 wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
 {
-    proxywasm *proxywasm = proxywasms[vm->cpu];
+    proxywasm *proxywasm = proxywasms[wasm_vm_cpu(vm)];
 
     if (proxywasm == NULL)
     {
         proxywasm = kzalloc(sizeof(struct proxywasm), GFP_KERNEL);
         proxywasm->vm = vm;
-        proxywasms[vm->cpu] = proxywasm;
+        proxywasms[wasm_vm_cpu(vm)] = proxywasm;
 
         proxywasm_context *root_context = new_proxywasm_context(NULL);
         printk("wasm: root_context_id %d", root_context->id);
