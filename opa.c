@@ -204,7 +204,7 @@ error:
 
     opa_free(opa, builtinsJson);
 
-    opas[vm->cpu] = opa;
+    opas[wasm_vm_cpu(vm)] = opa;
 
     return (wasm_vm_result){.err = NULL};
 }
