@@ -206,7 +206,7 @@ error:
 
     opas[wasm_vm_cpu(vm)] = opa;
 
-    return (wasm_vm_result){.err = NULL};
+    return wasm_vm_result_ok;
 }
 
 wasm_vm_result opa_eval(opa_wrapper *opa, i32 inputAddr, i32 inputLen)

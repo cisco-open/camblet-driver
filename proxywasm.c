@@ -509,7 +509,7 @@ error:
         cur->next = filter;
     }
 
-    return (wasm_vm_result){.err = NULL};
+    return wasm_vm_result_ok;
 }
 
 wasm_vm_result proxywasm_create_context(proxywasm *p)
