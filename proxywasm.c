@@ -521,8 +521,26 @@ wasm_vm_result proxywasm_create_context(proxywasm *p)
 
 wasm_vm_result proxywasm_destroy_context(proxywasm *p)
 {
-    FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_delete, p->current_context->id));
-    free_proxywasm_context(p->current_context); # TODO this never gets called
+    wasm_vm_result result;
+    proxywasm_filter *f;
+    for (f = p->filters; f != NULL; f = f->next)
+    {
+        result = wasm_vm_call_direct(p->vm, f->proxy_on_done, p->current_context->id);
+        if (result.err != NULL)
+        {
+            pr_err("wasm: Calling filter %s.proxy_on_done errored %s\n", f->name, result.err);
+        }
+
+        result = wasm_vm_call_direct(p->vm, f->proxy_on_delete, p->current_context->id);
+        if (result.err != NULL)
+        {
+            pr_err("wasm: Calling filter %s.proxy_on_delete errored %s\n", f->name, result.err);
+        }
+    }
+
+    free_proxywasm_context(p->current_context);
+
+    return wasm_vm_result_ok;
 }
 
 wasm_vm_result proxy_on_context_create(proxywasm *p, i32 context_id, i32 root_context_id)
