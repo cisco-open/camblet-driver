@@ -21,6 +21,8 @@
 typedef uint32_t wasm_ptr_t;
 typedef uint32_t wasm_size_t;
 
+const wasm_vm_result wasm_vm_result_ok = {0};
+
 typedef struct wasm_vm
 {
     spinlock_t _lock;

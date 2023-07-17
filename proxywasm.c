@@ -13,8 +13,6 @@
 
 #include "proxywasm.h"
 
-const wasm_vm_result wasm_vm_result_ok = {0};
-
 // We need to use dynamic hashtables, so we have to hack a bit around hashing macros:
 #define HASHTABLE_BITS 4
 
