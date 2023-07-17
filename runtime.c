@@ -18,17 +18,22 @@
 #include "m3_env.h"
 #include "m3_api_libc.h"
 
-#define PRIi32 "i"
-#define PRIi64 "lli"
-
-#define MAX_MODULES 64
-#define STACK_SIZE_BYTES 256 * 1024
-
 typedef uint32_t wasm_ptr_t;
 typedef uint32_t wasm_size_t;
 
-static u8 *wasm_bins[MAX_MODULES];
-static int wasm_bins_qty = 0;
+typedef struct wasm_vm
+{
+    spinlock_t _lock;
+    unsigned long _lock_flags;
+    int cpu;
+
+    IM3Environment _env;
+    IM3Runtime _runtimes[MAX_MODULES_PER_VM];
+    int _num_runtimes;
+
+    u8 *wasm_bins[MAX_MODULES_PER_VM];
+
+} wasm_vm;
 
 static wasm_vm *vms[NR_CPUS];
 
@@ -52,7 +57,7 @@ wasm_vm *wasm_vm_new(int cpu)
     return vm;
 }
 
-static void *free_module_name(IM3Module module, void * i_info)
+static void *free_module_name(IM3Module module, void *i_info)
 {
     kfree(module->name);
     module->name = "freeing";
@@ -67,6 +72,7 @@ void wasm_vm_destroy(wasm_vm *vm)
         IM3Runtime runtime = vm->_runtimes[i];
         ForEachModule(runtime, free_module_name, NULL);
         m3_FreeRuntime(runtime);
+        kfree(vm->wasm_bins[i]);
     }
     m3_FreeEnvironment(vm->_env);
     kfree(vm);
@@ -81,7 +87,8 @@ wasm_vm *this_cpu_wasm_vm(void)
 
 wasm_vm *wasm_vm_for_cpu(unsigned cpu)
 {
-    if (cpu >= nr_cpu_ids) return NULL;
+    if (cpu >= nr_cpu_ids)
+        return NULL;
     return vms[cpu];
 }
 
@@ -110,12 +117,6 @@ wasm_vm_result wasm_vm_destroy_per_cpu(void)
         {
             printk("wasm: destroying vm for cpu %d", cpu);
             wasm_vm_destroy(vms[cpu]);
-        }
-
-        int i;
-        for (i = 0; i < wasm_bins_qty; i++)
-        {
-            kfree(wasm_bins[i]);
         }
     }
 
@@ -156,6 +157,12 @@ wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char 
 {
     M3Result result = m3Err_none;
     IM3Module module = NULL;
+    IM3Runtime runtime = NULL;
+
+    if (vm->_num_runtimes == MAX_MODULES_PER_VM)
+    {
+        return (wasm_vm_result){.err = "too many modules loaded"};
+    }
 
     u8 *wasm = kmalloc(code_size, GFP_ATOMIC);
     if (!wasm)
@@ -168,21 +175,22 @@ wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char 
 
     result = m3_ParseModule(vm->_env, &module, wasm, code_size);
     if (result)
+    {
         goto on_error;
+    }
 
-
-    IM3Runtime runtime = m3_NewRuntime(vm->_env, STACK_SIZE_BYTES, NULL);
+    runtime = m3_NewRuntime(vm->_env, STACK_SIZE_BYTES, NULL);
     if (runtime == NULL)
     {
-        m3_FreeEnvironment(vm->_env);
-        kfree(vm);
         result = "cannot allocate memory for wasm runtime";
         goto on_error;
     }
 
     result = m3_LoadModule(runtime, module);
     if (result)
+    {
         goto on_error;
+    }
 
     char *module_name = kmalloc(strlen(name), GFP_ATOMIC);
     strcpy(module_name, name);
@@ -192,24 +200,25 @@ wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char 
     if (result)
         goto on_error;
 
-    if (wasm_bins_qty < MAX_MODULES)
-    {
-        wasm_bins[wasm_bins_qty++] = wasm;
-    }
+    vm->wasm_bins[vm->_num_runtimes] = wasm;
+    vm->_runtimes[vm->_num_runtimes] = runtime;
 
-    vm->_runtimes[vm->_num_runtimes++] = runtime;
+    vm->_num_runtimes++;
 
     return (wasm_vm_result){.data = {{.module = module}}, .err = NULL};
 
 on_error:
     m3_FreeModule(module);
-    if (wasm)
-    {
-        kfree(wasm);
-        kfree(module_name);
-    }
+    m3_FreeRuntime(runtime);
+    kfree(wasm);
+    kfree(module_name);
 
     return (wasm_vm_result){.err = result};
+}
+
+int wasm_vm_cpu(wasm_vm *vm)
+{
+    return vm->cpu;
 }
 
 wasm_vm_result wasm_vm_call_direct_v(wasm_vm *vm, wasm_vm_function *func, va_list args)
@@ -240,7 +249,7 @@ wasm_vm_result wasm_vm_call_direct_v(wasm_vm *vm, wasm_vm_function *func, va_lis
         return (wasm_vm_result){.err = "failed to get results for call"};
     }
     wasm_vm_result vm_result;
-    for(i = 0; i < ret_count; i++)
+    for (i = 0; i < ret_count; i++)
     {
         switch (m3_GetRetType(func, i))
         {
@@ -250,14 +259,14 @@ wasm_vm_result wasm_vm_call_direct_v(wasm_vm *vm, wasm_vm_function *func, va_lis
         case c_m3Type_i64:
             vm_result.data[i].i64 = *(i64 *)valptrs[i];
             break;
-# if d_m3HasFloat
+#if d_m3HasFloat
         case c_m3Type_f32:
             vm_result.data[i].f32 = *(f32 *)valptrs[i];
             break;
         case c_m3Type_f64:
             vm_result.data[i].f64 = *(f64 *)valptrs[i];
             break;
-# endif
+#endif
         default:
             return (wasm_vm_result){.err = "unknown return type"};
         }
@@ -315,7 +324,7 @@ wasm_vm_result wasm_vm_global(wasm_vm_module *module, const char *name)
         return (wasm_vm_result){.data[0].i32 = tagged.value.i32};
     case c_m3Type_i64:
         return (wasm_vm_result){.data[0].i64 = tagged.value.i64};
-# if d_m3HasFloat
+#if d_m3HasFloat
     case c_m3Type_f32:
         return (wasm_vm_result){.data[0].f32 = tagged.value.f32};
     case c_m3Type_f64:
@@ -579,7 +588,8 @@ wasm_vm_result wasm_vm_get_module(wasm_vm *vm, const char *name)
     for (i = 0; i < vm->_num_runtimes; i++)
     {
         module = ForEachModule(vm->_runtimes[i], (ModuleVisitor)v_FindModule, (void *)name);
-        if (module) break;
+        if (module)
+            break;
     }
 
     return (wasm_vm_result){.data = {{.module = module}}};
@@ -595,7 +605,8 @@ wasm_vm_result wasm_vm_get_function(wasm_vm *vm, const char *module, const char 
     {
         result = m3_FindFunctionInModule(&function, vm->_runtimes[i], module, name);
 
-        if (function) break;
+        if (function)
+            break;
     }
 
     return (wasm_vm_result){.data = {{.function = function}}, .err = result};
