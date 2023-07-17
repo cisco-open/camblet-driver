@@ -50,7 +50,7 @@ typedef struct wasm_vm_result
     const char *err;
 } wasm_vm_result;
 
-const wasm_vm_result wasm_vm_result_ok = {0};
+extern const wasm_vm_result wasm_vm_result_ok;
 
 #define wasm_vm_try_get_function(VAR, CALL) \
     {                                       \
