@@ -21,6 +21,8 @@
 typedef uint32_t wasm_ptr_t;
 typedef uint32_t wasm_size_t;
 
+const wasm_vm_result wasm_vm_result_ok = {0};
+
 typedef struct wasm_vm
 {
     spinlock_t _lock;
@@ -105,7 +107,7 @@ wasm_vm_result wasm_vm_new_per_cpu(void)
         printk("wasm: creating vm for cpu %d", cpu);
         vms[cpu] = wasm_vm_new(cpu);
     }
-    return (wasm_vm_result){.err = NULL};
+    return wasm_vm_result_ok;
 }
 
 wasm_vm_result wasm_vm_destroy_per_cpu(void)
@@ -120,7 +122,7 @@ wasm_vm_result wasm_vm_destroy_per_cpu(void)
         }
     }
 
-    return (wasm_vm_result){.err = NULL};
+    return wasm_vm_result_ok;
 }
 
 static void wasm_vm_print_backtrace(wasm_vm_function *func)
@@ -233,7 +235,7 @@ wasm_vm_result wasm_vm_call_direct_v(wasm_vm *vm, wasm_vm_function *func, va_lis
     int ret_count = m3_GetRetCount(func);
     if (ret_count == 0)
     {
-        return (wasm_vm_result){.err = NULL};
+        return wasm_vm_result_ok;
     }
 
     static uint64_t valbuff[MAX_RETURN_VALUES] = {0};
@@ -331,7 +333,7 @@ wasm_vm_result wasm_vm_global(wasm_vm_module *module, const char *name)
         return (wasm_vm_result){.data[0].f64 = tagged.value.f64};
 #endif
     default:
-        return (wasm_vm_result){};
+        return wasm_vm_result_ok;
     }
 }
 
