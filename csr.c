@@ -3,7 +3,10 @@
 typedef struct csr_module
 {
     wasm_vm *vm;
-
+    // Memory management
+    wasm_vm_function *csr_malloc;
+    wasm_vm_function *csr_free;
+    // Certificate request generation
     wasm_vm_function *generate_csr;
 }csr_module;
 
@@ -14,6 +17,11 @@ csr_module* this_cpu_csr(void)
     int cpu = get_cpu();
     put_cpu();
     return csr_modules[cpu];
+}
+
+wasm_vm_module* get_csr_module(csr_module *csr)
+{
+    return csr->csr_malloc->module;
 }
 
 
@@ -27,6 +35,8 @@ wasm_vm_result init_csr_for(wasm_vm *vm, wasm_vm_module *module)
     }
     wasm_vm_result result;
     wasm_vm_try_get_function(csr->generate_csr, wasm_vm_get_function(vm, module->name, "gen_csr"));
+    wasm_vm_try_get_function(csr->csr_malloc, wasm_vm_get_function(vm, module->name, "malloc"));
+    wasm_vm_try_get_function(csr->csr_free, wasm_vm_get_function(vm, module->name, "free"));
 
 error:
     if (result.err)
@@ -36,6 +46,15 @@ error:
     }
 
     return (wasm_vm_result){.err = NULL};
+}
+
+wasm_vm_result csr_malloc(csr_module *csr, i32 size)
+{
+    return wasm_vm_call_direct(csr->vm, csr->csr_malloc, size);
+}
+
+wasm_vm_result csr_free(csr_module *csr, i32 ptr){
+    return wasm_vm_call_direct(csr->vm, csr->csr_free, ptr);
 }
 
 wasm_vm_result gen_csr(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len) {

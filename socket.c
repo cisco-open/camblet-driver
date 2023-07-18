@@ -668,12 +668,26 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		size_t pem_len = br_pem_encode(NULL, NULL, len, "RSA PRIVATE KEY", 0);
 
-		unsigned char *pem = kzalloc(pem_len+1, GFP_KERNEL);
-		br_pem_encode(pem, encoded_rsa, len, "RSA PRIVATE KEY", 0);
-
+		//Allocate memory inside the wasm vm since this data must be available inside the module
 		csr_module *csr = this_cpu_csr();
+		wasm_vm_result malloc_result = csr_malloc(csr, pem_len+1);
+		if (malloc_result.err)
+		{
+			FATAL("csr wasm_vm_csr_malloc error: %s", malloc_result.err);
+			return 0;
+		}
+		uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
+		i32 addr = malloc_result.data->i32;
+
+		unsigned char *pem = mem + addr;
+
+		br_pem_encode(pem, encoded_rsa, pem_len, "RSA PRIVATE KEY", 0);
+
 
 		wasm_vm_result generated_csr = gen_csr(csr, pem, len);
+
+
+		// unsigned char *pem = kzalloc(pem_len+1, GFP_KERNEL);
 
 		/*
 		 * Initialise the context with the cipher suites and
