@@ -35,8 +35,8 @@ wasm_vm_result init_csr_for(wasm_vm *vm, wasm_vm_module *module)
     }
     wasm_vm_result result;
     wasm_vm_try_get_function(csr->generate_csr, wasm_vm_get_function(vm, module->name, "gen_csr"));
-    wasm_vm_try_get_function(csr->csr_malloc, wasm_vm_get_function(vm, module->name, "malloc"));
-    wasm_vm_try_get_function(csr->csr_free, wasm_vm_get_function(vm, module->name, "free"));
+    wasm_vm_try_get_function(csr->csr_malloc, wasm_vm_get_function(vm, module->name, "csr_malloc"));
+    wasm_vm_try_get_function(csr->csr_free, wasm_vm_get_function(vm, module->name, "csr_free"));
 
 error:
     if (result.err)
