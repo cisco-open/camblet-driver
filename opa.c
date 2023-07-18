@@ -14,11 +14,11 @@
 typedef struct opa_wrapper
 {
     wasm_vm *vm;
-    IM3Function malloc;
-    IM3Function free;
+    wasm_vm_function *malloc;
+    wasm_vm_function *free;
+    wasm_vm_function *eval;
+    wasm_vm_function *json_dump;
     void **builtins;
-    IM3Function eval;
-    IM3Function json_dump;
 } opa_wrapper;
 
 static opa_wrapper *opas[NR_CPUS] = {0};
