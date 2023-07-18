@@ -59,6 +59,25 @@ i32 time_now_ns(opa_wrapper *opa)
     return addr;
 }
 
+i32 time_now_ns(opa_wrapper *opa, i32 arg1)
+{
+    u64 now = ktime_get_real_ns();
+
+    wasm_vm_result result = opa_malloc(opa, sizeof(now));
+    if (result.err)
+    {
+        FATAL("opa wasm_vm_opa_malloc error: %s", result.err);
+        return 0;
+    }
+
+    uint8_t *mem = wasm_vm_memory(opa->eval->module);
+    i32 addr = result.data->i32;
+
+    memcpy(mem + addr, &now, sizeof(now));
+
+    return addr;
+}
+
 int parse_opa_builtins(opa_wrapper *opa, char *json)
 {
     JSON_Value *root_value = json_parse_string(json);
@@ -76,6 +95,10 @@ int parse_opa_builtins(opa_wrapper *opa, char *json)
         {
             const char *name = json_object_get_name(object, i);
             const int64_t builtin_id = json_object_get_number(object, name);
+            if (strcmp(name, "time.now_ns") == 0)
+            {
+                opa->builtins[builtin_id] = time_now_ns;
+            }
             if (strcmp(name, "time.now_ns") == 0)
             {
                 opa->builtins[builtin_id] = time_now_ns;
@@ -156,13 +179,13 @@ m3ApiRawFunction(opa_builtin1)
 
     opa_wrapper *opa = (opa_wrapper *)_ctx->userdata;
 
-    printk("wasm: calling opa_builtin0 %d", builtin_id);
+    printk("wasm: calling opa_builtin1 %d", builtin_id);
 
-    i32 (*builtin)(opa_wrapper *) = opa->builtins[builtin_id];
+    i32 (*builtin)(opa_wrapper *, i32) = opa->builtins[builtin_id];
 
     if (!builtin)
     {
-        pr_err("wasm: opa_builtin0 %d not found", builtin_id);
+        pr_err("wasm: opa_builtin1 %d not found", builtin_id);
         m3ApiTrap(m3Err_trapAbort);
     }
 
