@@ -143,6 +143,29 @@ m3ApiRawFunction(opa_builtin0)
         m3ApiTrap(m3Err_trapAbort);
     }
 
+    m3ApiReturn(builtin(opa, ctx));
+}
+
+m3ApiRawFunction(opa_builtin1)
+{
+    m3ApiReturnType(i32);
+
+    m3ApiGetArg(i32, builtin_id);
+    m3ApiGetArg(i32, ctx);
+    m3ApiGetArg(i32, _1);
+
+    opa_wrapper *opa = (opa_wrapper *)_ctx->userdata;
+
+    printk("wasm: calling opa_builtin0 %d", builtin_id);
+
+    i32 (*builtin)(opa_wrapper *) = opa->builtins[builtin_id];
+
+    if (!builtin)
+    {
+        pr_err("wasm: opa_builtin0 %d not found", builtin_id);
+        m3ApiTrap(m3Err_trapAbort);
+    }
+
     m3ApiReturn(builtin(opa));
 }
 
