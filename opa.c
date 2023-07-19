@@ -63,9 +63,22 @@ i32 trace(opa_wrapper *opa, i32 _ctx, i32 arg1)
 {
     uint8_t *mem = wasm_vm_memory(opa->eval->module);
 
-    printk("wasm: opa: Note \"%s\"", mem + arg1);
+    printk("wasm: opa: Note \"%s\"", (char *)(mem + arg1));
 
-    return true;
+    wasm_vm_result result = opa_malloc(opa, sizeof(true));
+    if (result.err)
+    {
+        FATAL("opa wasm_vm_opa_malloc error: %s", result.err);
+        return 0;
+    }
+
+    i32 addr = result.data->i32;
+
+    int true = true;
+
+    memcpy(mem + addr, &true, sizeof(true));
+
+    return addr;
 }
 
 int parse_opa_builtins(opa_wrapper *opa, char *json)
