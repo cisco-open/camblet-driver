@@ -8,27 +8,37 @@ typedef struct csr_module
     wasm_vm_function *csr_free;
     // Certificate request generation
     wasm_vm_function *generate_csr;
-}csr_module;
+} csr_module;
 
 static csr_module *csr_modules[NR_CPUS] = {0};
 
-csr_module* this_cpu_csr(void)
+csr_module *this_cpu_csr(void)
 {
     int cpu = get_cpu();
     put_cpu();
     return csr_modules[cpu];
 }
 
-wasm_vm_module* get_csr_module(csr_module *csr)
+wasm_vm_module *get_csr_module(csr_module *csr)
 {
     return csr->csr_malloc->module;
 }
 
+void csr_lock(csr_module *csr)
+{
+    wasm_vm_lock(csr->vm);
+}
+
+void csr_unlock(csr_module *csr)
+{
+    wasm_vm_unlock(csr->vm);
+}
 
 wasm_vm_result init_csr_for(wasm_vm *vm, wasm_vm_module *module)
 {
     csr_module *csr = csr_modules[vm->cpu];
-    if (csr == NULL) {
+    if (csr == NULL)
+    {
         csr = kzalloc(sizeof(struct csr_module), GFP_KERNEL);
         csr->vm = vm;
         csr_modules[vm->cpu] = csr;
@@ -53,11 +63,13 @@ wasm_vm_result csr_malloc(csr_module *csr, i32 size)
     return wasm_vm_call_direct(csr->vm, csr->csr_malloc, size);
 }
 
-wasm_vm_result csr_free(csr_module *csr, i32 ptr){
+wasm_vm_result csr_free(csr_module *csr, i32 ptr)
+{
     return wasm_vm_call_direct(csr->vm, csr->csr_free, ptr);
 }
 
-wasm_vm_result gen_csr(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len) {
+wasm_vm_result gen_csr(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len)
+{
     wasm_vm_result result = wasm_vm_call_direct(csr->vm, csr->generate_csr, priv_key_buff_ptr, priv_key_buff_len);
     if (result.err != NULL)
     {

@@ -667,10 +667,12 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		//Allocate memory inside the wasm vm since this data must be available inside the module
 		csr_module *csr = this_cpu_csr();
+		csr_lock(csr);
 		wasm_vm_result malloc_result = csr_malloc(csr, 4096);
 		if (malloc_result.err)
 		{
 			FATAL("csr wasm_vm_csr_malloc error: %s", malloc_result.err);
+			csr_unlock(csr);
 			return 0;
 		}
 		uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
@@ -682,6 +684,8 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		printk("PEM: %s", pem);
 
 		wasm_vm_result generated_csr = gen_csr(csr, addr, pem_len+1);
+
+		csr_unlock(csr);
 
 		/*
 		 * Initialise the context with the cipher suites and
