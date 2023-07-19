@@ -429,20 +429,20 @@ m3ApiRawFunction(m3_ext_submit_metric)
     m3ApiReturn(i_size);
 }
 
+typedef uint32_t __wasi_size_t;
+
+typedef struct __wasi_iovec_t {
+    __wasi_size_t buf;
+    __wasi_size_t buf_len;
+} __wasi_iovec_t;
+
 typedef struct __wasi_ciovec_t {
-    /**
-     * The address of the buffer to be written.
-     */
-    const uint8_t * buf;
-
-    /**
-     * The length of the buffer to be written.
-     */
-    uint32_t buf_len;
-
+    void* buf;
+    __wasi_size_t buf_len;
 } __wasi_ciovec_t;
 
-const void* copy_iov_to_host(IM3Runtime runtime, void* _mem, __wasi_ciovec_t* host_iov, __wasi_ciovec_t* wasi_iov, int32_t iovs_len)
+
+const void* copy_iov_to_host(IM3Runtime runtime, void* _mem, __wasi_ciovec_t* host_iov, __wasi_iovec_t* wasi_iov, int32_t iovs_len)
 {
     // Convert wasi memory offsets to host addresses
     for (int i = 0; i < iovs_len; i++) {
@@ -457,27 +457,23 @@ m3ApiRawFunction(m3_wasi_generic_fd_write)
 {  
     m3ApiReturnType(uint16_t);
     m3ApiGetArg(uint32_t             , fd);
-    m3ApiGetArgMem(__wasi_ciovec_t * , wasi_iovs);
-    m3ApiGetArg(size_t               , iovs_len);
+    m3ApiGetArgMem(__wasi_iovec_t *  , wasi_iovs);
+    m3ApiGetArg(i32                  , iovs_len);
     m3ApiGetArgMem(uint32_t *        , nwritten);
 
-    m3ApiCheckMem(wasi_iovs,    iovs_len * sizeof(__wasi_ciovec_t));
+    m3ApiCheckMem(wasi_iovs,    iovs_len * sizeof(__wasi_iovec_t));
     m3ApiCheckMem(nwritten,     sizeof(uint32_t));
 
-    __wasi_ciovec_t iovs[iovs_len];
-    const void* mem_check = copy_iov_to_host(runtime, _mem, iovs, wasi_iovs, iovs_len);
-    if (mem_check != m3Err_none) {
+    __wasi_ciovec_t iovs[1];
+    const void *mem_check = copy_iov_to_host(runtime, _mem, iovs, wasi_iovs, iovs_len);
+    if (mem_check != m3Err_none)
+    {
         return mem_check;
     }
 
-    // if (iovs_len == 1) {
-    //     printk("iovs len number is one");
-    // }
-    // int i;
-    // for(i=0; i < iovs_len; i++) 
-    // {
-    //     printk("%.*s", iovs[i].buf_len, iovs[i].buf);
-    // }
+    printk("iovs_len %d iovs[0].buf_len %d", iovs_len, iovs[0].buf_len);
+    printk("%s", iovs[0].buf);
+    *nwritten = iovs[0].buf_len;
 
     m3ApiReturn(0);
 }

@@ -684,7 +684,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		br_pem_encode(pem, encoded_rsa, pem_len, "RSA PRIVATE KEY", 0);
 
 
-		wasm_vm_result generated_csr = gen_csr(csr, addr, len);
+		wasm_vm_result generated_csr = gen_csr(csr, addr, pem_len+1);
 
 
 		// unsigned char *pem = kzalloc(pem_len+1, GFP_KERNEL);
