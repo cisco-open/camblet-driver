@@ -429,6 +429,30 @@ m3ApiRawFunction(m3_ext_submit_metric)
     m3ApiReturn(i_size);
 }
 
+typedef struct __wasi_ciovec_t {
+    /**
+     * The address of the buffer to be written.
+     */
+    const uint8_t * buf;
+
+    /**
+     * The length of the buffer to be written.
+     */
+    uint32_t buf_len;
+
+} __wasi_ciovec_t;
+
+m3ApiRawFunction(m3_wasi_generic_fd_write)
+{  
+    m3ApiReturnType(uint16_t);
+    m3ApiGetArg(uint32_t             , fd);
+    m3ApiGetArgMem(__wasi_ciovec_t * , iovs);
+    m3ApiGetArg(size_t               , iovs_len);
+    m3ApiGetArgMem(uint32_t *        , nwritten);
+
+    m3ApiReturn(0);
+}
+
 m3ApiRawFunction(m3_wasi_generic_environ_get)
 {
     m3ApiReturnType  (uint32_t)
@@ -493,6 +517,7 @@ static M3Result m3_LinkWASIMocks(IM3Module module)
     _(SuppressLookupFailure (m3_LinkRawFunction (module, wasi, "environ_get",       "i(**)", m3_wasi_generic_environ_get)));
     _(SuppressLookupFailure (m3_LinkRawFunction (module, wasi, "environ_sizes_get", "i(**)", m3_wasi_generic_environ_sizes_get)));
     _(SuppressLookupFailure (m3_LinkRawFunction (module, wasi, "proc_exit",           "(i)", m3_wasi_generic_proc_exit)));
+    _(SuppressLookupFailure (m3_LinkRawFunction (module, wasi, "fd_write",        "i(i*i*)", m3_wasi_generic_fd_write)));
 
 _catch:
     return result;
