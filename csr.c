@@ -61,7 +61,7 @@ wasm_vm_result gen_csr(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff
     wasm_vm_result result = wasm_vm_call_direct(csr->vm, csr->generate_csr, priv_key_buff_ptr, priv_key_buff_len);
     if (result.err != NULL)
     {
-        pr_err("wasm: calling gen_csr errored %s\n", wasm_vm_last_error(csr->generate_csr->module));
+        pr_err("wasm: calling gen_csr errored %s\n", result.err);
         return result;
     }
     printk("wasm: result of calling gen_csr %d\n", result.data->i32);

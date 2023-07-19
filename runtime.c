@@ -442,13 +442,42 @@ typedef struct __wasi_ciovec_t {
 
 } __wasi_ciovec_t;
 
+const void* copy_iov_to_host(IM3Runtime runtime, void* _mem, __wasi_ciovec_t* host_iov, __wasi_ciovec_t* wasi_iov, int32_t iovs_len)
+{
+    // Convert wasi memory offsets to host addresses
+    for (int i = 0; i < iovs_len; i++) {
+        host_iov[i].buf = m3ApiOffsetToPtr(wasi_iov[i].buf);
+        host_iov[i].buf_len  = wasi_iov[i].buf_len;
+        m3ApiCheckMem(host_iov[i].buf,     host_iov[i].buf_len);
+    }
+    m3ApiSuccess();
+}
+
 m3ApiRawFunction(m3_wasi_generic_fd_write)
 {  
     m3ApiReturnType(uint16_t);
     m3ApiGetArg(uint32_t             , fd);
-    m3ApiGetArgMem(__wasi_ciovec_t * , iovs);
+    m3ApiGetArgMem(__wasi_ciovec_t * , wasi_iovs);
     m3ApiGetArg(size_t               , iovs_len);
     m3ApiGetArgMem(uint32_t *        , nwritten);
+
+    m3ApiCheckMem(wasi_iovs,    iovs_len * sizeof(__wasi_ciovec_t));
+    m3ApiCheckMem(nwritten,     sizeof(uint32_t));
+
+    __wasi_ciovec_t iovs[iovs_len];
+    const void* mem_check = copy_iov_to_host(runtime, _mem, iovs, wasi_iovs, iovs_len);
+    if (mem_check != m3Err_none) {
+        return mem_check;
+    }
+
+    // if (iovs_len == 1) {
+    //     printk("iovs len number is one");
+    // }
+    // int i;
+    // for(i=0; i < iovs_len; i++) 
+    // {
+    //     printk("%.*s", iovs[i].buf_len, iovs[i].buf);
+    // }
 
     m3ApiReturn(0);
 }
