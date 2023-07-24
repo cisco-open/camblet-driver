@@ -18,6 +18,7 @@ typedef struct opa_wrapper
     wasm_vm_function *free;
     wasm_vm_function *eval;
     wasm_vm_function *json_dump;
+    wasm_vm_function *value_dump;
     void **builtins;
 } opa_wrapper;
 
@@ -63,9 +64,16 @@ i32 trace(opa_wrapper *opa, i32 _ctx, i32 arg1)
 {
     uint8_t *mem = wasm_vm_memory(opa->eval->module);
 
-    printk("wasm: opa: Note \"%s\"", (char *)(mem + arg1));
+    wasm_vm_result result = wasm_vm_call_direct(opa->vm, opa->value_dump, arg1);
+    if (result.err)
+    {
+        FATAL("opa wasm_vm_value_dump error: %s", result.err);
+        return 0;
+    }
 
-    wasm_vm_result result = opa_malloc(opa, sizeof(true));
+    printk("wasm: opa: Note %s", (char *)(mem + result.data->i32));
+
+    result = opa_malloc(opa, sizeof(true));
     if (result.err)
     {
         FATAL("opa wasm_vm_opa_malloc error: %s", result.err);
@@ -220,6 +228,7 @@ wasm_vm_result init_opa_for(wasm_vm *vm, wasm_vm_module *module)
     wasm_vm_try_get_function(opa->free, wasm_vm_get_function(vm, OPA_MODULE, "opa_free"));
     wasm_vm_try_get_function(opa->eval, wasm_vm_get_function(vm, OPA_MODULE, "opa_eval"));
     wasm_vm_try_get_function(opa->json_dump, wasm_vm_get_function(vm, OPA_MODULE, "opa_json_dump"));
+    wasm_vm_try_get_function(opa->value_dump, wasm_vm_get_function(vm, OPA_MODULE, "opa_value_dump"));
     wasm_vm_try_get_function(builtinsFunc, wasm_vm_get_function(vm, OPA_MODULE, "builtins"));
     opa->vm = vm;
 
