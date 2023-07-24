@@ -660,34 +660,28 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		if (sc->rsa_pub->nlen != priv_exponent_size) {
 			printk("Error happened during priv_exponent generation");
 		}
-		size_t len = br_encode_rsa_raw_der(NULL, sc->rsa_priv, sc->rsa_pub, priv_exponent, priv_exponent_size);
-
-		unsigned char* encoded_rsa = kzalloc(len, GFP_KERNEL);
-		br_encode_rsa_raw_der(encoded_rsa, sc->rsa_priv, sc->rsa_pub, priv_exponent, priv_exponent_size);
-
-
-		size_t pem_len = br_pem_encode(NULL, NULL, len, "RSA PRIVATE KEY", 0);
+		size_t len = br_encode_rsa_pkcs8_der(NULL, sc->rsa_priv, sc->rsa_pub, priv_exponent, priv_exponent_size);
 
 		//Allocate memory inside the wasm vm since this data must be available inside the module
 		csr_module *csr = this_cpu_csr();
 
 		csr_lock(csr);
-		wasm_vm_result malloc_result = csr_malloc(csr, pem_len+1);
+		wasm_vm_result malloc_result = csr_malloc(csr, len);
 		if (malloc_result.err)
 		{
 			FATAL("csr wasm_vm_csr_malloc error: %s", malloc_result.err);
 			csr_unlock(csr);
 			return 0;
 		}
+
 		uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
 		i32 addr = malloc_result.data->i32;
 
-		unsigned char *pem = mem + addr;
+		unsigned char *der = mem + addr;
 
-		br_pem_encode(pem, encoded_rsa, pem_len, "RSA PRIVATE KEY", 0);
+		br_encode_rsa_pkcs8_der(der, sc->rsa_priv, sc->rsa_pub, priv_exponent, priv_exponent_size);
 
-
-		wasm_vm_result generated_csr = gen_csr(csr, addr, pem_len+1);
+		wasm_vm_result generated_csr = gen_csr(csr, addr, len);
 
 		csr_unlock(csr);
 
