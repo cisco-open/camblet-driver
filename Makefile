@@ -94,12 +94,18 @@ rmmod:
 	sudo rm -f /run/wasm.socket
 	sudo rmmod bearssl
 
-setup-vm:
+_debian_deps:
 	sudo apt update
 	sudo apt install -y clang libbpf-dev dwarves build-essential linux-tools-generic golang dkms
-	sudo cp /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
+
+_archlinux_deps:
+	sudo pacman -Syu linux-headers base-devel clang go dkms
+
+_install_opa:
 	sudo curl -L -o /usr/local/bin/opa https://openpolicyagent.org/downloads/v0.54.0/opa_linux_$(shell go version | cut -f2 -d'/')_static
 	sudo chmod +x /usr/local/bin/opa
 
-setup-archlinux-vm:
-	sudo pacman -Syu linux-headers base-devel clang go dkms
+setup-vm: _debian_deps _install_opa
+	sudo cp /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
+
+setup-archlinux-vm: _archlinux_deps _install_opa
