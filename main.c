@@ -28,7 +28,7 @@
 
 MODULE_AUTHOR("Cisco Systems");
 MODULE_LICENSE("Dual MIT/GPL");
-MODULE_DESCRIPTION("A kernel module that exposes a wasm VM");
+MODULE_DESCRIPTION("A kernel module that exposes a Wasm VM");
 MODULE_VERSION("0.1");
 
 static bool proxywasm_modules = true;
