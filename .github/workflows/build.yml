@@ -61,3 +61,11 @@ jobs:
     - name: Cleanup module
       working-directory: wasm-kernel-module
       run: make rmmod
+
+    - name: Test DKMS
+      working-directory: wasm-kernel-module
+      run: |
+        sudo cp -r . /usr/src/wasm-0.1.0/
+        sudo dkms add -m wasm -v 0.1.0
+        sudo dkms build -m wasm -v 0.1.0
+        sudo dkms install -m wasm -v 0.1.0
