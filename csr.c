@@ -44,7 +44,7 @@ wasm_vm_result init_csr_for(wasm_vm *vm, wasm_vm_module *module)
         csr_modules[vm->cpu] = csr;
     }
     wasm_vm_result result;
-    wasm_vm_try_get_function(csr->generate_csr, wasm_vm_get_function(vm, module->name, "gen_csr"));
+    wasm_vm_try_get_function(csr->generate_csr, wasm_vm_get_function(vm, module->name, "csr_gen"));
     wasm_vm_try_get_function(csr->csr_malloc, wasm_vm_get_function(vm, module->name, "csr_malloc"));
     wasm_vm_try_get_function(csr->csr_free, wasm_vm_get_function(vm, module->name, "csr_free"));
 
@@ -68,14 +68,14 @@ wasm_vm_result csr_free(csr_module *csr, i32 ptr)
     return wasm_vm_call_direct(csr->vm, csr->csr_free, ptr);
 }
 
-wasm_vm_result gen_csr(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len)
+wasm_vm_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len)
 {
     wasm_vm_result result = wasm_vm_call_direct(csr->vm, csr->generate_csr, priv_key_buff_ptr, priv_key_buff_len);
     if (result.err != NULL)
     {
-        pr_err("wasm: calling gen_csr errored %s\n", result.err);
+        pr_err("wasm: calling csr_gen errored %s\n", result.err);
         return result;
     }
-    printk("wasm: result of calling gen_csr %d\n", result.data->i32);
+    printk("wasm: result of calling csr_gen %d\n", result.data->i32);
     return result;
 }

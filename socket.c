@@ -681,11 +681,25 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		br_encode_rsa_pkcs8_der(der, sc->rsa_priv, sc->rsa_pub, priv_exponent, priv_exponent_size);
 
-		wasm_vm_result generated_csr = gen_csr(csr, addr, len);
+		wasm_vm_result generated_csr = csr_gen(csr, addr, len);
+	
+		wasm_vm_result free_result = csr_free(csr, addr);
+		if (free_result.err)
+		{
+			FATAL("csr wasm_vm_csr_free error: %s", free_result.err);
+			csr_unlock(csr);
+			return 0;
+		}
+
+		i64 csr_from_module = generated_csr.data->i64;
+
+		i32 csr_len = (i32)(csr_from_module);
+		unsigned char * csr_ptr = (i32)(csr_from_module >> 32) + mem;
+
+		printk("%.*s", csr_len, csr_ptr);
+
 
 		csr_unlock(csr);
-
-		// unsigned char *pem = kzalloc(pem_len+1, GFP_KERNEL);
 
 		/*
 		 * Initialise the context with the cipher suites and
