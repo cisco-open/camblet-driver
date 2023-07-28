@@ -138,7 +138,7 @@ cfssl gencert \
 ```
 
 
-Generate the static C resources of these certificates with the BearSSL's `brssl` CLI and copy these into the given [certificate_rsa.h](certificate_rsa.h) header file:
+Generate the static C resources of these certificates with BearSSL's `brssl` CLI and copy these into the given [certificate_rsa.h](certificate_rsa.h) header file:
 
 ```bash
 # Trust anchor (CA)
@@ -166,4 +166,30 @@ lima python3 -m http.server
 
 # In another terminal connect to the server (over plaintext, will be TLS terminated by the kernel)
 lima curl -v http://localhost:8000
+```
+
+## DKMS Support
+
+Linux kernel modules need to be built against a specified kernel version, this is when dynamic kernel module support, [DKMS](https://github.com/dell/dkms) comes in handy. The DKMS framework enables you to automatically re-build kernel modules into the current kernel tree as you upgrade your kernel.
+
+The Wasm kernel module has support for DKMS, you can use it in the following way currently:
+
+```bash
+sudo git clone --recurse-submodule --branch dkms https://github.com/cisco-open/wasm-kernel-module.git /usr/src/wasm-0.1.0/
+
+# Add the kernel module to the DKMS source control
+sudo dkms add -m wasm -v 0.1.0
+
+# Build and install the kernel module against the current kernel version
+sudo dkms install -m wasm -v 0.1.0
+
+# Check the logs that the module got loaded
+sudo dmesg -T
+```
+
+Un-installation is very simple as well:
+
+```bash
+sudo dkms uninstall -m wasm -v 0.1.0
+sudo dkms remove -m wasm -v 0.1.0
 ```
