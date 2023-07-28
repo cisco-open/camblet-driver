@@ -492,13 +492,6 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
         // *offset += bytes_to_read;
     }
 
-    // // if (*offset >= c->size)
-    // {
-    //     // free the command
-    //     kfree(c->data);
-    //     kfree(c);
-    // }
-
     return bytes_read;
 }
 
