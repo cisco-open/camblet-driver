@@ -21,7 +21,14 @@ static int device_release(struct inode *, struct file *);
 static ssize_t device_read(struct file *, char __user *, size_t, loff_t *);
 static ssize_t device_write(struct file *, const char __user *, size_t, loff_t *);
 
-void send_command(char *data, size_t size);
+typedef struct command_answer {
+    char *error;
+    char *answer;
+} command_answer;
+
+void free_command_answer(command_answer *cmd_answer);
+
+command_answer *send_command(char *data, size_t size);
 wasm_vm_result load_module(char *name, char *code, unsigned length, char *entrypoint);
 
 #define SUCCESS 0

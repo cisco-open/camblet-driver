@@ -602,7 +602,18 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		// Sample how to send a command to the userspace agent
 		const char *command = "{\"command\": \"accept\", \"name\": \"8000\"}";
-		send_command(command, strlen(command));
+		command_answer *answer = send_command(command, strlen(command));
+
+		if (answer->error)
+		{
+			pr_err("wasm_accept: failed to send command: %s", answer->error);
+		}
+		else
+		{
+			pr_info("wasm_accept: command answer: %s", answer->answer);
+		}
+
+		free_command_answer(answer);
 
 		/*
 		 * Initialise the context with the cipher suites and

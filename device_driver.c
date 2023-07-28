@@ -10,6 +10,7 @@
 
 #include <linux/uaccess.h>
 #include <linux/delay.h>
+#include <linux/wait.h>
 
 #include "base64.h"
 #include "device_driver.h"
@@ -21,6 +22,7 @@
 /* Global variables are declared as static, so are global within the file. */
 
 #define DEFAULT_MODULE_ENTRYPOINT "main"
+#define COMMAND_TIMEOUT_SECONDS 5
 
 static int major; /* major number assigned to our device driver */
 
@@ -39,24 +41,92 @@ typedef struct command
     struct list_head list;
     char *data;
     size_t size;
+    int id;
+    struct command_answer *answer;
+    wait_queue_head_t wait_queue;
 };
 
 // protect the command list with a mutex
 static DEFINE_SPINLOCK(command_list_lock);
 static unsigned long command_list_lock_flags;
 static LIST_HEAD(command_list);
+static LIST_HEAD(in_flight_command_list);
+
+static struct command *lookup_in_flight_command(int id)
+{
+    spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
+
+    struct command *cmd = NULL;
+    struct command *tmp;
+    list_for_each_entry(tmp, &in_flight_command_list, list)
+    {
+        if (tmp->id == id)
+        {
+            cmd = tmp;
+            break;
+        }
+    }
+
+    spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
+
+    return cmd;
+}
+
+void free_command_answer(struct command_answer *cmd_answer)
+{
+    if (cmd_answer->error)
+    {
+        kfree(cmd_answer->error);
+    }
+
+    if (cmd_answer->answer)
+    {
+        kfree(cmd_answer->answer);
+    }
+
+    kfree(cmd_answer);
+}
 
 // create a function to add a command to the list (called from the VM), locked with a spinlock
-void send_command(char *data, size_t size)
+command_answer *send_command(char *data, size_t size)
 {
     struct command *cmd = kmalloc(sizeof(struct command), GFP_KERNEL);
     cmd->data = kmalloc(size, GFP_KERNEL);
     memcpy(cmd->data, data, size);
     cmd->size = size;
+    init_waitqueue_head(&cmd->wait_queue);
 
     spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
     list_add_tail(&cmd->list, &command_list);
     spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
+
+    DEFINE_WAIT(wait);
+
+    // wait until the command is processed
+    printk("wasm: waiting for command to be processed");
+
+    // wait for the command to be processed
+    prepare_to_wait(&cmd->wait_queue, &wait, TASK_INTERRUPTIBLE);
+    // Sleep until the condition is true or the timeout expires
+    unsigned long timeout = msecs_to_jiffies(COMMAND_TIMEOUT_SECONDS * 1000);
+    schedule_timeout(timeout);
+
+    finish_wait(&cmd->wait_queue, &wait);
+
+    if (cmd->answer == NULL)
+    {
+        printk(KERN_ERR "wasm: command answer timeout");
+
+        cmd->answer = kmalloc(sizeof(struct command_answer), GFP_KERNEL);
+        cmd->answer->error = kmalloc(strlen("timeout") + 1, GFP_KERNEL);
+        strcpy(cmd->answer->error, "timeout");
+    }
+
+    spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
+    list_del(&cmd->list);
+    spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
+
+    return cmd->answer;
 }
 
 // create a function to get a command from the list (called from the driver), locked with a mutex
@@ -69,6 +139,7 @@ static struct command *get_command(void)
     {
         cmd = list_first_entry(&command_list, struct command, list);
         list_del(&cmd->list);
+        list_add_tail(&cmd->list, &in_flight_command_list);
     }
     spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
 
@@ -272,6 +343,50 @@ int parse_json_from_buffer(void)
                 goto cleanup;
             }
         }
+        else if (strcmp("answer", command) == 0)
+        {
+            printk("wasm: command answer parsing");
+
+            int command_id = json_object_get_number(root, "id");
+
+            struct command *cmd = lookup_in_flight_command(command_id);
+
+            if (cmd == NULL)
+            {
+                printk(KERN_ERR "wasm: command %d not found", command_id);
+                status = -1;
+                goto cleanup;
+            }
+
+            struct command_answer *cmd_answer = kmalloc(sizeof(struct command_answer), GFP_KERNEL);
+            char *answer = json_object_get_string(root, "answer");
+            char *error = json_object_get_string(root, "error");
+
+            printk("wasm: answer: %s, error: %s", answer, error);
+
+            if (error)
+            {
+                cmd_answer->error = kmalloc(strlen(error) + 1, GFP_KERNEL);
+                strcpy(cmd_answer->error, error);
+            }
+            else
+            {
+                cmd_answer->error = NULL;
+            }
+
+            if (answer)
+            {
+                cmd_answer->answer = kmalloc(strlen(answer) + 1, GFP_KERNEL);
+                strcpy(cmd_answer->answer, answer);
+            }
+            else
+            {
+                cmd_answer->answer = NULL;
+            }
+
+            cmd->answer = cmd_answer;
+            wake_up_interruptible(&cmd->wait_queue);
+        }
         else if (strcmp("proxywasm_test", command) == 0)
         {
             // TODO test only
@@ -362,7 +477,7 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
 
     // copy the command to the buffer
     int bytes_read = 0;
-    int bytes_to_read = c->size; //min(length, c->size - *offset);
+    int bytes_to_read = c->size; // min(length, c->size - *offset);
     if (bytes_to_read > 0)
     {
         // if (copy_to_user(buffer, c->data + *offset, bytes_to_read))
@@ -377,12 +492,12 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
         // *offset += bytes_to_read;
     }
 
-    // if (*offset >= c->size)
-    {
-        // free the command
-        kfree(c->data);
-        kfree(c);
-    }
+    // // if (*offset >= c->size)
+    // {
+    //     // free the command
+    //     kfree(c->data);
+    //     kfree(c);
+    // }
 
     return bytes_read;
 }
@@ -399,10 +514,10 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
     else
         bytes_to_write = maxbytes;
 
-    bytes_writen = bytes_to_write - copy_from_user(device_buffer + *offset, buffer, bytes_to_write);
+    bytes_writen = bytes_to_write - copy_from_user(device_buffer + device_buffer_size, buffer, bytes_to_write);
     printk(KERN_INFO "wasm: device has been written %d", bytes_writen);
     *offset += bytes_writen;
-    device_buffer_size = *offset;
+    device_buffer_size += bytes_writen;
 
     // search for the end of the string in device_buffer
     for (;;)
