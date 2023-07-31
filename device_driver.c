@@ -39,9 +39,10 @@ static atomic_t already_open = ATOMIC_INIT(CDEV_NOT_USED);
 typedef struct command
 {
     struct list_head list;
+    char *name;
     char *data;
-    size_t size;
-    int id;
+    size_t data_size;
+    uuid_t uuid;
     struct command_answer *answer;
     wait_queue_head_t wait_queue;
 };
@@ -52,7 +53,7 @@ static unsigned long command_list_lock_flags;
 static LIST_HEAD(command_list);
 static LIST_HEAD(in_flight_command_list);
 
-static struct command *lookup_in_flight_command(int id)
+static struct command *lookup_in_flight_command(char *id)
 {
     spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
 
@@ -60,7 +61,7 @@ static struct command *lookup_in_flight_command(int id)
     struct command *tmp;
     list_for_each_entry(tmp, &in_flight_command_list, list)
     {
-        if (tmp->id == id)
+        if (strncmp(tmp->uuid.b, id, UUID_SIZE) == 0)
         {
             cmd = tmp;
             break;
@@ -88,16 +89,18 @@ void free_command_answer(struct command_answer *cmd_answer)
 }
 
 // create a function to add a command to the list (called from the VM), locked with a spinlock
-command_answer *send_command(char *data, size_t size)
+command_answer *send_command(char *name, char *data, size_t data_size)
 {
-    struct command *cmd = kmalloc(sizeof(struct command), GFP_KERNEL);
-    cmd->data = kmalloc(size, GFP_KERNEL);
-    memcpy(cmd->data, data, size);
-    cmd->size = size;
-    init_waitqueue_head(&cmd->wait_queue);
+    struct command cmd;
+
+    uuid_gen(&cmd.uuid);
+    cmd.name = name;
+    cmd.data = data;
+    cmd.data_size = data_size;
+    init_waitqueue_head(&cmd.wait_queue);
 
     spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
-    list_add_tail(&cmd->list, &command_list);
+    list_add_tail(&cmd.list, &command_list);
     spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
 
     DEFINE_WAIT(wait);
@@ -106,27 +109,27 @@ command_answer *send_command(char *data, size_t size)
     printk("wasm: waiting for command to be processed");
 
     // wait for the command to be processed
-    prepare_to_wait(&cmd->wait_queue, &wait, TASK_INTERRUPTIBLE);
+    prepare_to_wait(&cmd.wait_queue, &wait, TASK_INTERRUPTIBLE);
     // Sleep until the condition is true or the timeout expires
     unsigned long timeout = msecs_to_jiffies(COMMAND_TIMEOUT_SECONDS * 1000);
     schedule_timeout(timeout);
 
-    finish_wait(&cmd->wait_queue, &wait);
+    finish_wait(&cmd.wait_queue, &wait);
 
-    if (cmd->answer == NULL)
+    if (cmd.answer == NULL)
     {
         printk(KERN_ERR "wasm: command answer timeout");
 
-        cmd->answer = kmalloc(sizeof(struct command_answer), GFP_KERNEL);
-        cmd->answer->error = kmalloc(strlen("timeout") + 1, GFP_KERNEL);
-        strcpy(cmd->answer->error, "timeout");
+        cmd.answer = kmalloc(sizeof(struct command_answer), GFP_KERNEL);
+        cmd.answer->error = kmalloc(strlen("timeout") + 1, GFP_KERNEL);
+        strcpy(cmd.answer->error, "timeout");
     }
 
     spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
-    list_del(&cmd->list);
+    list_del(&cmd.list);
     spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
 
-    return cmd->answer;
+    return cmd.answer;
 }
 
 // create a function to get a command from the list (called from the driver), locked with a mutex
@@ -146,8 +149,42 @@ static struct command *get_command(void)
     return cmd;
 }
 
+// generate function to write command as json to a buffer
+int write_command_to_buffer(char *buffer, size_t buffer_size, struct command *cmd)
+{
+    JSON_Value *root_value = json_value_init_object();
+    JSON_Object *root_object = json_value_get_object(root_value);
+
+    char uuid[UUID_SIZE * 2];
+    base64_encode(uuid, UUID_SIZE * 2, cmd->uuid.b, UUID_SIZE);
+    json_object_set_string(root_object, "id", uuid);
+
+    json_object_set_string(root_object, "command", cmd->name);
+
+    if (cmd->data)
+    {
+        json_object_set_string(root_object, "data", cmd->data);
+    }
+
+    char *serialized_string = json_serialize_to_string(root_value);
+    int length = strlen(serialized_string);
+    if (length > buffer_size)
+    {
+        printk(KERN_ERR "wasm: command buffer too small: %d", length);
+        return -1;
+    }
+
+    strcpy(buffer, serialized_string);
+    json_free_serialized_string(serialized_string);
+    json_value_free(root_value);
+
+    return length;
+}
+
 static char device_buffer[DEVICE_BUFFER_SIZE];
 static size_t device_buffer_size = 0;
+
+static char device_out_buffer[64 * 1024];
 
 static struct class *cls;
 
@@ -345,9 +382,18 @@ int parse_json_from_buffer(void)
         }
         else if (strcmp("answer", command) == 0)
         {
-            printk("wasm: command answer parsing");
+            char *base64_id = json_object_get_string(root, "id");
 
-            int command_id = json_object_get_number(root, "id");
+            printk("wasm: command answer parsing, id: %s", base64_id);
+
+            char command_id[UUID_SIZE * 2];
+            int length = base64_decode(command_id, UUID_SIZE * 2, base64_id, strlen(base64_id));
+            if (length < 0)
+            {
+                FATAL("base64_decode of id failed");
+                status = -1;
+                goto cleanup;
+            }
 
             struct command *cmd = lookup_in_flight_command(command_id);
 
@@ -475,13 +521,20 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
         c = get_command();
     }
 
-    // copy the command to the buffer
+    int json_length = write_command_to_buffer(device_out_buffer, sizeof device_out_buffer, c);
+    if (json_length < 0)
+    { 
+        return -EFAULT;
+    }
+
+    printk("wasm: the command json is done: %s", device_out_buffer);
+
     int bytes_read = 0;
-    int bytes_to_read = c->size; // min(length, c->size - *offset);
+    int bytes_to_read = json_length; // min(length, c->size - *offset);
     if (bytes_to_read > 0)
     {
         // if (copy_to_user(buffer, c->data + *offset, bytes_to_read))
-        if (copy_to_user(buffer, c->data, bytes_to_read))
+        if (copy_to_user(buffer, device_out_buffer, bytes_to_read))
         {
             return -EFAULT;
         }
