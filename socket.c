@@ -602,7 +602,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		// Sample how to send a command to the userspace agent
 		const char *data = "{\"port\": \"8000\"}";
-		command_answer *answer = send_command("accept", data, strlen(data));
+		command_answer *answer = send_command("accept", data);
 
 		if (answer->error)
 		{

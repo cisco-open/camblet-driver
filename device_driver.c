@@ -41,7 +41,6 @@ typedef struct command
     struct list_head list;
     char *name;
     char *data;
-    size_t data_size;
     uuid_t uuid;
     struct command_answer *answer;
     wait_queue_head_t wait_queue;
@@ -89,14 +88,13 @@ void free_command_answer(struct command_answer *cmd_answer)
 }
 
 // create a function to add a command to the list (called from the VM), locked with a spinlock
-command_answer *send_command(char *name, char *data, size_t data_size)
+command_answer *send_command(char *name, char *data)
 {
     struct command cmd;
 
     uuid_gen(&cmd.uuid);
     cmd.name = name;
     cmd.data = data;
-    cmd.data_size = data_size;
     init_waitqueue_head(&cmd.wait_queue);
 
     spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
@@ -408,8 +406,6 @@ int parse_json_from_buffer(void)
             char *answer = json_object_get_string(root, "answer");
             char *error = json_object_get_string(root, "error");
 
-            printk("wasm: answer: %s, error: %s", answer, error);
-
             if (error)
             {
                 cmd_answer->error = kmalloc(strlen(error) + 1, GFP_KERNEL);
@@ -431,6 +427,7 @@ int parse_json_from_buffer(void)
             }
 
             cmd->answer = cmd_answer;
+
             wake_up_interruptible(&cmd->wait_queue);
         }
         else if (strcmp("proxywasm_test", command) == 0)

@@ -29,7 +29,7 @@ typedef struct command_answer
 
 void free_command_answer(command_answer *cmd_answer);
 
-command_answer *send_command(char *name, char *data, size_t data_size);
+command_answer *send_command(char *name, char *data);
 wasm_vm_result load_module(char *name, char *code, unsigned length, char *entrypoint);
 
 #define SUCCESS 0
