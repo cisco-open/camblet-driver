@@ -114,8 +114,13 @@ make logs
 Install the [CLI](https://github.com/cisco-open/wasm-kernel-module-cli) for the kernel module:
 
 ```bash
+# You can build the module on your workstation
 git clone https://github.com/cisco-open/wasm-kernel-module-cli.git
 cd wasm-kernel-module-cli
+make build-cli
+
+# But you need to run it in the VM, where the device is exposed
+lima sudo ./w3k server
 ```
 
 Then follow the instructions [here](https://github.com/cisco-open/wasm-kernel-module-cli#cli).
