@@ -4,6 +4,7 @@ This Linux Kernel module runs and exposes a [Wasm](https://webassembly.org) runt
 - Wasm is capable of running the kernel space
 - running code in kernel space in almost all languages compiled to Wasm
 - expose Wasm functionality written in Wasm to eBPF securely
+- run [proxy-wasm](https://github.com/proxy-wasm/spec) filters on TCP sockets
 
 ## Why doing this?
 
