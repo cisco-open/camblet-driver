@@ -4,6 +4,7 @@ This Linux Kernel module runs and exposes a [Wasm](https://webassembly.org) runt
 - Wasm is capable of running the kernel space
 - running code in kernel space in almost all languages compiled to Wasm
 - expose Wasm functionality written in Wasm to eBPF securely
+- run [proxy-wasm](https://github.com/proxy-wasm/spec) filters on TCP sockets
 
 ## Why doing this?
 
@@ -113,8 +114,13 @@ make logs
 Install the [CLI](https://github.com/cisco-open/wasm-kernel-module-cli) for the kernel module:
 
 ```bash
+# You can build the module on your workstation
 git clone https://github.com/cisco-open/wasm-kernel-module-cli.git
 cd wasm-kernel-module-cli
+make build-cli
+
+# But you need to run it in the VM, where the device is exposed
+lima sudo ./w3k server
 ```
 
 Then follow the instructions [here](https://github.com/cisco-open/wasm-kernel-module-cli#cli).

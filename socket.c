@@ -601,8 +601,19 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		proxywasm_unlock(p);
 
 		// Sample how to send a command to the userspace agent
-		const char *command = "{\"command\": \"accept\", \"name\": \"8000\"}";
-		send_command(command, strlen(command));
+		const char *data = "{\"port\": \"8000\"}";
+		command_answer *answer = send_command("accept", data);
+
+		if (answer->error)
+		{
+			pr_err("wasm_accept: failed to send command: %s", answer->error);
+		}
+		else
+		{
+			pr_info("wasm_accept: command answer: %s", answer->answer);
+		}
+
+		free_command_answer(answer);
 
 		/*
 		 * Initialise the context with the cipher suites and
