@@ -24,6 +24,7 @@
 #include "proxywasm.h"
 #include "csr.h"
 #include "socket.h"
+#include "rsa_tools.h"
 
 #define RSA_OR_EC 0
 
@@ -41,8 +42,6 @@ const char *ALPNs[] = {
 const size_t ALPNs_NUM = sizeof(ALPNs) / sizeof(ALPNs[0]);
 
 static struct proto wasm_prot;
-
-static br_hmac_drbg_context hmac_drbg_ctx;
 
 typedef struct
 {
@@ -572,20 +571,6 @@ void wasm_destroy(struct sock *sk)
 	tcp_v4_destroy_sock(sk);
 }
 
-//BearSSL RSA Keygen related functions
-//Initialize BearSSL random number generator with a unix getrandom backed seeder
-void init_rnd_gen(void) {
-
-	br_prng_seeder seeder;
-
-	seeder = br_prng_seeder_system(NULL);
-
-	br_hmac_drbg_init(&hmac_drbg_ctx, &br_sha256_vtable, NULL, 0);
-	if (!seeder(&hmac_drbg_ctx.vtable)) {
-		printk(KERN_ERR "system source of randomness failed");
-	}
-}
-
 // an enum for the direction
 typedef enum
 {
@@ -642,34 +627,25 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		// generating certificate signing request
 	
-		br_rsa_keygen rsa_keygen = br_rsa_keygen_get_default();
-
-		unsigned char raw_priv_key[BR_RSA_KBUF_PRIV_SIZE(2048)];
-		unsigned char raw_pub_key[BR_RSA_KBUF_PUB_SIZE(2048)];
-
-
-		uint32_t result = rsa_keygen(&hmac_drbg_ctx.vtable, sc->rsa_priv, raw_priv_key, sc->rsa_pub, raw_pub_key, 2048, 3);
-		if (result == 1) {
-			printk("RSA keys are successfully generated.");
+		u_int32_t result =  generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
+		if (result == 0) {
+			pr_err("wasm_accept: error generating rsa keys");
 		}
 
-		printk("Generating private exponent");
-		br_rsa_compute_privexp rsa_priv_exp_comp = br_rsa_compute_privexp_get_default();
-		unsigned char priv_exponent[256];
-		size_t priv_exponent_size = rsa_priv_exp_comp(priv_exponent, sc->rsa_priv, 3);
-		if (sc->rsa_pub->nlen != priv_exponent_size) {
-			printk("Error happened during priv_exponent generation");
+		size_t len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
+		if (len == 0) {
+			pr_err("wasm_accept: error during rsa private key der encoding");
 		}
-		size_t len = br_encode_rsa_pkcs8_der(NULL, sc->rsa_priv, sc->rsa_pub, priv_exponent, priv_exponent_size);
 
 		//Allocate memory inside the wasm vm since this data must be available inside the module
 		csr_module *csr = this_cpu_csr();
 
 		csr_lock(csr);
+
 		wasm_vm_result malloc_result = csr_malloc(csr, len);
 		if (malloc_result.err)
 		{
-			FATAL("csr wasm_vm_csr_malloc error: %s", malloc_result.err);
+			pr_err("wasm_accept: wasm_vm_csr_malloc error: %s", malloc_result.err);
 			csr_unlock(csr);
 			return 0;
 		}
@@ -679,14 +655,14 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		unsigned char *der = mem + addr;
 
-		br_encode_rsa_pkcs8_der(der, sc->rsa_priv, sc->rsa_pub, priv_exponent, priv_exponent_size);
+		encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
 
 		wasm_vm_result generated_csr = csr_gen(csr, addr, len);
 	
 		wasm_vm_result free_result = csr_free(csr, addr);
 		if (free_result.err)
 		{
-			FATAL("csr wasm_vm_csr_free error: %s", free_result.err);
+			pr_err("wasm_accept: wasm_vm_csr_free error: %s", free_result.err);
 			csr_unlock(csr);
 			return 0;
 		}
@@ -695,9 +671,6 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		i32 csr_len = (i32)(csr_from_module);
 		unsigned char * csr_ptr = (i32)(csr_from_module >> 32) + mem;
-
-		printk("%.*s", csr_len, csr_ptr);
-
 
 		csr_unlock(csr);
 
