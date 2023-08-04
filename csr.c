@@ -36,12 +36,12 @@ void csr_unlock(csr_module *csr)
 
 wasm_vm_result init_csr_for(wasm_vm *vm, wasm_vm_module *module)
 {
-    csr_module *csr = csr_modules[vm->cpu];
+    csr_module *csr = csr_modules[wasm_vm_cpu(vm)];
     if (csr == NULL)
     {
         csr = kzalloc(sizeof(struct csr_module), GFP_KERNEL);
         csr->vm = vm;
-        csr_modules[vm->cpu] = csr;
+        csr_modules[wasm_vm_cpu(vm)] = csr;
     }
     wasm_vm_result result;
     wasm_vm_try_get_function(csr->generate_csr, wasm_vm_get_function(vm, module->name, "csr_gen"));
