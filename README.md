@@ -26,16 +26,16 @@ Current restrictions for kernel-space wasm3:
 
 ## Development environment
 
-Our primary development environment is [Lima](https://lima-vm.io) since it supports x86_64 and ARM as well. The module was tested on Ubuntu and Arch Linux and requires kernel version 5.19 and upwards.
-
-As a first step checkout the code:
+Checkout the code before you start:
 
 ```bash
-git clone --recurse-submodules https://github.com/cisco-open/wasm-kernel-module.git
+git clone --recurse-submodules git@github.com:cisco-open/wasm-kernel-module.git
 cd wasm-kernel-module
 ```
 
 ### Lima
+
+Our primary development environment is [Lima](https://lima-vm.io) since it supports x86_64 and ARM as well. The module was tested on Ubuntu and Arch Linux and requires kernel version 5.19 and upwards.
 
 Install Lima itself, for example on macOS using brew:
 ```bash
@@ -51,9 +51,9 @@ limactl start --set '.mounts[0].writable=true' --tty=false
 ```
 
 Setup the required dependencies in the VM:
+
 ```bash
 lima # enter the VM
-...
 sudo apt update && sudo apt install make
 make setup-vm
 ```
@@ -80,16 +80,19 @@ Connect to the Vagrant machine through SSH:
 vagrant ssh
 ```
 
+### Coding
+
+We are using VSCode for development and the project ships with a `c_cpp_properties.json` file which contains the required include paths for the kernel headers. The file is ARM specific from include path point-of-view so if you happen to run on x86_64 please replace the paths accordingly (arm64 -> x86, aarch64 -> x86_64).
+
+You will also need a Linux source bundle, to have full navigation in the source code. The easiest way is to run the `setup-dev-env` target after you already have created a working and configured VM in Lima (with `lima make setup-vm`). This target installs the necessary GCC cross-compilers for IntelliSense, clones the Linux repo, and configures the VSCode workspace accordingly:
+
+```bash
+make setup-dev-env
+```
+
 ## Build and install
 
 *This assumes that you have created a development environment according to the previous section.*
-
-Checkout the code:
-
-```bash
-git clone --recurse-submodules git@github.com:cisco-open/wasm-kernel-module.git
-cd wasm-kernel-module
-```
 
 Build the kernel modules(BearSSL and WASM):
 

@@ -1,6 +1,6 @@
 {
     "env": {
-        "linux-src": "../../bonifaido/rust-linux/"
+        "linux-src": "./linux/"
     },
     "configurations": [
         {
