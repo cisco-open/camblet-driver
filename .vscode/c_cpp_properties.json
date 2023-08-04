@@ -27,6 +27,7 @@
                 "third-party/wasm3/source/"
             ],
             "macFrameworkPath": [],
+            "cStandard": "gnu11",
             "intelliSenseMode": "linux-gcc-arm64",
             "compilerPath": "/opt/homebrew/bin/aarch64-linux-gnu-gcc",
             "configurationProvider": "ms-vscode.makefile-tools"
