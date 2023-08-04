@@ -115,7 +115,7 @@ setup-archlinux-vm: _archlinux_deps _install_opa
 setup-dev-env:
 	test -f .vscode/c_cpp_properties.json || cp .vscode/c_cpp_properties.json.orig .vscode/c_cpp_properties.json
 	brew tap messense/macos-cross-toolchains
-	brew install $(ARCH)-unknown-linux-gnu
+	brew install $(shell lima uname -m)-unknown-linux-gnu
 	test -d linux || git clone --depth=1 git@github.com:torvalds/linux.git
 	cd linux && lima make tinyconfig
 	cd linux && lima make -j
