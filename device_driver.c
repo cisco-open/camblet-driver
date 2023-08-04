@@ -147,32 +147,36 @@ static struct command *get_command(void)
     return cmd;
 }
 
-// generate function to write command as json to a buffer
-int write_command_to_buffer(char *buffer, size_t buffer_size, struct command *cmd)
+static int write_command_to_buffer(char *buffer, size_t buffer_size, struct command *cmd)
 {
+    char uuid[UUID_SIZE * 2];
+    int length = base64_encode(uuid, UUID_SIZE * 2, cmd->uuid.b, UUID_SIZE);
+    if (length < 0)
+    {
+        FATAL("base64_encode of id failed");
+        goto cleanup;
+    }
+
     JSON_Value *root_value = json_value_init_object();
     JSON_Object *root_object = json_value_get_object(root_value);
 
-    char uuid[UUID_SIZE * 2];
-    base64_encode(uuid, UUID_SIZE * 2, cmd->uuid.b, UUID_SIZE);
     json_object_set_string(root_object, "id", uuid);
-
     json_object_set_string(root_object, "command", cmd->name);
-
-    if (cmd->data)
-    {
-        json_object_set_string(root_object, "data", cmd->data);
-    }
+    json_object_set_string(root_object, "data", cmd->data);
 
     char *serialized_string = json_serialize_to_string(root_value);
-    int length = strlen(serialized_string);
+    
+    length = strlen(serialized_string);
     if (length > buffer_size)
     {
         printk(KERN_ERR "wasm: command buffer too small: %d", length);
-        return -1;
+        length = -1;
+        goto cleanup;
     }
 
     strcpy(buffer, serialized_string);
+
+cleanup:
     json_free_serialized_string(serialized_string);
     json_value_free(root_value);
 
