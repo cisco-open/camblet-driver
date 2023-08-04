@@ -29,7 +29,7 @@ Current restrictions for kernel-space wasm3:
 Checkout the code before you start:
 
 ```bash
-git clone --recurse-submodules git@github.com:cisco-open/wasm-kernel-module.git
+git clone --recurse-submodules https://github.com/cisco-open/wasm-kernel-module.git
 cd wasm-kernel-module
 ```
 
