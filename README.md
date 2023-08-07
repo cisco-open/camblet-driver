@@ -18,7 +18,7 @@ This project was presented on KubeCon 2023 Amsterdam, Wasm Day, you can find the
 
 ## Which Wasm runtime?
 
-The [wasm3](https://github.com/wasm3/wasm3) runtime got chosen since it is written in C and has minimal dependencies (except a C library) and it is extremely portable. In kernel space, there is no libc, but we maintain a fork of wasm3 which can run in kernel space as well (check the `thrid-party/wasm3/` submodule).
+The [wasm3](https://github.com/wasm3/wasm3) runtime got chosen since it is written in C and has minimal dependencies (except a C library) and it is extremely portable. In kernel space, there is no libc, but we maintain a fork of wasm3 which can run in kernel space as well (check the `third-party/wasm3/` submodule).
 
 Current restrictions for kernel-space wasm3:
 - no floating point support [can be soft-emulated if needed]
@@ -87,6 +87,10 @@ We are using VSCode for development and the project ships with a `c_cpp_properti
 You will also need a Linux source bundle, to have full navigation in the source code. The easiest way is to run the `setup-dev-env` target after you already have created a working and configured VM in Lima (with `lima make setup-vm`). This target installs the necessary GCC cross-compilers for IntelliSense, clones the Linux repo, and configures the VSCode workspace accordingly:
 
 ```bash
+# Start the VM if you haven't already
+limactl start
+
+# Setup the development environment
 make setup-dev-env
 ```
 
@@ -97,22 +101,28 @@ make setup-dev-env
 Build the kernel modules(BearSSL and WASM):
 
 ```bash
+# Enter the VM
+lima
+
 # Build on all CPU cores parallelly
 make -j$(nproc)
 ```
 
 Load the kernel modules(BearSSL and WASM):
-```
+
+```bash
 make insmod
 ```
 
 Unload the kernel modules(BearSSL and WASM):
-```
+
+```bash
 make rmmod
 ```
 
 Follow the kernel logs:
-```
+
+```bash
 make logs
 ```
 
