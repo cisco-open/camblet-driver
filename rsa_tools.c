@@ -1,5 +1,7 @@
 #include "rsa_tools.h"
 
+#include "linux/kernel.h"
+
 static br_hmac_drbg_context hmac_drbg_ctx;
 
 
