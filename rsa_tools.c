@@ -28,8 +28,7 @@ uint32_t generate_rsa_keys(br_rsa_private_key *rsa_priv, br_rsa_public_key *rsa_
     unsigned char raw_priv_key[BR_RSA_KBUF_PRIV_SIZE(2048)];
     unsigned char raw_pub_key[BR_RSA_KBUF_PUB_SIZE(2048)];
 
-    uint32_t result = rsa_keygen(&hmac_drbg_ctx.vtable, rsa_priv, raw_priv_key, rsa_pub, raw_pub_key, 2048, 3);
-    return result;
+    return rsa_keygen(&hmac_drbg_ctx.vtable, rsa_priv, raw_priv_key, rsa_pub, raw_pub_key, 2048, 3);
 }
 
 // BearSSL RSA Keygen related functions
@@ -44,6 +43,5 @@ size_t encode_rsa_priv_key_to_der(unsigned char *der, br_rsa_private_key *rsa_pr
     {
         printk("Error happened during priv_exponent generation");
     }
-    size_t len = br_encode_rsa_pkcs8_der(der, rsa_priv, rsa_pub, priv_exponent, priv_exponent_size);
-    return len;
+    return br_encode_rsa_pkcs8_der(der, rsa_priv, rsa_pub, priv_exponent, priv_exponent_size);
 }

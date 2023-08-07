@@ -250,9 +250,19 @@ static void free_wasm_socket_context(wasm_socket_context *sc)
 		// 	pr_err("br_sslio_close returned an error");
 		// }
 		if (sc->direction == ListenerDirectionInbound)
+		{
 			kfree(sc->sc);
+			kfree(sc->rsa_priv);
+			kfree(sc->rsa_pub);
+			kfree(sc->cert);
+		}
 		else
+		{
 			kfree(sc->cc);
+			kfree(sc->rsa_priv);
+			kfree(sc->rsa_pub);
+			kfree(sc->cert);
+		}
 
 		// TODO free the proxywasm context
 
