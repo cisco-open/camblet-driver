@@ -352,7 +352,15 @@ void dump_msghdr(struct msghdr *msg)
 	npages = iov_iter_npages(&msg->msg_iter, 16384);
 	printk(KERN_INFO "npages = %d", npages);
 
-	iovlen = iov_length(msg->msg_iter.iov, npages);
+	struct iovec *iov;
+	
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
+	iov = msg->msg_iter.iov;
+#else
+	iov = iter_iov(&msg->msg_iter);
+#endif
+
+	iovlen = iov_length(iov, npages);
 	printk(KERN_INFO "iovlen = %zd", iovlen);
 
 	len = copy_from_iter(data, iovlen - msg->msg_iter.count, &msg->msg_iter);
