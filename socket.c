@@ -633,18 +633,20 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 			// generating certificate signing request
 			if (sc->rsa_priv == NULL || sc->rsa_pub == NULL)
 			{
-				u_int32_t result =  generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
-				if (result == 0) {
+				u_int32_t result = generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
+				if (result == 0)
+				{
 					pr_err("wasm_accept: error generating rsa keys");
 				}
 			}
 
 			size_t len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
-			if (len == 0) {
+			if (len == 0)
+			{
 				pr_err("wasm_accept: error during rsa private key der encoding");
 			}
 
-			//Allocate memory inside the wasm vm since this data must be available inside the module
+			// Allocate memory inside the wasm vm since this data must be available inside the module
 			csr_module *csr = this_cpu_csr();
 
 			csr_lock(csr);
@@ -665,7 +667,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 			encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
 
 			wasm_vm_result generated_csr = csr_gen(csr, addr, len);
-		
+
 			wasm_vm_result free_result = csr_free(csr, addr);
 			if (free_result.err)
 			{
@@ -677,10 +679,9 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 			i64 csr_from_module = generated_csr.data->i64;
 
 			i32 csr_len = (i32)(csr_from_module);
-			unsigned char * csr_ptr = (i32)(csr_from_module >> 32) + mem;
+			unsigned char *csr_ptr = (i32)(csr_from_module >> 32) + mem;
 
 			csr_unlock(csr);
-
 		}
 		/*
 		 * Initialise the context with the cipher suites and
@@ -771,18 +772,20 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			// generating certificate signing request
 			if (sc->rsa_priv == NULL || sc->rsa_pub == NULL)
 			{
-				u_int32_t result =  generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
-				if (result == 0) {
+				u_int32_t result = generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
+				if (result == 0)
+				{
 					pr_err("wasm_accept: error generating rsa keys");
 				}
 			}
 
 			size_t len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
-			if (len == 0) {
+			if (len == 0)
+			{
 				pr_err("wasm_accept: error during rsa private key der encoding");
 			}
 
-			//Allocate memory inside the wasm vm since this data must be available inside the module
+			// Allocate memory inside the wasm vm since this data must be available inside the module
 			csr_module *csr = this_cpu_csr();
 
 			csr_lock(csr);
@@ -803,7 +806,7 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
 
 			wasm_vm_result generated_csr = csr_gen(csr, addr, len);
-		
+
 			wasm_vm_result free_result = csr_free(csr, addr);
 			if (free_result.err)
 			{
@@ -815,10 +818,9 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			i64 csr_from_module = generated_csr.data->i64;
 
 			i32 csr_len = (i32)(csr_from_module);
-			unsigned char * csr_ptr = (i32)(csr_from_module >> 32) + mem;
+			unsigned char *csr_ptr = (i32)(csr_from_module >> 32) + mem;
 
 			csr_unlock(csr);
-
 		}
 
 		/*
@@ -879,7 +881,7 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 int wasm_socket_init(void)
 {
-	//Initialize BearSSL random number generator
+	// Initialize BearSSL random number generator
 	init_rnd_gen();
 
 	// let's overwrite tcp_port with our own implementation
