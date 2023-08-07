@@ -445,7 +445,8 @@ typedef struct __wasi_ciovec_t {
 const void* copy_iov_to_host(IM3Runtime runtime, void* _mem, __wasi_ciovec_t* host_iov, __wasi_iovec_t* wasi_iov, int32_t iovs_len)
 {
     // Convert wasi memory offsets to host addresses
-    for (int i = 0; i < iovs_len; i++) {
+    int i;
+    for (i = 0; i < iovs_len; i++) {
         host_iov[i].buf = m3ApiOffsetToPtr(wasi_iov[i].buf);
         host_iov[i].buf_len  = wasi_iov[i].buf_len;
         m3ApiCheckMem(host_iov[i].buf,     host_iov[i].buf_len);
