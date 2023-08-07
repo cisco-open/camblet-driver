@@ -429,56 +429,6 @@ m3ApiRawFunction(m3_ext_submit_metric)
     m3ApiReturn(i_size);
 }
 
-typedef uint32_t __wasi_size_t;
-
-typedef struct __wasi_iovec_t {
-    __wasi_size_t buf;
-    __wasi_size_t buf_len;
-} __wasi_iovec_t;
-
-typedef struct __wasi_ciovec_t {
-    void* buf;
-    __wasi_size_t buf_len;
-} __wasi_ciovec_t;
-
-
-const void* copy_iov_to_host(IM3Runtime runtime, void* _mem, __wasi_ciovec_t* host_iov, __wasi_iovec_t* wasi_iov, int32_t iovs_len)
-{
-    // Convert wasi memory offsets to host addresses
-    int i;
-    for (i = 0; i < iovs_len; i++) {
-        host_iov[i].buf = m3ApiOffsetToPtr(wasi_iov[i].buf);
-        host_iov[i].buf_len  = wasi_iov[i].buf_len;
-        m3ApiCheckMem(host_iov[i].buf,     host_iov[i].buf_len);
-    }
-    m3ApiSuccess();
-}
-
-m3ApiRawFunction(m3_wasi_generic_fd_write)
-{  
-    m3ApiReturnType(uint16_t);
-    m3ApiGetArg(uint32_t             , fd);
-    m3ApiGetArgMem(__wasi_iovec_t *  , wasi_iovs);
-    m3ApiGetArg(i32                  , iovs_len);
-    m3ApiGetArgMem(uint32_t *        , nwritten);
-
-    m3ApiCheckMem(wasi_iovs,    iovs_len * sizeof(__wasi_iovec_t));
-    m3ApiCheckMem(nwritten,     sizeof(uint32_t));
-
-    __wasi_ciovec_t iovs[1];
-    const void *mem_check = copy_iov_to_host(runtime, _mem, iovs, wasi_iovs, iovs_len);
-    if (mem_check != m3Err_none)
-    {
-        return mem_check;
-    }
-
-    printk("iovs_len %d iovs[0].buf_len %d", iovs_len, iovs[0].buf_len);
-    printk("%s", iovs[0].buf);
-    *nwritten = iovs[0].buf_len;
-
-    m3ApiReturn(0);
-}
-
 m3ApiRawFunction(m3_wasi_generic_environ_get)
 {
     m3ApiReturnType  (uint32_t)
@@ -543,7 +493,6 @@ static M3Result m3_LinkWASIMocks(IM3Module module)
     _(SuppressLookupFailure (m3_LinkRawFunction (module, wasi, "environ_get",       "i(**)", m3_wasi_generic_environ_get)));
     _(SuppressLookupFailure (m3_LinkRawFunction (module, wasi, "environ_sizes_get", "i(**)", m3_wasi_generic_environ_sizes_get)));
     _(SuppressLookupFailure (m3_LinkRawFunction (module, wasi, "proc_exit",           "(i)", m3_wasi_generic_proc_exit)));
-    _(SuppressLookupFailure (m3_LinkRawFunction (module, wasi, "fd_write",        "i(i*i*)", m3_wasi_generic_fd_write)));
 
 _catch:
     return result;
