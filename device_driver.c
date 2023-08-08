@@ -17,6 +17,7 @@
 #include "json.h"
 #include "opa.h"
 #include "proxywasm.h"
+#include "csr.h"
 #include "runtime.h"
 
 /* Global variables are declared as static, so are global within the file. */
@@ -309,13 +310,24 @@ wasm_vm_result load_module(char *name, char *code, unsigned length, char *entryp
                 return result;
             }
         }
-        else if (strstr(name, "proxywasm") != NULL)
+        else if (strstr(name, PROXY_WASM) != NULL)
         {
             printk("wasm: initializing proxywasm for %s", name);
             result = init_proxywasm_for(vm, module);
             if (result.err)
             {
                 FATAL("init_proxywasm_for: %s", result.err);
+                wasm_vm_unlock(vm);
+                return result;
+            }
+        }
+        else if (strstr(name, CSR_MODULE) != NULL)
+        {
+            printk("wasm: initializing csr module for %s", name);
+            result = init_csr_for(vm, module);
+            if (result.err)
+            {
+                FATAL("init_csr_for: %s", result.err);
                 wasm_vm_unlock(vm);
                 return result;
             }

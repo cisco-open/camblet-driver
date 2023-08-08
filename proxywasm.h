@@ -13,6 +13,8 @@
 
 #include "runtime.h"
 
+#define PROXY_WASM "proxywasm"
+
 typedef enum
 {
   WasmResult_Ok = 0,
