@@ -10,6 +10,7 @@
 
 #include <linux/uaccess.h>
 #include <linux/delay.h>
+#include <linux/version.h>
 #include <linux/wait.h>
 
 #include "base64.h"
@@ -209,7 +210,12 @@ int chardev_init(void)
 
     pr_info("wasm: I was assigned major number %d.", major);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
     cls = class_create(THIS_MODULE, DEVICE_NAME);
+#else
+    cls = class_create(DEVICE_NAME);
+#endif
+
     device_create(cls, NULL, MKDEV(major, 0), NULL, DEVICE_NAME);
 
     pr_info("wasm: Device created on /dev/%s", DEVICE_NAME);
