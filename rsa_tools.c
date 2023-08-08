@@ -6,7 +6,7 @@ static br_hmac_drbg_context hmac_drbg_ctx;
 
 // BearSSL RSA Keygen related functions
 // Initialize BearSSL random number generator with a unix getrandom backed seeder
-void init_rnd_gen()
+int init_rnd_gen()
 {
 
     br_prng_seeder seeder;
@@ -17,7 +17,9 @@ void init_rnd_gen()
     if (!seeder(&hmac_drbg_ctx.vtable))
     {
         printk(KERN_ERR "system source of randomness failed");
+        return -1;
     }
+    return 0;
 }
 // BearSSL RSA Keygen related functions
 // Generates a 2048 bit long rsa key pair

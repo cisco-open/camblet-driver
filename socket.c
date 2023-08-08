@@ -252,20 +252,17 @@ static void free_wasm_socket_context(wasm_socket_context *sc)
 		if (sc->direction == ListenerDirectionInbound)
 		{
 			kfree(sc->sc);
-			kfree(sc->rsa_priv);
-			kfree(sc->rsa_pub);
-			kfree(sc->cert);
 		}
 		else
 		{
 			kfree(sc->cc);
-			kfree(sc->rsa_priv);
-			kfree(sc->rsa_pub);
-			kfree(sc->cert);
 		}
 
-		// TODO free the proxywasm context
+		kfree(sc->rsa_priv);
+		kfree(sc->rsa_pub);
+		kfree(sc->cert);
 
+		// TODO free the proxywasm context
 		kfree(sc);
 	}
 }
@@ -647,13 +644,15 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 				if (result == 0)
 				{
 					pr_err("wasm_accept: error generating rsa keys");
+					return 0;
 				}
 			}
 
 			size_t len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
 			if (len == 0)
 			{
-				pr_err("wasm_accept: error during rsa private key der encoding");
+				pr_err("wasm_accept: error during rsa private der key length calculation");
+				return 0;
 			}
 
 			// Allocate memory inside the wasm vm since this data must be available inside the module
@@ -674,7 +673,12 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 			unsigned char *der = mem + addr;
 
-			encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
+			size_t error = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
+			if (error = 0)
+			{
+				pr_err("wasm_accept: error during rsa private key der encoding");
+				return 0;
+			}
 
 			wasm_vm_result generated_csr = csr_gen(csr, addr, len);
 
@@ -892,7 +896,11 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 int wasm_socket_init(void)
 {
 	// Initialize BearSSL random number generator
-	init_rnd_gen();
+	int err = init_rnd_gen();
+	if (err == -1)
+	{
+		return err;
+	}
 
 	// let's overwrite tcp_port with our own implementation
 	accept = tcp_prot.accept;
