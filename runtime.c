@@ -194,7 +194,7 @@ wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char 
         goto on_error;
     }
 
-    char *module_name = kmalloc(strlen(name), GFP_ATOMIC);
+    char *module_name = kmalloc(strlen(name) + 1, GFP_ATOMIC);
     strcpy(module_name, name);
     m3_SetModuleName(module, module_name);
 
