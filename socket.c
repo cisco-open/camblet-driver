@@ -8,16 +8,13 @@
  * modified, or distributed except according to those terms.
  */
 
-#include <linux/module.h>
-#include <linux/kernel.h>
-#include <net/protocol.h>
 #include <linux/tcp.h>
 #include <linux/version.h>
+#include <linux/uaccess.h>
+#include <net/protocol.h>
 #include <net/tcp.h>
 #include <net/sock.h>
 #include <net/ip.h>
-
-#include <linux/uaccess.h>
 
 #include "bearssl.h"
 #include "device_driver.h"
@@ -371,7 +368,7 @@ void dump_msghdr(struct msghdr *msg)
 	printk(KERN_INFO "npages = %d", npages);
 
 	struct iovec *iov;
-	
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
 	iov = msg->msg_iter.iov;
 #else
