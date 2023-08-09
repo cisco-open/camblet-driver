@@ -447,7 +447,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
 
     strcpy(filter->name, module->name);
 
-    wasm_vm_try_get_function(filter->proxy_on_memory_allocate, wasm_vm_get_function(vm, module->name, "malloc")); // ???? proxy_on_memory_allocate?
+    wasm_vm_try_get_function(filter->proxy_on_memory_allocate, wasm_vm_get_function(vm, module->name, "malloc"));
     wasm_vm_try_get_function(filter->proxy_on_context_create, wasm_vm_get_function(vm, module->name, "proxy_on_context_create"));
     wasm_vm_try_get_function(filter->proxy_on_new_connection, wasm_vm_get_function(vm, module->name, "proxy_on_new_connection"));
     wasm_vm_try_get_function(filter->proxy_on_vm_start, wasm_vm_get_function(vm, module->name, "proxy_on_vm_start"));

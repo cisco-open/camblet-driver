@@ -19,7 +19,9 @@
 #include "bearssl.h"
 #include "device_driver.h"
 #include "proxywasm.h"
+#include "csr.h"
 #include "socket.h"
+#include "rsa_tools.h"
 
 #define RSA_OR_EC 0
 
@@ -49,6 +51,10 @@ typedef struct
 	unsigned char iobuf[BR_SSL_BUFSIZE_BIDI];
 	br_sslio_context ioc;
 	br_x509_minimal_context xc;
+
+	br_rsa_private_key *rsa_priv;
+	br_rsa_public_key *rsa_pub;
+	br_x509_certificate *cert;
 
 	proxywasm_context *pc;
 	proxywasm *p;
@@ -192,6 +198,10 @@ static wasm_socket_context *new_server_wasm_socket_context(proxywasm *p)
 {
 	wasm_socket_context *c = kzalloc(sizeof(wasm_socket_context), GFP_KERNEL);
 	c->sc = kmalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
+	c->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
+	c->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
+	c->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
+
 	wasm_vm_result res = proxywasm_create_context(p);
 	if (res.err)
 	{
@@ -209,6 +219,10 @@ static wasm_socket_context *new_client_wasm_socket_context(proxywasm *p)
 {
 	wasm_socket_context *c = kzalloc(sizeof(wasm_socket_context), GFP_KERNEL);
 	c->cc = kmalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
+	c->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
+	c->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
+	c->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
+
 	wasm_vm_result res = proxywasm_create_context(p);
 	if (res.err)
 	{
@@ -237,12 +251,19 @@ static void free_wasm_socket_context(wasm_socket_context *sc)
 		// 	pr_err("br_sslio_close returned an error");
 		// }
 		if (sc->direction == ListenerDirectionInbound)
+		{
 			kfree(sc->sc);
+		}
 		else
+		{
 			kfree(sc->cc);
+		}
+
+		kfree(sc->rsa_priv);
+		kfree(sc->rsa_pub);
+		kfree(sc->cert);
 
 		// TODO free the proxywasm context
-
 		kfree(sc);
 	}
 }
@@ -621,6 +642,70 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		free_command_answer(answer);
 
+		// We should not only check for empty cert but we must check the certs validity
+		// TODO must set the certificate to avoid new cert generation every time
+		if (sc->cert->data_len == 0)
+		{
+			// generating certificate signing request
+			if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
+			{
+				u_int32_t result = generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
+				if (result == 0)
+				{
+					pr_err("wasm_accept: error generating rsa keys");
+					return 0;
+				}
+			}
+
+			size_t len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
+			if (len == 0)
+			{
+				pr_err("wasm_accept: error during rsa private der key length calculation");
+				return 0;
+			}
+
+			// Allocate memory inside the wasm vm since this data must be available inside the module
+			csr_module *csr = this_cpu_csr();
+
+			csr_lock(csr);
+
+			wasm_vm_result malloc_result = csr_malloc(csr, len);
+			if (malloc_result.err)
+			{
+				pr_err("wasm_accept: wasm_vm_csr_malloc error: %s", malloc_result.err);
+				csr_unlock(csr);
+				return 0;
+			}
+
+			uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
+			i32 addr = malloc_result.data->i32;
+
+			unsigned char *der = mem + addr;
+
+			size_t error = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
+			if (error = 0)
+			{
+				pr_err("wasm_accept: error during rsa private key der encoding");
+				return 0;
+			}
+
+			wasm_vm_result generated_csr = csr_gen(csr, addr, len);
+
+			wasm_vm_result free_result = csr_free(csr, addr);
+			if (free_result.err)
+			{
+				pr_err("wasm_accept: wasm_vm_csr_free error: %s", free_result.err);
+				csr_unlock(csr);
+				return 0;
+			}
+
+			i64 csr_from_module = generated_csr.data->i64;
+
+			i32 csr_len = (i32)(csr_from_module);
+			unsigned char *csr_ptr = (i32)(csr_from_module >> 32) + mem;
+
+			csr_unlock(csr);
+		}
 		/*
 		 * Initialise the context with the cipher suites and
 		 * algorithms. This depends on the server key type
@@ -703,6 +788,64 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 		proxywasm_unlock(p);
 
+		// We should not only check for empty cert but we must check the certs validity
+		// TODO must set the certificate to avoid new cert generation every time
+		if (sc->cert->data_len == 0)
+		{
+			// generating certificate signing request
+			if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
+			{
+				u_int32_t result = generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
+				if (result == 0)
+				{
+					pr_err("wasm_accept: error generating rsa keys");
+				}
+			}
+
+			size_t len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
+			if (len == 0)
+			{
+				pr_err("wasm_accept: error during rsa private key der encoding");
+			}
+
+			// Allocate memory inside the wasm vm since this data must be available inside the module
+			csr_module *csr = this_cpu_csr();
+
+			csr_lock(csr);
+
+			wasm_vm_result malloc_result = csr_malloc(csr, len);
+			if (malloc_result.err)
+			{
+				pr_err("wasm_accept: wasm_vm_csr_malloc error: %s", malloc_result.err);
+				csr_unlock(csr);
+				return 0;
+			}
+
+			uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
+			i32 addr = malloc_result.data->i32;
+
+			unsigned char *der = mem + addr;
+
+			encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
+
+			wasm_vm_result generated_csr = csr_gen(csr, addr, len);
+
+			wasm_vm_result free_result = csr_free(csr, addr);
+			if (free_result.err)
+			{
+				pr_err("wasm_accept: wasm_vm_csr_free error: %s", free_result.err);
+				csr_unlock(csr);
+				return 0;
+			}
+
+			i64 csr_from_module = generated_csr.data->i64;
+
+			i32 csr_len = (i32)(csr_from_module);
+			unsigned char *csr_ptr = (i32)(csr_from_module >> 32) + mem;
+
+			csr_unlock(csr);
+		}
+
 		/*
 		 * Initialise the context with the cipher suites and
 		 * algorithms. This depends on the server key type
@@ -761,6 +904,13 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 int wasm_socket_init(void)
 {
+	// Initialize BearSSL random number generator
+	int err = init_rnd_gen();
+	if (err == -1)
+	{
+		return err;
+	}
+
 	// let's overwrite tcp_port with our own implementation
 	accept = tcp_prot.accept;
 	connect = tcp_prot.connect;
