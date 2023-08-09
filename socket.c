@@ -219,6 +219,10 @@ static wasm_socket_context *new_client_wasm_socket_context(proxywasm *p)
 {
 	wasm_socket_context *c = kzalloc(sizeof(wasm_socket_context), GFP_KERNEL);
 	c->cc = kmalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
+	c->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
+	c->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
+	c->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
+
 	wasm_vm_result res = proxywasm_create_context(p);
 	if (res.err)
 	{
@@ -640,10 +644,10 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		// We should not only check for empty cert but we must check the certs validity
 		// TODO must set the certificate to avoid new cert generation every time
-		if (sc->cert == NULL)
+		if (sc->cert->data_len == 0)
 		{
 			// generating certificate signing request
-			if (sc->rsa_priv == NULL || sc->rsa_pub == NULL)
+			if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
 			{
 				u_int32_t result = generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
 				if (result == 0)
@@ -786,10 +790,10 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 		// We should not only check for empty cert but we must check the certs validity
 		// TODO must set the certificate to avoid new cert generation every time
-		if (sc->cert == NULL)
+		if (sc->cert->data_len == 0)
 		{
 			// generating certificate signing request
-			if (sc->rsa_priv == NULL || sc->rsa_pub == NULL)
+			if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
 			{
 				u_int32_t result = generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
 				if (result == 0)
