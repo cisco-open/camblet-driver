@@ -67,8 +67,9 @@ jobs:
         python3 -m http.server &
         sleep 1
         curl -v http://localhost:8000
-        sudo dmesg -T  
+        sudo dmesg -T | tail -100
         sudo kill -9 $(jobs -p)
+        sleep 1
 
     - name: Cleanup module
       working-directory: wasm-kernel-module
