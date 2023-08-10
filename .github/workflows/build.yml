@@ -63,8 +63,9 @@ jobs:
       timeout-minutes: 1
       run: |
         sudo ./w3k server &
+        sleep 1
         python3 -m http.server &
-        sleep 3
+        sleep 1
         curl -v http://localhost:8000
         sudo dmesg -T  
         jobs -p | xargs kill
