@@ -49,11 +49,18 @@ uint32_t generate_rsa_keys(br_rsa_private_key *rsa_priv, br_rsa_public_key *rsa_
 size_t encode_rsa_priv_key_to_der(unsigned char *der, br_rsa_private_key *rsa_priv, br_rsa_public_key *rsa_pub)
 {
     br_rsa_compute_privexp rsa_priv_exp_comp = br_rsa_compute_privexp_get_default();
-    unsigned char priv_exponent[256];
-    size_t priv_exponent_size = rsa_priv_exp_comp(priv_exponent, rsa_priv, 3);
-    if (rsa_pub->nlen != priv_exponent_size)
+    size_t priv_exponent_size = rsa_priv_exp_comp(NULL, rsa_priv, 3);
+    if (priv_exponent_size == 0)
+    {
+        printk("Error happened during priv_exponent lenght calculation");
+        return 0;
+    }
+    unsigned char priv_exponent[priv_exponent_size];
+    if (rsa_priv_exp_comp(priv_exponent, rsa_priv, 3) != priv_exponent_size)
     {
         printk("Error happened during priv_exponent generation");
+        printk("%d, %d", rsa_pub->nlen, priv_exponent_size);
+        return 0;
     }
     return br_encode_rsa_pkcs8_der(der, rsa_priv, rsa_pub, priv_exponent, priv_exponent_size);
 }
