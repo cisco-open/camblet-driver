@@ -16,15 +16,15 @@ jobs:
         submodules: recursive
         path: wasm-kernel-module
 
-    - name: Install/setup prerequisites
-      working-directory: wasm-kernel-module
-      run: make setup-vm
-
     # - name: Setup upterm session
     #   uses: lhotari/action-upterm@v1
     #   with:
     #     ## limits ssh access and adds the ssh public key for the user which triggered the workflow
     #     limit-access-to-actor: true
+
+    - name: Install/setup prerequisites
+      working-directory: wasm-kernel-module
+      run: make setup-vm
 
     - name: Build the kernel module
       working-directory: wasm-kernel-module
@@ -57,6 +57,19 @@ jobs:
       run: |
         make load-opa-policy-wasm
         sudo dmesg -T
+
+    - name: Run proxy-wasm smoke test
+      working-directory: wasm-kernel-module-cli
+      timeout-minutes: 1
+      run: |
+        sudo ./w3k server &
+        sleep 1
+        python3 -m http.server &
+        sleep 1
+        curl -v http://localhost:8000
+        sudo dmesg -T | tail -100
+        sudo kill -9 $(jobs -p)
+        sudo pkill -9 w3k
 
     - name: Cleanup module
       working-directory: wasm-kernel-module
