@@ -58,6 +58,15 @@ jobs:
         make load-opa-policy-wasm
         sudo dmesg -T
 
+    - name: Run proxy-wasm smoke test
+      working-directory: wasm-kernel-module-cli
+      run: |
+        sudo ./w3k server &
+        python3 -m http.server &
+        curl -v http://localhost:8000
+        sudo dmesg -T  
+        jobs -p | xargs kill
+
     - name: Cleanup module
       working-directory: wasm-kernel-module
       run: make rmmod
