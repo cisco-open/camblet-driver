@@ -20,12 +20,6 @@ jobs:
       working-directory: wasm-kernel-module
       run: make setup-vm
 
-    # - name: Setup upterm session
-    #   uses: lhotari/action-upterm@v1
-    #   with:
-    #     ## limits ssh access and adds the ssh public key for the user which triggered the workflow
-    #     limit-access-to-actor: true
-
     - name: Build the kernel module
       working-directory: wasm-kernel-module
       run: make -j$(nproc)
@@ -69,6 +63,12 @@ jobs:
         curl -v http://localhost:8000
         sudo dmesg -T  
         jobs -p | xargs kill
+
+    - name: Setup upterm session
+      uses: lhotari/action-upterm@v1
+      with:
+        ## limits ssh access and adds the ssh public key for the user which triggered the workflow
+        limit-access-to-actor: true
 
     - name: Cleanup module
       working-directory: wasm-kernel-module
