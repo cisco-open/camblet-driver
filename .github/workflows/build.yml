@@ -16,11 +16,11 @@ jobs:
         submodules: recursive
         path: wasm-kernel-module
 
-    - name: Setup upterm session
-      uses: lhotari/action-upterm@v1
-      with:
-        ## limits ssh access and adds the ssh public key for the user which triggered the workflow
-        limit-access-to-actor: true
+    # - name: Setup upterm session
+    #   uses: lhotari/action-upterm@v1
+    #   with:
+    #     ## limits ssh access and adds the ssh public key for the user which triggered the workflow
+    #     limit-access-to-actor: true
 
     - name: Install/setup prerequisites
       working-directory: wasm-kernel-module
