@@ -258,7 +258,14 @@ static void free_wasm_socket_context(wasm_socket_context *sc)
 		{
 			kfree(sc->cc);
 		}
-
+		if (sc->rsa_priv != NULL)
+		{
+			kfree(sc->rsa_priv->p);
+		}
+		if (sc->rsa_pub != NULL)
+		{
+			kfree(sc->rsa_pub->n);
+		}
 		kfree(sc->rsa_priv);
 		kfree(sc->rsa_pub);
 		kfree(sc->cert);
@@ -623,6 +630,8 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		if (res.err)
 		{
 			pr_err("new_server_wasm_socket_context: failed to create context: %s", res.err);
+			proxywasm_unlock(p);
+			return -1;
 		}
 
 		proxywasm_unlock(p);
@@ -653,7 +662,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 				if (result == 0)
 				{
 					pr_err("wasm_accept: error generating rsa keys");
-					return 0;
+					return -1;
 				}
 			}
 
@@ -661,7 +670,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 			if (len == 0)
 			{
 				pr_err("wasm_accept: error during rsa private der key length calculation");
-				return 0;
+				return -1;
 			}
 
 			// Allocate memory inside the wasm vm since this data must be available inside the module
@@ -674,7 +683,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 			{
 				pr_err("wasm_accept: wasm_vm_csr_malloc error: %s", malloc_result.err);
 				csr_unlock(csr);
-				return 0;
+				return -1;
 			}
 
 			uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
@@ -686,7 +695,8 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 			if (error = 0)
 			{
 				pr_err("wasm_accept: error during rsa private key der encoding");
-				return 0;
+				csr_unlock(csr);
+				return -1;
 			}
 
 			wasm_vm_result generated_csr = csr_gen(csr, addr, len);
@@ -696,7 +706,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 			{
 				pr_err("wasm_accept: wasm_vm_csr_free error: %s", free_result.err);
 				csr_unlock(csr);
-				return 0;
+				return -1;
 			}
 
 			i64 csr_from_module = generated_csr.data->i64;
@@ -784,6 +794,8 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		if (res.err)
 		{
 			pr_err("new_client_wasm_socket_context: failed to create context: %s", res.err);
+			proxywasm_unlock(p);
+			return -1;
 		}
 
 		proxywasm_unlock(p);
@@ -798,14 +810,16 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 				u_int32_t result = generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
 				if (result == 0)
 				{
-					pr_err("wasm_accept: error generating rsa keys");
+					pr_err("wasm_connect: error generating rsa keys");
+					return -1;
 				}
 			}
 
 			size_t len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
 			if (len == 0)
 			{
-				pr_err("wasm_accept: error during rsa private key der encoding");
+				pr_err("wasm_connect: error during rsa private der key length calculation");
+				return -1;
 			}
 
 			// Allocate memory inside the wasm vm since this data must be available inside the module
@@ -816,9 +830,9 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			wasm_vm_result malloc_result = csr_malloc(csr, len);
 			if (malloc_result.err)
 			{
-				pr_err("wasm_accept: wasm_vm_csr_malloc error: %s", malloc_result.err);
+				pr_err("wasm_connect: wasm_vm_csr_malloc error: %s", malloc_result.err);
 				csr_unlock(csr);
-				return 0;
+				return -1;
 			}
 
 			uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
@@ -826,16 +840,22 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 			unsigned char *der = mem + addr;
 
-			encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
+			size_t error = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
+			if (error = 0)
+			{
+				pr_err("wasm_connect: error during rsa private key der encoding");
+				csr_unlock(csr);
+				return -1;
+			}
 
 			wasm_vm_result generated_csr = csr_gen(csr, addr, len);
 
 			wasm_vm_result free_result = csr_free(csr, addr);
 			if (free_result.err)
 			{
-				pr_err("wasm_accept: wasm_vm_csr_free error: %s", free_result.err);
+				pr_err("wasm_connect: wasm_vm_csr_free error: %s", free_result.err);
 				csr_unlock(csr);
-				return 0;
+				return -1;
 			}
 
 			i64 csr_from_module = generated_csr.data->i64;
