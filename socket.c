@@ -801,6 +801,7 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 				if (result == 0)
 				{
 					pr_err("wasm_connect: error generating rsa keys");
+					return 0;
 				}
 			}
 
