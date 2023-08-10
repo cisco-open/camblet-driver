@@ -63,7 +63,7 @@ jobs:
         curl -v http://localhost:8000
         sudo dmesg -T | tail -100
         sudo kill -9 $(jobs -p)
-        sleep 1
+        sudo pkill -9 w3k
 
     - name: Setup upterm session
       uses: lhotari/action-upterm@v1
