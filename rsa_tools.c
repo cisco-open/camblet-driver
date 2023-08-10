@@ -11,8 +11,12 @@
 #include "rsa_tools.h"
 
 #include "linux/kernel.h"
+#include "linux/slab.h"
 
 static br_hmac_drbg_context hmac_drbg_ctx;
+
+#define RSA_BIT_LENGHT 2048
+#define RSA_PUB_EXP 3
 
 // BearSSL RSA Keygen related functions
 // Initialize BearSSL random number generator with a unix getrandom backed seeder
@@ -26,7 +30,7 @@ int init_rnd_gen()
     br_hmac_drbg_init(&hmac_drbg_ctx, &br_sha256_vtable, NULL, 0);
     if (!seeder(&hmac_drbg_ctx.vtable))
     {
-        printk(KERN_ERR "system source of randomness failed");
+        pr_err("rsa_tools: system source of randomness failed");
         return -1;
     }
     return 0;
@@ -37,10 +41,10 @@ uint32_t generate_rsa_keys(br_rsa_private_key *rsa_priv, br_rsa_public_key *rsa_
 {
     br_rsa_keygen rsa_keygen = br_rsa_keygen_get_default();
 
-    unsigned char raw_priv_key[BR_RSA_KBUF_PRIV_SIZE(2048)];
-    unsigned char raw_pub_key[BR_RSA_KBUF_PUB_SIZE(2048)];
+	unsigned char *raw_priv_key = kmalloc(BR_RSA_KBUF_PRIV_SIZE(RSA_BIT_LENGHT), GFP_KERNEL);
+	unsigned char *raw_pub_key = kmalloc(BR_RSA_KBUF_PUB_SIZE(RSA_BIT_LENGHT), GFP_KERNEL);
 
-    return rsa_keygen(&hmac_drbg_ctx.vtable, rsa_priv, raw_priv_key, rsa_pub, raw_pub_key, 2048, 3);
+    return rsa_keygen(&hmac_drbg_ctx.vtable, rsa_priv, raw_priv_key, rsa_pub, raw_pub_key, RSA_BIT_LENGHT, RSA_PUB_EXP);
 }
 
 // BearSSL RSA Keygen related functions
@@ -49,11 +53,17 @@ uint32_t generate_rsa_keys(br_rsa_private_key *rsa_priv, br_rsa_public_key *rsa_
 size_t encode_rsa_priv_key_to_der(unsigned char *der, br_rsa_private_key *rsa_priv, br_rsa_public_key *rsa_pub)
 {
     br_rsa_compute_privexp rsa_priv_exp_comp = br_rsa_compute_privexp_get_default();
-    unsigned char priv_exponent[256];
-    size_t priv_exponent_size = rsa_priv_exp_comp(priv_exponent, rsa_priv, 3);
-    if (rsa_pub->nlen != priv_exponent_size)
+    size_t priv_exponent_size = rsa_priv_exp_comp(NULL, rsa_priv, RSA_PUB_EXP);
+    if (priv_exponent_size == 0)
     {
-        printk("Error happened during priv_exponent generation");
+        pr_err("rsa_tools:error happened during priv_exponent lenght calculation");
+        return -1;
+    }
+    unsigned char priv_exponent[priv_exponent_size];
+    if (rsa_priv_exp_comp(priv_exponent, rsa_priv, RSA_PUB_EXP) != priv_exponent_size)
+    {
+        pr_err("rsa_tools: error happened during priv_exponent generation");
+        return -1;
     }
     return br_encode_rsa_pkcs8_der(der, rsa_priv, rsa_pub, priv_exponent, priv_exponent_size);
 }
