@@ -63,6 +63,7 @@ jobs:
       run: |
         sudo ./w3k server &
         python3 -m http.server &
+        sleep 3
         curl -v http://localhost:8000
         sudo dmesg -T  
         jobs -p | xargs kill
