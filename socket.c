@@ -623,6 +623,8 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		if (res.err)
 		{
 			pr_err("new_server_wasm_socket_context: failed to create context: %s", res.err);
+			proxywasm_unlock(p);
+			return -1;
 		}
 
 		proxywasm_unlock(p);
@@ -686,6 +688,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 			if (error = 0)
 			{
 				pr_err("wasm_accept: error during rsa private key der encoding");
+				csr_unlock(csr);
 				return 0;
 			}
 
@@ -786,6 +789,8 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		if (res.err)
 		{
 			pr_err("new_client_wasm_socket_context: failed to create context: %s", res.err);
+			proxywasm_unlock(p);
+			return 0;
 		}
 
 		proxywasm_unlock(p);
