@@ -60,6 +60,7 @@ jobs:
 
     - name: Run proxy-wasm smoke test
       working-directory: wasm-kernel-module-cli
+      timeout-minutes: 1
       run: |
         sudo ./w3k server &
         python3 -m http.server &
