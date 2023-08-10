@@ -16,6 +16,12 @@ jobs:
         submodules: recursive
         path: wasm-kernel-module
 
+    - name: Setup upterm session
+      uses: lhotari/action-upterm@v1
+      with:
+        ## limits ssh access and adds the ssh public key for the user which triggered the workflow
+        limit-access-to-actor: true
+
     - name: Install/setup prerequisites
       working-directory: wasm-kernel-module
       run: make setup-vm
@@ -64,12 +70,6 @@ jobs:
         sudo dmesg -T | tail -100
         sudo kill -9 $(jobs -p)
         sudo pkill -9 w3k
-
-    - name: Setup upterm session
-      uses: lhotari/action-upterm@v1
-      with:
-        ## limits ssh access and adds the ssh public key for the user which triggered the workflow
-        limit-access-to-actor: true
 
     - name: Cleanup module
       working-directory: wasm-kernel-module
