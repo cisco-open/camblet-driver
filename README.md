@@ -1,5 +1,7 @@
 # wasm-kernel-module
 
+[![Makefile CI](https://github.com/cisco-open/wasm-kernel-module/actions/workflows/build.yml/badge.svg)](https://github.com/cisco-open/wasm-kernel-module/actions/workflows/build.yml)
+
 This Linux Kernel module runs and exposes a [Wasm](https://webassembly.org) runtime as a proof of concept for checking:
 - Wasm is capable of running the kernel space
 - running code in kernel space in almost all languages compiled to Wasm
