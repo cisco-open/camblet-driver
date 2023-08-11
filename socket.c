@@ -243,6 +243,7 @@ static void free_wasm_socket_context(wasm_socket_context *sc)
 		printk("free_wasm_socket_context: shutting down wasm_socket_context of context id: %p", sc->pc);
 
 		proxywasm_lock(sc->p);
+		proxywasm_set_context(sc->p, sc->pc);
 		proxywasm_destroy_context(sc->p);
 		proxywasm_unlock(sc->p);
 
