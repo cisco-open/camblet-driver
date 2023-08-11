@@ -242,7 +242,9 @@ static void free_wasm_socket_context(wasm_socket_context *sc)
 	{
 		printk("free_wasm_socket_context: shutting down wasm_socket_context of context id: %p", sc->pc);
 
+		proxywasm_lock(sc->p);
 		proxywasm_destroy_context(sc->p);
+		proxywasm_unlock(sc->p);
 
 		// TODO we should call br_sslio_close here, but that hangs in non-typed socket mode
 		br_ssl_engine_close(sc->ioc.engine);
@@ -270,7 +272,6 @@ static void free_wasm_socket_context(wasm_socket_context *sc)
 		kfree(sc->rsa_pub);
 		kfree(sc->cert);
 
-		// TODO free the proxywasm context
 		kfree(sc);
 	}
 }
