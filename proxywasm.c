@@ -27,14 +27,14 @@
     proxywasm_filter *f;                                                                \
     for (f = p->filters; f != NULL; f = f->next)                                        \
     {                                                                                   \
-        printk("wasm: Calling filter %s\n", f->name);                                   \
+        printk("wasm: calling %s "#CALL, f->name);                               \
         result = CALL;                                                                  \
         if (result.err != NULL)                                                         \
         {                                                                               \
-            pr_err("wasm: Calling filter %s errored %s\n", f->name, result.err);        \
+            pr_err("wasm: calling %s "#CALL" error: %s\n", f->name, result.err); \
             return result;                                                              \
         }                                                                               \
-        printk("wasm: result of calling filter %s -> %d\n", f->name, result.data->i32); \
+        printk("wasm: result of calling %s "#CALL": %d", f->name, result.data->i32);   \
     }                                                                                   \
     return result;
 
@@ -528,13 +528,13 @@ wasm_vm_result proxywasm_destroy_context(proxywasm *p)
         result = wasm_vm_call_direct(p->vm, f->proxy_on_done, p->current_context->id);
         if (result.err != NULL)
         {
-            pr_err("wasm: Calling filter %s.proxy_on_done errored %s\n", f->name, result.err);
+            pr_err("wasm: calling %s.proxy_on_done errored %s", f->name, result.err);
         }
 
         result = wasm_vm_call_direct(p->vm, f->proxy_on_delete, p->current_context->id);
         if (result.err != NULL)
         {
-            pr_err("wasm: Calling filter %s.proxy_on_delete errored %s\n", f->name, result.err);
+            pr_err("wasm: calling %s.proxy_on_delete errored %s", f->name, result.err);
         }
     }
 
