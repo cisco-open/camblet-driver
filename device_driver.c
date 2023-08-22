@@ -308,8 +308,9 @@ wasm_vm_result load_module(char *name, char *code, unsigned length, char *entryp
             result.err = NULL;
         }
 
-        if (strcmp(name, OPA_MODULE) == 0)
+        if (strstr(name, OPA_MODULE) != NULL)
         {
+            printk("wasm: initializing opa for %s", name);
             result = init_opa_for(vm, module);
             if (result.err)
             {

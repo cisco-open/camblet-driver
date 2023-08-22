@@ -232,6 +232,8 @@ wasm_vm_result init_opa_for(wasm_vm *vm, wasm_vm_module *module)
     wasm_vm_try_get_function(builtinsFunc, wasm_vm_get_function(vm, OPA_MODULE, "builtins"));
     opa->vm = vm;
 
+    printk("got all functions");
+
     result = wasm_vm_call_direct(vm, builtinsFunc);
     if (result.err)
         goto error;
@@ -282,7 +284,7 @@ int this_cpu_opa_eval(const char *input)
 {
     int ret = false;
     i32 inputAddr = 0;
-    i32 inputLen = strlen(input) + 1;
+    i32 inputLen = strlen(input);
     wasm_vm_result result;
 
     wasm_vm *vm = this_cpu_wasm_vm();

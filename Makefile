@@ -68,10 +68,19 @@ wasm-objs :=  third-party/wasm3/source/m3_api_libc.o \
 
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
- 
-default:
+
+default: socket_wasm.h
 	cd third-party/BearSSL && $(MAKE) linux-km
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) modules
+
+socket_wasm.h: socket.rego
+	opa build -t wasm -e "socket/allow" socket.rego -o bundle.tar.gz
+	tar zxvf bundle.tar.gz /policy.wasm
+	mv policy.wasm socket.wasm
+	xxd -i socket.wasm socket_wasm.h
+
+opa-test:
+	opa test *.rego -v
 
 clean:
 	$(MAKE) -C $(KBUILD) M=$(PWD) clean

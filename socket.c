@@ -22,6 +22,7 @@
 #include "csr.h"
 #include "socket.h"
 #include "rsa_tools.h"
+#include "opa.h"
 
 #define RSA_OR_EC 0
 
@@ -601,10 +602,12 @@ typedef enum
 	OUTPUT
 } direction;
 
-// a function to evaluate the connection if it should be intercepted
-bool eval_connection(u16 port, direction direction, const char *comm)
+// a function to evaluate the connection if it should be intercepted, now with opa
+bool eval_connection(u16 port, direction direction, const char *command)
 {
-	return (port == 8000 || port == 8080); //&& direction == INPUT && strcmp(comm, "python3") == 0;
+	char input[256];
+	sprintf(input, "{\"port\": %d, \"direction\": %d, \"command\": \"%s\"}", port, direction, command);
+	return this_cpu_opa_eval(input);
 }
 
 struct sock *(*accept)(struct sock *sk, int flags, int *err, bool kern);

@@ -24,8 +24,9 @@
 #include "socket.h"
 
 #include "filter_stats.h"
-#include "module_csr.h"
 #include "filter_tcp_metadata.h"
+#include "module_csr.h"
+#include "socket_wasm.h"
 
 MODULE_AUTHOR("Cisco Systems");
 MODULE_LICENSE("Dual MIT/GPL");
@@ -103,7 +104,14 @@ static int __init wasm_init(void)
         result = load_module("csr_module", module_csr, size_module_csr, NULL);
         if (result.err)
         {
-            FATAL("load_module -> csr_gen_filter: %s", result.err);
+            FATAL("load_module -> csr_module: %s", result.err);
+            return -1;
+        }
+
+        result = load_module("socket_opa", socket_wasm, socket_wasm_len, NULL);
+        if (result.err)
+        {
+            FATAL("load_module -> socket_opa: %s", result.err);
             return -1;
         }
     }
