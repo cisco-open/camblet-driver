@@ -22,10 +22,7 @@ static br_hmac_drbg_context hmac_drbg_ctx;
 // Initialize BearSSL random number generator with a unix getrandom backed seeder
 int init_rnd_gen()
 {
-
-    br_prng_seeder seeder;
-
-    seeder = br_prng_seeder_system(NULL);
+    br_prng_seeder seeder = br_prng_seeder_system(NULL);
 
     br_hmac_drbg_init(&hmac_drbg_ctx, &br_sha256_vtable, NULL, 0);
     if (!seeder(&hmac_drbg_ctx.vtable))
