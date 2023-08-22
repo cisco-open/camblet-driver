@@ -83,7 +83,7 @@ typedef struct proxywasm_filter proxywasm_filter;
 
 proxywasm *proxywasm_for_vm(wasm_vm *vm);
 proxywasm *this_cpu_proxywasm(void);
-void proxywasm_lock(proxywasm *p);
+void proxywasm_lock(proxywasm *p, proxywasm_context *c);
 void proxywasm_unlock(proxywasm *p);
 
 wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module);
