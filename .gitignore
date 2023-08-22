@@ -6,7 +6,7 @@
 *.o.d
 *.order
 *.symvers
-.vscode
+.vscode/*.json
 .idea
 .vagrant
 *.dwo
@@ -14,3 +14,4 @@
 *.tar.gz
 cli/cli
 target/
+linux/

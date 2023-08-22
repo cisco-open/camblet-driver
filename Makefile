@@ -98,10 +98,10 @@ rmmod:
 
 _debian_deps:
 	sudo apt update
-	sudo apt install -y clang libbpf-dev dwarves build-essential linux-tools-generic golang dkms
+	sudo apt install -y clang libbpf-dev dwarves build-essential linux-tools-generic golang dkms flex bison
 
 _archlinux_deps:
-	sudo pacman -Syu linux-headers base-devel clang go dkms
+	sudo pacman -Syu linux-headers base-devel clang go dkms git
 
 _install_opa:
 	sudo curl -L -o /usr/local/bin/opa https://openpolicyagent.org/downloads/v0.54.0/opa_linux_$(shell go version | cut -f2 -d'/')_static
@@ -111,3 +111,11 @@ setup-vm: _debian_deps _install_opa
 	sudo cp /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
 
 setup-archlinux-vm: _archlinux_deps _install_opa
+
+setup-dev-env:
+	test -f .vscode/c_cpp_properties.json || cp .vscode/c_cpp_properties.json.orig .vscode/c_cpp_properties.json
+	brew tap messense/macos-cross-toolchains
+	brew install $(shell lima uname -m)-unknown-linux-gnu
+	test -d linux || git clone --depth=1 git@github.com:torvalds/linux.git
+	cd linux && lima make tinyconfig
+	cd linux && lima make -j

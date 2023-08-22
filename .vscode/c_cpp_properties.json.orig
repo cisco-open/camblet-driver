@@ -1,0 +1,37 @@
+{
+    "env": {
+        "linux-src": "./linux/"
+    },
+    "configurations": [
+        {
+            "name": "Kernel",
+            "defines": [
+                "MODULE",
+                "__KERNEL__",
+                "KBUILD_MODNAME='wasm'"
+            ],
+            "includePath": [
+                "${linux-src}/include/",
+                "${linux-src}/include/uapi/",
+                "${linux-src}/include/generated/uapi/",
+                "${linux-src}/tools/include/",
+                "${linux-src}/tools/include/uapi",
+                "${linux-src}/tools/lib/",
+                "${linux-src}/arch/arm64/include/",
+                "${linux-src}/arch/arm64/include/generated/",
+                "${linux-src}/arch/arm64/include/uapi/",
+                "${linux-src}/arch/arm64/include/generated/uapi/",
+                "third-party/base64/",
+                "third-party/BearSSL/inc/",
+                "third-party/parson/",
+                "third-party/wasm3/source/"
+            ],
+            "macFrameworkPath": [],
+            "cStandard": "gnu11",
+            "intelliSenseMode": "linux-gcc-arm64",
+            "compilerPath": "/opt/homebrew/bin/aarch64-linux-gnu-gcc",
+            "configurationProvider": "ms-vscode.makefile-tools"
+        }
+    ],
+    "version": 4
+}

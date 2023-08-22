@@ -18,7 +18,7 @@ This project was presented on KubeCon 2023 Amsterdam, Wasm Day, you can find the
 
 ## Which Wasm runtime?
 
-The [wasm3](https://github.com/wasm3/wasm3) runtime got chosen since it is written in C and has minimal dependencies (except a C library) and it is extremely portable. In kernel space, there is no libc, but we maintain a fork of wasm3 which can run in kernel space as well (check the `thrid-party/wasm3/` submodule).
+The [wasm3](https://github.com/wasm3/wasm3) runtime got chosen since it is written in C and has minimal dependencies (except a C library) and it is extremely portable. In kernel space, there is no libc, but we maintain a fork of wasm3 which can run in kernel space as well (check the `third-party/wasm3/` submodule).
 
 Current restrictions for kernel-space wasm3:
 - no floating point support [can be soft-emulated if needed]
@@ -26,9 +26,7 @@ Current restrictions for kernel-space wasm3:
 
 ## Development environment
 
-Our primary development environment is [Lima](https://lima-vm.io) since it supports x86_64 and ARM as well. The module was tested on Ubuntu and Arch Linux and requires kernel version 5.19 and upwards.
-
-As a first step checkout the code:
+Checkout the code before you start:
 
 ```bash
 git clone --recurse-submodules https://github.com/cisco-open/wasm-kernel-module.git
@@ -36,6 +34,8 @@ cd wasm-kernel-module
 ```
 
 ### Lima
+
+Our primary development environment is [Lima](https://lima-vm.io) since it supports x86_64 and ARM as well. The module was tested on Ubuntu and Arch Linux and requires kernel version 5.19 and upwards.
 
 Install Lima itself, for example on macOS using brew:
 ```bash
@@ -51,9 +51,9 @@ limactl start --set '.mounts[0].writable=true' --tty=false
 ```
 
 Setup the required dependencies in the VM:
+
 ```bash
 lima # enter the VM
-...
 sudo apt update && sudo apt install make
 make setup-vm
 ```
@@ -80,36 +80,51 @@ Connect to the Vagrant machine through SSH:
 vagrant ssh
 ```
 
+### Coding
+
+We are using VSCode for development and the project ships with a `c_cpp_properties.json` file which contains the required include paths for the kernel headers. The file is ARM specific from include path point-of-view so if you happen to run on x86_64 please replace the paths accordingly (arm64 -> x86, aarch64 -> x86_64).
+
+We are respecting your `c_cpp_properties.json` file by not overriding it. Please copy the required parts to your file, if it is already present. 
+
+You will also need a Linux source bundle, to have full navigation in the source code. The easiest way is to run the `setup-dev-env` target after you already have created a working and configured VM in Lima (with `lima make setup-vm`). This target installs the necessary GCC cross-compilers for IntelliSense, clones the Linux repo, and configures the VSCode workspace accordingly:
+
+```bash
+# Start the VM if you haven't already
+limactl start
+
+# Setup the development environment
+make setup-dev-env
+```
+
 ## Build and install
 
 *This assumes that you have created a development environment according to the previous section.*
 
-Checkout the code:
-
-```bash
-git clone --recurse-submodules git@github.com:cisco-open/wasm-kernel-module.git
-cd wasm-kernel-module
-```
-
 Build the kernel modules(BearSSL and WASM):
 
 ```bash
+# Enter the VM
+lima
+
 # Build on all CPU cores parallelly
 make -j$(nproc)
 ```
 
 Load the kernel modules(BearSSL and WASM):
-```
+
+```bash
 make insmod
 ```
 
 Unload the kernel modules(BearSSL and WASM):
-```
+
+```bash
 make rmmod
 ```
 
 Follow the kernel logs:
-```
+
+```bash
 make logs
 ```
 
