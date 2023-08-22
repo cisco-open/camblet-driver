@@ -242,8 +242,7 @@ static void free_wasm_socket_context(wasm_socket_context *sc)
 	{
 		printk("free_wasm_socket_context: shutting down wasm_socket_context of context id: %p", sc->pc);
 
-		proxywasm_lock(sc->p);
-		proxywasm_set_context(sc->p, sc->pc);
+		proxywasm_lock(sc->p, sc->pc);
 		proxywasm_destroy_context(sc->p);
 		proxywasm_unlock(sc->p);
 
@@ -445,8 +444,7 @@ int wasm_recvmsg(struct sock *sock,
 
 	set_read_buffer_size(c, get_read_buffer_size(c) + ret);
 
-	proxywasm_lock(c->p);
-	proxywasm_set_context(c->p, c->pc);
+	proxywasm_lock(c->p, c->pc);
 	wasm_vm_result result;
 	switch (c->direction)
 	{
@@ -528,8 +526,7 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	set_write_buffer_size(c, get_write_buffer_size(c) + len);
 
-	proxywasm_lock(c->p);
-	proxywasm_set_context(c->p, c->pc);
+	proxywasm_lock(c->p, c->pc);
 	wasm_vm_result result;
 	switch (c->direction)
 	{
@@ -624,7 +621,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 	if (client && eval_connection(port, INPUT, current->comm))
 	{
 		proxywasm *p = this_cpu_proxywasm();
-		proxywasm_lock(p);
+		proxywasm_lock(p, NULL);
 
 		wasm_socket_context *sc = new_server_wasm_socket_context(p);
 
@@ -794,7 +791,7 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
 		proxywasm *p = this_cpu_proxywasm();
-		proxywasm_lock(p);
+		proxywasm_lock(p, NULL);
 
 		wasm_socket_context *sc = new_client_wasm_socket_context(p);
 

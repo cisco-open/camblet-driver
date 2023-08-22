@@ -163,9 +163,10 @@ proxywasm *this_cpu_proxywasm(void)
     return proxywasms[cpu];
 }
 
-void proxywasm_lock(proxywasm *p)
+void proxywasm_lock(proxywasm *p, proxywasm_context *c)
 {
     wasm_vm_lock(p->vm);
+    proxywasm_set_context(p, c);
 }
 
 void proxywasm_unlock(proxywasm *p)
@@ -187,7 +188,7 @@ m3ApiRawFunction(proxy_log)
 {
     m3ApiReturnType(i32)
 
-        m3ApiGetArg(i32, log_level);
+    m3ApiGetArg(i32, log_level);
     m3ApiGetArgMem(char *, message_data);
     m3ApiGetArg(i32, message_size);
 
