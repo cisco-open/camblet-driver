@@ -84,6 +84,8 @@ vagrant ssh
 
 We are using VSCode for development and the project ships with a `c_cpp_properties.json` file which contains the required include paths for the kernel headers. The file is ARM specific from include path point-of-view so if you happen to run on x86_64 please replace the paths accordingly (arm64 -> x86, aarch64 -> x86_64).
 
+We are respecting your `c_cpp_properties.json` file by not overriding it. Please copy the required parts to your file, if it is already present. 
+
 You will also need a Linux source bundle, to have full navigation in the source code. The easiest way is to run the `setup-dev-env` target after you already have created a working and configured VM in Lima (with `lima make setup-vm`). This target installs the necessary GCC cross-compilers for IntelliSense, clones the Linux repo, and configures the VSCode workspace accordingly:
 
 ```bash
