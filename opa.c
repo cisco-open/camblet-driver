@@ -224,12 +224,12 @@ wasm_vm_result init_opa_for(wasm_vm *vm, wasm_vm_module *module)
     wasm_vm_function *builtinsFunc;
 
     opa_wrapper *opa = kmalloc(sizeof(struct opa_wrapper), GFP_KERNEL);
-    wasm_vm_try_get_function(opa->malloc, wasm_vm_get_function(vm, OPA_MODULE, "opa_malloc"));
-    wasm_vm_try_get_function(opa->free, wasm_vm_get_function(vm, OPA_MODULE, "opa_free"));
-    wasm_vm_try_get_function(opa->eval, wasm_vm_get_function(vm, OPA_MODULE, "opa_eval"));
-    wasm_vm_try_get_function(opa->json_dump, wasm_vm_get_function(vm, OPA_MODULE, "opa_json_dump"));
-    wasm_vm_try_get_function(opa->value_dump, wasm_vm_get_function(vm, OPA_MODULE, "opa_value_dump"));
-    wasm_vm_try_get_function(builtinsFunc, wasm_vm_get_function(vm, OPA_MODULE, "builtins"));
+    wasm_vm_try_get_function(opa->malloc, wasm_vm_get_function(vm, module->name, "opa_malloc"));
+    wasm_vm_try_get_function(opa->free, wasm_vm_get_function(vm, module->name, "opa_free"));
+    wasm_vm_try_get_function(opa->eval, wasm_vm_get_function(vm, module->name, "opa_eval"));
+    wasm_vm_try_get_function(opa->json_dump, wasm_vm_get_function(vm, module->name, "opa_json_dump"));
+    wasm_vm_try_get_function(opa->value_dump, wasm_vm_get_function(vm, module->name, "opa_value_dump"));
+    wasm_vm_try_get_function(builtinsFunc, wasm_vm_get_function(vm, module->name, "builtins"));
     opa->vm = vm;
 
     printk("got all functions");
@@ -275,7 +275,7 @@ wasm_vm_result opa_eval(opa_wrapper *opa, i32 inputAddr, i32 inputLen)
     i32 entrypoint = 0;
     i32 dataAddr = 0;
     i32 heapAddr = 0;
-    i32 format = 0;
+    i32 format = 0; // 0 is JSON, 1 is “value”, i.e. serialized Rego values
 
     return wasm_vm_call_direct(opa->vm, opa->eval, 0, entrypoint, dataAddr, inputAddr, inputLen, heapAddr, format);
 }
@@ -284,7 +284,7 @@ int this_cpu_opa_eval(const char *input)
 {
     int ret = false;
     i32 inputAddr = 0;
-    i32 inputLen = strlen(input);
+    i32 inputLen = strlen(input) + 1;
     wasm_vm_result result;
 
     wasm_vm *vm = this_cpu_wasm_vm();
