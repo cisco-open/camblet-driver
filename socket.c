@@ -603,10 +603,10 @@ typedef enum
 } direction;
 
 // a function to evaluate the connection if it should be intercepted, now with opa
-bool eval_connection(u16 port, direction direction, const char *command)
+bool eval_connection(u16 port, direction direction, const char *command, u32 uid)
 {
 	char input[256];
-	sprintf(input, "{\"port\": %d, \"direction\": %d, \"command\": \"%s\"}", port, direction, command);
+	sprintf(input, "{\"port\": %d, \"direction\": %d, \"command\": \"%s\", \"uid\": %d}", port, direction, command, uid);
 	return this_cpu_opa_eval(input);
 }
 
@@ -617,11 +617,11 @@ int (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 {
 	u16 port = (u16)(sk->sk_portpair >> 16);
-	printk("wasm_accept: app: %s on port: %d", current->comm, port);
+	printk("wasm_accept: uid: %d app: %s on port: %d", current_uid().val, current->comm, port);
 
 	struct sock *client = accept(sk, flags, err, kern);
 
-	if (client && eval_connection(port, INPUT, current->comm))
+	if (client && eval_connection(port, INPUT, current->comm, current_uid().val))
 	{
 		proxywasm *p = this_cpu_proxywasm();
 		proxywasm_lock(p, NULL);
@@ -785,11 +785,11 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
 	u16 port = ntohs(usin->sin_port);
-	printk("wasm_connect to port: %d", port);
+	printk("wasm_connect: uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
 
 	int ret = connect(sk, uaddr, addr_len);
 
-	if (ret == 0 && eval_connection(port, OUTPUT, current->comm))
+	if (ret == 0 && eval_connection(port, OUTPUT, current->comm, current_uid().val))
 	{
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
