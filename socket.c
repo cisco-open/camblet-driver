@@ -702,6 +702,12 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 			}
 
 			wasm_vm_result generated_csr = csr_gen(csr, addr, len);
+			if (generated_csr.err)
+			{
+				pr_err("wasm_accept: wasm_vm_csr_gen error: %s", generated_csr.err);
+				csr_unlock(csr);
+				return -1;
+			}
 
 			wasm_vm_result free_result = csr_free(csr, addr);
 			if (free_result.err)
@@ -851,6 +857,12 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			}
 
 			wasm_vm_result generated_csr = csr_gen(csr, addr, len);
+			if (generated_csr.err)
+			{
+				pr_err("wasm_connect: wasm_vm_csr_gen error: %s", generated_csr.err);
+				csr_unlock(csr);
+				return -1;
+			}
 
 			wasm_vm_result free_result = csr_free(csr, addr);
 			if (free_result.err)
