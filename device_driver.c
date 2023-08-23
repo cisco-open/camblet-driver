@@ -92,15 +92,15 @@ void free_command_answer(struct command_answer *cmd_answer)
 // create a function to add a command to the list (called from the VM), locked with a spinlock
 command_answer *send_command(char *name, char *data)
 {
-    struct command cmd;
+    struct command *cmd = kmalloc(sizeof(struct command), GFP_KERNEL);
 
-    uuid_gen(&cmd.uuid);
-    cmd.name = name;
-    cmd.data = data;
-    init_waitqueue_head(&cmd.wait_queue);
+    uuid_gen(&cmd->uuid);
+    cmd->name = name;
+    cmd->data = data;
+    init_waitqueue_head(&cmd->wait_queue);
 
     spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
-    list_add_tail(&cmd.list, &command_list);
+    list_add_tail(&cmd->list, &command_list);
     spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
 
     DEFINE_WAIT(wait);
@@ -109,27 +109,29 @@ command_answer *send_command(char *name, char *data)
     printk("wasm: waiting for command to be processed");
 
     // wait for the command to be processed
-    prepare_to_wait(&cmd.wait_queue, &wait, TASK_INTERRUPTIBLE);
+    prepare_to_wait(&cmd->wait_queue, &wait, TASK_INTERRUPTIBLE);
     // Sleep until the condition is true or the timeout expires
     unsigned long timeout = msecs_to_jiffies(COMMAND_TIMEOUT_SECONDS * 1000);
     schedule_timeout(timeout);
 
-    finish_wait(&cmd.wait_queue, &wait);
+    finish_wait(&cmd->wait_queue, &wait);
 
-    if (cmd.answer == NULL)
+    if (cmd->answer == NULL)
     {
         printk(KERN_ERR "wasm: command answer timeout");
 
-        cmd.answer = kmalloc(sizeof(struct command_answer), GFP_KERNEL);
-        cmd.answer->error = kmalloc(strlen("timeout") + 1, GFP_KERNEL);
-        strcpy(cmd.answer->error, "timeout");
+        cmd->answer = kmalloc(sizeof(struct command_answer), GFP_KERNEL);
+        cmd->answer->error = kmalloc(strlen("timeout") + 1, GFP_KERNEL);
+        strcpy(cmd->answer->error, "timeout");
     }
 
     spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
-    list_del(&cmd.list);
+    list_del(&cmd->list);
     spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
 
-    return cmd.answer;
+    command_answer *cmd_answer = cmd->answer;
+    kfree(cmd);
+    return cmd_answer;
 }
 
 // create a function to get a command from the list (called from the driver), locked with a mutex
