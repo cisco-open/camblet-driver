@@ -64,7 +64,9 @@ wasm-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  worker_thread.o \
 			  opa.o \
 			  proxywasm.o \
-			  socket.o
+			  socket.o \
+			  task_context.o \
+			  commands.o
 
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
@@ -126,6 +128,6 @@ setup-dev-env:
 	test -f .vscode/c_cpp_properties.json || cp .vscode/c_cpp_properties.json.orig .vscode/c_cpp_properties.json
 	brew tap messense/macos-cross-toolchains
 	brew install $(shell lima uname -m)-unknown-linux-gnu
-	test -d linux || git clone --depth=1 --branch v6.2 git@github.com:torvalds/linux.git
+	test -d linux || git clone --depth=1 --branch v6.2 https://github.com/torvalds/linux.git
 	cd linux && lima make tinyconfig
 	cd linux && lima make -j

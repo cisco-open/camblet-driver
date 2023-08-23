@@ -24,6 +24,7 @@
 #include "socket.h"
 #include "rsa_tools.h"
 #include "opa.h"
+#include "commands.h"
 
 #define RSA_OR_EC 0
 
@@ -912,9 +913,8 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		proxywasm_unlock(p);
 
-		// Sample how to send a command to the userspace agent
-		const char *data = "{\"port\": \"8000\"}";
-		command_answer *answer = send_command("accept", data);
+		// Sample how to send a command to the userspace agents
+		command_answer *answer = send_accept_command(port);
 
 		if (answer->error)
 		{
@@ -929,7 +929,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		// We should not only check for empty cert but we must check the certs validity
 		// TODO must set the certificate to avoid new cert generation every time
-		if (sc->cert->data_len == 0)
+		if (sc->cert->data_len == 1234) // turn off csr generation for now
 		{
 			// generating certificate signing request
 			if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
@@ -1093,9 +1093,22 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 		proxywasm_unlock(p);
 
+		command_answer *answer = send_connect_command(port);
+
+		if (answer->error)
+		{
+			pr_err("wasm_accept: failed to send command: %s", answer->error);
+		}
+		else
+		{
+			pr_info("wasm_accept: command answer: %s", answer->answer);
+		}
+
+		free_command_answer(answer);
+
 		// We should not only check for empty cert but we must check the certs validity
 		// TODO must set the certificate to avoid new cert generation every time
-		if (sc->cert->data_len == 0)
+		if (sc->cert->data_len == 1234) // turn off csr generation for now
 		{
 			// generating certificate signing request
 			if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
