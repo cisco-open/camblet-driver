@@ -24,7 +24,7 @@
 /* Global variables are declared as static, so are global within the file. */
 
 #define DEFAULT_MODULE_ENTRYPOINT "main"
-#define COMMAND_TIMEOUT_SECONDS 5
+#define COMMAND_TIMEOUT_SECONDS 1
 
 static int major; /* major number assigned to our device driver */
 
@@ -43,6 +43,7 @@ typedef struct command
     struct list_head list;
     char *name;
     char *data;
+    task_context *context;
     uuid_t uuid;
     struct command_answer *answer;
     wait_queue_head_t wait_queue;
@@ -90,13 +91,14 @@ void free_command_answer(struct command_answer *cmd_answer)
 }
 
 // create a function to add a command to the list (called from the VM), locked with a spinlock
-command_answer *send_command(char *name, char *data)
+command_answer *send_command(char *name, char *data, task_context *context)
 {
     struct command *cmd = kmalloc(sizeof(struct command), GFP_KERNEL);
 
     uuid_gen(&cmd->uuid);
     cmd->name = name;
     cmd->data = data;
+    cmd->context = context;
     init_waitqueue_head(&cmd->wait_queue);
 
     spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
@@ -130,7 +132,12 @@ command_answer *send_command(char *name, char *data)
     spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
 
     command_answer *cmd_answer = cmd->answer;
+    if (cmd->context)
+    {
+        free_task_context(cmd->context);
+    }
     kfree(cmd);
+
     return cmd_answer;
 }
 
@@ -164,12 +171,23 @@ static int write_command_to_buffer(char *buffer, size_t buffer_size, struct comm
     JSON_Value *root_value = json_value_init_object();
     JSON_Object *root_object = json_value_get_object(root_value);
 
+    if (cmd->context)
+    {
+        JSON_Value *context_value = json_value_init_object();
+        JSON_Object *context_object = json_value_get_object(context_value);
+        json_object_set_number(context_object, "uid", cmd->context->uid.val);
+        json_object_set_number(context_object, "gid", cmd->context->gid.val);
+        json_object_set_string(context_object, "command_path", cmd->context->command_path);
+        json_object_set_string(context_object, "command_name", cmd->context->command_name);
+        json_object_set_value(root_object, "context", context_value);
+    }
+
     json_object_set_string(root_object, "id", uuid);
     json_object_set_string(root_object, "command", cmd->name);
     json_object_set_string(root_object, "data", cmd->data);
 
     char *serialized_string = json_serialize_to_string(root_value);
-    
+
     length = strlen(serialized_string);
     if (length > buffer_size)
     {
@@ -545,7 +563,7 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
 
     int json_length = write_command_to_buffer(device_out_buffer, sizeof device_out_buffer, c);
     if (json_length < 0)
-    { 
+    {
         return -EFAULT;
     }
 
