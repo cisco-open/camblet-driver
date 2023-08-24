@@ -287,10 +287,11 @@ int this_cpu_opa_eval(const char *input)
     i32 inputLen = strlen(input) + 1;
     wasm_vm_result result;
 
-    wasm_vm *vm = this_cpu_wasm_vm();
-    wasm_vm_lock(vm);
-
     opa_wrapper *opa = this_cpu_opa();
+    printk("wasm: opa %s.eval input: %s", opa->eval->module->name, input);
+
+    wasm_vm_lock(opa->vm);
+
     if (!opa)
     {
         ret = true;
@@ -305,25 +306,22 @@ int this_cpu_opa_eval(const char *input)
         goto cleanup;
     }
 
-    uint8_t *mem = wasm_vm_memory(opa->eval->module);
+    uint8_t *memory = wasm_vm_memory(opa->eval->module);
 
     inputAddr = result.data->i32;
-    memcpy(mem + inputAddr, input, inputLen);
+    memcpy(memory + inputAddr, input, inputLen);
 
     result = opa_eval(opa, inputAddr, inputLen);
     if (result.err)
     {
-        FATAL("opa_eval error: %s", result.err);
+        FATAL("wasm_vm_opa_eval error: %s", result.err);
         goto cleanup;
     }
 
-    char *res = (char *)(mem + result.data->i32);
+    char *json = (char *)(memory + result.data->i32);
+    ret = parse_opa_eval_result(json);
 
-    printk("wasm: opa result: %s", res);
-
-    ret = parse_opa_eval_result(res);
-
-    printk("wasm: opa result parsed: %d", ret);
+    printk("wasm: opa %s.eval result: %s -> %d", opa->eval->module->name, json, ret);
 
 cleanup:
     if (inputAddr != 0)
@@ -333,6 +331,6 @@ cleanup:
             FATAL("opa wasm_vm_opa_free json error: %s", result.err);
     }
 
-    wasm_vm_unlock(vm);
+    wasm_vm_unlock(opa->vm);
     return ret;
 }
