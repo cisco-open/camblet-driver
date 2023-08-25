@@ -8,6 +8,10 @@ package socket
 #   "direction": 0
 # }
 
+# direction constants
+INPUT := 0
+OUTPUT := 1
+
 allowed_ports := {8000, 8080}
 allowed_commands := {"curl", "python3"}
 
