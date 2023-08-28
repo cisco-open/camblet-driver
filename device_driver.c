@@ -20,6 +20,7 @@
 #include "proxywasm.h"
 #include "csr.h"
 #include "runtime.h"
+#include "commands.h"
 
 /* Global variables are declared as static, so are global within the file. */
 
