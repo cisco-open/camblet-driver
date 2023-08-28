@@ -8,7 +8,7 @@
  * modified, or distributed except according to those terms.
  */
 
-#include "device_driver.h"
+#include "commands.h"
 #include "json.h"
 
 command_answer *send_accept_command(u16 port)
