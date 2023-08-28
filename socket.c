@@ -412,13 +412,15 @@ int wasm_recvmsg(struct sock *sock,
 
 	if (c->protocol == NULL)
 	{
-		if (br_sslio_flush(&c->ioc) == 0)
+		ret = br_sslio_flush(&c->ioc);
+		if (ret == 0)
 		{
 			printk("wasm_recvmsg: TLS handshake done");
 		}
 		else
 		{
 			pr_err("wasm_recvmsg: %s TLS handshake error %d", get_direction(c), br_ssl_engine_last_error(&c->sc->eng));
+			goto bail;
 		}
 
 		c->protocol = br_ssl_engine_get_selected_protocol(&c->sc->eng);
@@ -488,17 +490,17 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	wasm_socket_context *c = sock->sk_user_data;
 
-	// dump_msghdr(msg);
-
 	if (c->protocol == NULL)
 	{
-		if (br_sslio_flush(&c->ioc) == 0)
+		ret = br_sslio_flush(&c->ioc);
+		if (ret == 0)
 		{
 			printk("wasm_sendmsg: TLS handshake done");
 		}
 		else
 		{
 			pr_err("wasm_sendmsg: %s TLS handshake error %d", get_direction(c), br_ssl_engine_last_error(&c->sc->eng));
+			goto bail;
 		}
 
 		c->protocol = br_ssl_engine_get_selected_protocol(&c->sc->eng);
@@ -562,7 +564,7 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	set_write_buffer_size(c, 0);
 
 	ret = br_sslio_flush(&c->ioc);
-	if (ret < 0)
+	if (ret != 0)
 	{
 		pr_err("wasm_sendmsg: br_sslio_flush returned an error");
 		goto bail;
