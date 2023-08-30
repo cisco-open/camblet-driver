@@ -15,7 +15,10 @@ OUTPUT := 1
 allowed_ports := {8000, 8080}
 allowed_commands := {"curl", "python3"}
 
-allow {
+allow = {
+	"mtls": true,
+	"permissive": false,
+} {
 	allowed_ports[input.port]
 	allowed_commands[input.command]
 }

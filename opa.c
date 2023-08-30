@@ -24,12 +24,12 @@ typedef struct opa_wrapper
 
 static opa_wrapper *opas[NR_CPUS] = {0};
 
-wasm_vm_result opa_malloc(opa_wrapper *opa, unsigned size)
+static wasm_vm_result opa_malloc(opa_wrapper *opa, unsigned size)
 {
     return wasm_vm_call_direct(opa->vm, opa->malloc, size);
 }
 
-wasm_vm_result opa_free(opa_wrapper *opa, i32 ptr)
+static wasm_vm_result opa_free(opa_wrapper *opa, i32 ptr)
 {
     return wasm_vm_call_direct(opa->vm, opa->free, ptr);
 }
@@ -41,7 +41,7 @@ opa_wrapper *this_cpu_opa(void)
     return opas[cpu];
 }
 
-i32 time_now_ns(opa_wrapper *opa, i32 _ctx)
+static i32 time_now_ns(opa_wrapper *opa, i32 _ctx)
 {
     u64 now = ktime_get_real_ns();
 
@@ -60,7 +60,7 @@ i32 time_now_ns(opa_wrapper *opa, i32 _ctx)
     return addr;
 }
 
-i32 trace(opa_wrapper *opa, i32 _ctx, i32 arg1)
+static i32 trace(opa_wrapper *opa, i32 _ctx, i32 arg1)
 {
     uint8_t *mem = wasm_vm_memory(opa->eval->module);
 
@@ -89,7 +89,7 @@ i32 trace(opa_wrapper *opa, i32 _ctx, i32 arg1)
     return addr;
 }
 
-int parse_opa_builtins(opa_wrapper *opa, char *json)
+static int parse_opa_builtins(opa_wrapper *opa, char *json)
 {
     JSON_Value *root_value = json_parse_string(json);
     if (root_value)
@@ -126,7 +126,7 @@ int parse_opa_builtins(opa_wrapper *opa, char *json)
     return 0;
 }
 
-int parse_opa_eval_result(char *json)
+static int parse_opa_eval_result(char *json)
 {
     JSON_Value *root_value = json_parse_string(json);
     if (root_value)
@@ -142,6 +142,35 @@ int parse_opa_eval_result(char *json)
         return ret;
     }
     return false;
+}
+
+opa_socket_context parse_opa_socket_eval_result(char *json)
+{
+    JSON_Value *root_value = json_parse_string(json);
+    opa_socket_context ret = {0};
+    if (root_value)
+    {
+        JSON_Array *results = json_value_get_array(root_value);
+        JSON_Object *result = json_array_get_object(results, 0);
+        if (result == NULL)
+            goto free;
+
+        int permissive = json_object_dotget_boolean(result, "result.permissive");
+        if (permissive == -1)
+            permissive = false;
+
+        int mtls = json_object_dotget_boolean(result, "result.mtls");
+        if (mtls == -1)
+            mtls = false;
+
+        ret.permissive = permissive;
+        ret.mtls = mtls;
+        ret.allowed = true;
+
+    free:
+        json_value_free(root_value);
+    }
+    return ret;
 }
 
 m3ApiRawFunction(opa_abort)
@@ -270,7 +299,7 @@ error:
     return wasm_vm_result_ok;
 }
 
-wasm_vm_result opa_eval(opa_wrapper *opa, i32 inputAddr, i32 inputLen)
+static wasm_vm_result opa_eval(opa_wrapper *opa, i32 inputAddr, i32 inputLen)
 {
     i32 entrypoint = 0;
     i32 dataAddr = 0;
@@ -322,6 +351,60 @@ int this_cpu_opa_eval(const char *input)
     ret = parse_opa_eval_result(json);
 
     printk("wasm: opa %s.eval result: %s -> %d", opa->eval->module->name, json, ret);
+
+cleanup:
+    if (inputAddr != 0)
+    {
+        result = opa_free(opa, inputAddr);
+        if (result.err)
+            FATAL("opa wasm_vm_opa_free json error: %s", result.err);
+    }
+
+    wasm_vm_unlock(opa->vm);
+    return ret;
+}
+
+opa_socket_context this_cpu_opa_socket_eval(const char *input)
+{
+    opa_socket_context ret = {0};
+    i32 inputAddr = 0;
+    i32 inputLen = strlen(input) + 1;
+    wasm_vm_result result;
+
+    opa_wrapper *opa = this_cpu_opa();
+    printk("wasm: opa %s.eval input: %s", opa->eval->module->name, input);
+
+    wasm_vm_lock(opa->vm);
+
+    if (!opa)
+    {
+        pr_warn("wasm: opa socket policy module not loaded, eval always evaluates to NULL");
+        goto cleanup;
+    }
+
+    result = opa_malloc(opa, inputLen);
+    if (result.err)
+    {
+        FATAL("opa wasm_vm_opa_malloc error: %s", result.err);
+        goto cleanup;
+    }
+
+    uint8_t *memory = wasm_vm_memory(opa->eval->module);
+
+    inputAddr = result.data->i32;
+    memcpy(memory + inputAddr, input, inputLen);
+
+    result = opa_eval(opa, inputAddr, inputLen);
+    if (result.err)
+    {
+        FATAL("wasm_vm_opa_eval error: %s", result.err);
+        goto cleanup;
+    }
+
+    char *json = (char *)(memory + result.data->i32);
+    ret = parse_opa_socket_eval_result(json);
+
+    printk("wasm: opa %s.eval result: %s -> %d", opa->eval->module->name, json, ret.allowed);
 
 cleanup:
     if (inputAddr != 0)
