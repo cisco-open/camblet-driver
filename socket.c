@@ -425,9 +425,13 @@ int wasm_recvmsg(struct sock *sock,
 
 		c->protocol = br_ssl_engine_get_selected_protocol(&c->sc->eng);
 
-		printk("wasm_recvmsg: %s protocol name: %s", get_direction(c), c->protocol);
-
-		set_property_v(c->pc, "upstream.negotiated_protocol", c->protocol, strlen(c->protocol));
+		if (c->protocol)
+		{
+			printk("wasm_recvmsg: %s protocol name: %s", get_direction(c), c->protocol);
+			set_property_v(c->pc, "upstream.negotiated_protocol", c->protocol, strlen(c->protocol));
+		}
+		else
+			c->protocol = "no-mtls";
 	}
 
 	len = min(size, get_read_buffer_capacity(c));
@@ -480,7 +484,6 @@ int wasm_recvmsg(struct sock *sock,
 	ret = len;
 
 bail:
-
 	return ret;
 }
 
@@ -505,9 +508,13 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 		c->protocol = br_ssl_engine_get_selected_protocol(&c->sc->eng);
 
-		printk("wasm_sendmsg: %s protocol name: %s", get_direction(c), c->protocol);
-
-		set_property_v(c->pc, "upstream.negotiated_protocol", c->protocol, strlen(c->protocol));
+		if (c->protocol)
+		{
+			printk("wasm_sendmsg: %s protocol name: %s", get_direction(c), c->protocol);
+			set_property_v(c->pc, "upstream.negotiated_protocol", c->protocol, strlen(c->protocol));
+		}
+		else
+			c->protocol = "no-mtls";
 	}
 
 	// get the cipher suite from the context
@@ -573,7 +580,6 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	ret = size;
 
 bail:
-
 	return ret;
 }
 
@@ -605,11 +611,11 @@ typedef enum
 } direction;
 
 // a function to evaluate the connection if it should be intercepted, now with opa
-bool eval_connection(u16 port, direction direction, const char *command, u32 uid)
+static opa_socket_context socket_eval(u16 port, direction direction, const char *command, u32 uid)
 {
 	char input[256];
 	sprintf(input, "{\"port\": %d, \"direction\": %d, \"command\": \"%s\", \"uid\": %d}", port, direction, command, uid);
-	return this_cpu_opa_eval(input);
+	return this_cpu_opa_socket_eval(input);
 }
 
 struct sock *(*accept)(struct sock *sk, int flags, int *err, bool kern);
@@ -623,7 +629,8 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	struct sock *client = accept(sk, flags, err, kern);
 
-	if (client && eval_connection(port, INPUT, current->comm, current_uid().val))
+	opa_socket_context opa_socket = socket_eval(port, OUTPUT, current->comm, current_uid().val);
+	if (client && opa_socket.allowed)
 	{
 		proxywasm *p = this_cpu_proxywasm();
 		proxywasm_lock(p, NULL);
@@ -742,9 +749,16 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 #if !RSA_OR_EC
 		br_ssl_server_init_full_rsa(sc->sc, CHAIN, CHAIN_LEN, &RSA);
 
-		br_x509_minimal_init_full(&sc->xc, TAs, TAs_NUM);
-		br_ssl_engine_set_x509(&sc->sc->eng, &sc->xc.vtable);
-		br_ssl_engine_set_default_rsavrfy(&sc->sc->eng);
+		// mTLS enablement
+		if (opa_socket.mtls)
+		{
+			br_x509_minimal_init_full(&sc->xc, TAs, TAs_NUM);
+			br_ssl_engine_set_x509(&sc->sc->eng, &sc->xc.vtable);
+
+			br_ssl_engine_set_default_rsavrfy(&sc->sc->eng);
+
+			br_ssl_server_set_trust_anchor_names_alt(sc->sc, TAs, TAs_NUM);
+		}
 #elif
 		br_ssl_server_init_full_ec(sc->sc, CHAIN, CHAIN_LEN, BR_KEYTYPE_EC, &EC);
 #endif
@@ -760,8 +774,6 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		br_ssl_engine_set_buffer(&sc->sc->eng, &sc->iobuf, BR_SSL_BUFSIZE_BIDI, true);
 
 		br_ssl_engine_set_protocol_names(&sc->sc->eng, ALPNs, ALPNs_NUM);
-
-		br_ssl_server_set_trust_anchor_names_alt(sc->sc, TAs, TAs_NUM);
 
 		/*
 		 * Reset the server context, for a new handshake.
@@ -791,7 +803,8 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	int ret = connect(sk, uaddr, addr_len);
 
-	if (ret == 0 && eval_connection(port, OUTPUT, current->comm, current_uid().val))
+	opa_socket_context opa_socket = socket_eval(port, OUTPUT, current->comm, current_uid().val);
+	if (ret == 0 && opa_socket.allowed)
 	{
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
@@ -900,7 +913,11 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		// br_x509_minimal_init_full(sc->xc, TAs, TAs_NUM);
 		// br_ssl_engine_set_x509(&sc->cc->eng, &sc->xc->vtable);
 
-		br_ssl_client_set_single_rsa(sc->cc, CHAIN, CHAIN_LEN, &RSA, br_rsa_pkcs1_sign_get_default());
+		// mTLS enablement
+		if (opa_socket.mtls)
+		{
+			br_ssl_client_set_single_rsa(sc->cc, CHAIN, CHAIN_LEN, &RSA, br_rsa_pkcs1_sign_get_default());
+		}
 
 		/*
 		 * Set the I/O buffer to the provided array. We

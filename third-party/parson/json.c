@@ -86,7 +86,7 @@ static void* malloc(size_t size) {
     return kmalloc(size, GFP_KERNEL);
 }
 
-static void free(void* ptr){
+static void free(void* ptr) {
     kfree(ptr);
 }
 
