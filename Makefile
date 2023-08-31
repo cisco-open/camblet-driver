@@ -95,6 +95,7 @@ insmod-bearssl:
 	sudo insmod third-party/BearSSL/bearssl.ko
 
 insmod: insmod-bearssl
+	sudo modprobe tls
 	sudo insmod wasm.ko
 
 insmod-no-proxywasm: insmod-bearssl

@@ -13,6 +13,7 @@
 #include <linux/uaccess.h>
 #include <net/protocol.h>
 #include <net/tcp.h>
+#include <net/tls.h>
 #include <net/sock.h>
 #include <net/ip.h>
 
@@ -61,6 +62,22 @@ typedef struct
 	proxywasm *p;
 	i64 direction;
 	char *protocol;
+
+	struct sock *sock;
+
+	int (*ktls_recvmsg)(struct sock *sock,
+						struct msghdr *msg,
+						size_t size,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
+						int noblock,
+#endif
+						int flags,
+						int *addr_len);
+
+	int (*ktls_sendmsg)(struct sock *sock,
+						struct msghdr *msg,
+						size_t size);
+
 } wasm_socket_context;
 
 // Struct to hold buffer functions
@@ -98,6 +115,161 @@ static char *realloc_and_access_buffer(proxywasm_context *c, struct buffer_funct
 	return buffer + buffer_size;
 }
 
+static int send_msg(struct sock *sock, void *msg, size_t len)
+{
+	// printk("send_msg -> buf %p size %d bytes, sock: %p", msg, len, sock);
+	struct msghdr hdr = {0};
+	struct kvec iov = {.iov_base = msg, .iov_len = len};
+
+	iov_iter_kvec(&hdr.msg_iter, WRITE, &iov, 1, len);
+
+	int sent = tcp_sendmsg(sock, &hdr, len);
+
+	// printk("send_msg -> sent %d bytes, sock: %p", sent, sock);
+
+	return sent;
+}
+
+static int send_msg_ktls(wasm_socket_context *c, void *msg, size_t len)
+{
+	// printk("send_msg -> buf %p size %d bytes, sock: %p", msg, len, sock);
+	struct msghdr hdr = {0};
+	struct kvec iov = {.iov_base = msg, .iov_len = len};
+
+	iov_iter_kvec(&hdr.msg_iter, WRITE, &iov, 1, len);
+
+	int sent = c->ktls_sendmsg(c->sock, &hdr, len);
+
+	// printk("send_msg -> sent %d bytes, sock: %p", sent, sock);
+
+	return sent;
+}
+
+static int recv_msg(struct sock *sock, char *buf, size_t size)
+{
+	// printk("recv_msg -> buf %p size %d bytes, sock: %p", buf, size, sock);
+	struct msghdr hdr = {0};
+	struct kvec iov = {.iov_base = buf, .iov_len = size};
+	int addr_len = 0;
+
+	iov_iter_kvec(&hdr.msg_iter, READ, &iov, 1, size);
+
+	int received = tcp_recvmsg(sock, &hdr, size,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
+							   0,
+#endif
+							   0, &addr_len);
+
+	// printk("recv_msg -> received %d bytes, sock: %p", received, sock);
+
+	return received;
+}
+
+static int recv_msg_ktls(wasm_socket_context *c, char *buf, size_t size)
+{
+	// printk("recv_msg -> buf %p size %d bytes, sock: %p", buf, size, sock);
+	struct msghdr hdr = {0};
+	struct kvec iov = {.iov_base = buf, .iov_len = size};
+	int addr_len = 0;
+
+	iov_iter_kvec(&hdr.msg_iter, READ, &iov, 1, size);
+
+	int received = c->ktls_recvmsg(c->sock, &hdr, size,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
+								   0,
+#endif
+								   0, &addr_len);
+
+	// printk("recv_msg -> received %d bytes, sock: %p", received, sock);
+
+	return received;
+}
+
+/*
+ * Low-level data read callback for the simplified SSL I/O API.
+ */
+static int
+sock_read(void *ctx, unsigned char *buf, size_t len)
+{
+	for (;;)
+	{
+		ssize_t rlen;
+
+		rlen = recv_msg((struct sock *)ctx, buf, len);
+		if (rlen <= 0)
+		{
+			if (rlen < 0)
+			{
+				continue;
+			}
+			return -1;
+		}
+		return (int)rlen;
+	}
+}
+
+/*
+ * Low-level data write callback for the simplified SSL I/O API.
+ */
+static int
+sock_write(void *ctx, const unsigned char *buf, size_t len)
+{
+	for (;;)
+	{
+		ssize_t wlen;
+
+		wlen = send_msg((struct sock *)ctx, buf, len);
+		if (wlen <= 0)
+		{
+			if (wlen < 0)
+			{
+				continue;
+			}
+			return -1;
+		}
+		return (int)wlen;
+	}
+}
+
+static int
+ktls_sock_read(wasm_socket_context *c, unsigned char *buf, size_t len)
+{
+	for (;;)
+	{
+		ssize_t rlen;
+
+		rlen = recv_msg_ktls(c, buf, len);
+		if (rlen <= 0)
+		{
+			if (rlen < 0)
+			{
+				continue;
+			}
+			return -1;
+		}
+		return (int)rlen;
+	}
+}
+
+static int
+ktls_sock_write(wasm_socket_context *c, const unsigned char *buf, size_t len)
+{
+	for (;;)
+	{
+		ssize_t wlen;
+		wlen = send_msg_ktls(c, buf, len);
+		if (wlen <= 0)
+		{
+			if (wlen < 0)
+			{
+				continue;
+			}
+			return -1;
+		}
+		return (int)wlen;
+	}
+}
+
 static char *get_direction(wasm_socket_context *c)
 {
 	if (c->direction == ListenerDirectionInbound)
@@ -107,6 +279,54 @@ static char *get_direction(wasm_socket_context *c)
 	else
 	{
 		return "client";
+	}
+}
+
+static br_ssl_engine_context *get_ssl_engine_context(wasm_socket_context *c)
+{
+	return c->sc ? &c->sc->eng : &c->cc->eng;
+}
+
+static int *wasm_socket_read(wasm_socket_context *c, void *dst, size_t len)
+{
+	if (c->ktls_recvmsg)
+	{
+		return ktls_sock_read(c, dst, len);
+	}
+	else
+	{
+		int ret = br_sslio_read(&c->ioc, dst, len);
+		if (ret < 0)
+		{
+			const br_ssl_engine_context *ec = get_ssl_engine_context(c);
+			pr_err("wasm_socket_read: %s br_sslio_read error %d", get_direction(c), br_ssl_engine_last_error(ec));
+		}
+		return ret;
+	}
+}
+
+static int *wasm_socket_write(wasm_socket_context *c, void *src, size_t len)
+{
+	if (c->ktls_sendmsg)
+	{
+		return ktls_sock_write(c, src, len); // TODO not sure if this is a write all!
+	}
+	else
+	{
+		int ret = br_sslio_write_all(&c->ioc, src, len);
+		if (ret < 0)
+		{
+			const br_ssl_engine_context *ec = get_ssl_engine_context(c);
+			pr_err("wasm_socket_write: %s br_sslio_write_all error %d", get_direction(c), br_ssl_engine_last_error(ec));
+			return ret;
+		}
+
+		ret = br_sslio_flush(&c->ioc);
+		if (ret != 0)
+		{
+			pr_err("wasm_socket_write: br_sslio_flush returned an error %d", ret);
+		}
+		return ret;
 	}
 }
 
@@ -262,13 +482,14 @@ static void set_write_buffer_size(wasm_socket_context *c, int size)
 	}
 }
 
-static wasm_socket_context *new_server_wasm_socket_context(proxywasm *p)
+static wasm_socket_context *new_server_wasm_socket_context(proxywasm *p, struct sock *sock)
 {
 	wasm_socket_context *c = kzalloc(sizeof(wasm_socket_context), GFP_KERNEL);
 	c->sc = kmalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
 	c->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
 	c->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
 	c->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
+	c->sock = sock;
 
 	wasm_vm_result res = proxywasm_create_context(p);
 	if (res.err)
@@ -283,13 +504,14 @@ static wasm_socket_context *new_server_wasm_socket_context(proxywasm *p)
 	return c;
 }
 
-static wasm_socket_context *new_client_wasm_socket_context(proxywasm *p)
+static wasm_socket_context *new_client_wasm_socket_context(proxywasm *p, struct sock *sock)
 {
 	wasm_socket_context *c = kzalloc(sizeof(wasm_socket_context), GFP_KERNEL);
 	c->cc = kmalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
 	c->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
 	c->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
 	c->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
+	c->sock = sock;
 
 	wasm_vm_result res = proxywasm_create_context(p);
 	if (res.err)
@@ -344,87 +566,6 @@ static void free_wasm_socket_context(wasm_socket_context *sc)
 	}
 }
 
-static int send_msg(struct sock *sock, void *msg, size_t len)
-{
-	// printk("send_msg -> buf %p size %d bytes, sock: %p", msg, len, sock);
-	struct msghdr hdr = {0};
-	struct kvec iov = {.iov_base = msg, .iov_len = len};
-
-	iov_iter_kvec(&hdr.msg_iter, WRITE, &iov, 1, len);
-
-	int sent = tcp_sendmsg(sock, &hdr, len);
-
-	// printk("send_msg -> sent %d bytes, sock: %p", sent, sock);
-
-	return sent;
-}
-
-static int recv_msg(struct sock *sock, char *buf, size_t size)
-{
-	// printk("recv_msg -> buf %p size %d bytes, sock: %p", buf, size, sock);
-	struct msghdr hdr = {0};
-	struct kvec iov = {.iov_base = buf, .iov_len = size};
-	int addr_len = 0;
-
-	iov_iter_kvec(&hdr.msg_iter, READ, &iov, 1, size);
-
-	int received = tcp_recvmsg(sock, &hdr, size,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
-							   0,
-#endif
-							   0, &addr_len);
-
-	// printk("recv_msg -> received %d bytes, sock: %p", received, sock);
-
-	return received;
-}
-
-/*
- * Low-level data read callback for the simplified SSL I/O API.
- */
-static int
-sock_read(void *ctx, unsigned char *buf, size_t len)
-{
-	for (;;)
-	{
-		ssize_t rlen;
-
-		rlen = recv_msg((struct sock *)ctx, buf, len);
-		if (rlen <= 0)
-		{
-			if (rlen < 0)
-			{
-				continue;
-			}
-			return -1;
-		}
-		return (int)rlen;
-	}
-}
-
-/*
- * Low-level data write callback for the simplified SSL I/O API.
- */
-static int
-sock_write(void *ctx, const unsigned char *buf, size_t len)
-{
-	for (;;)
-	{
-		ssize_t wlen;
-
-		wlen = send_msg((struct sock *)ctx, buf, len);
-		if (wlen <= 0)
-		{
-			if (wlen < 0)
-			{
-				continue;
-			}
-			return -1;
-		}
-		return (int)wlen;
-	}
-}
-
 void dump_msghdr(struct msghdr *msg)
 {
 	char data[1024];
@@ -464,6 +605,8 @@ void dump_msghdr(struct msghdr *msg)
 	printk(KERN_INFO "iovoffset = %zd\n", msg->msg_iter.iov_offset);
 }
 
+static int configure_ktls_sock(wasm_socket_context *c, struct sock *sock);
+
 int wasm_recvmsg(struct sock *sock,
 				 struct msghdr *msg,
 				 size_t size,
@@ -499,6 +642,13 @@ int wasm_recvmsg(struct sock *sock,
 		}
 		else
 			c->protocol = "no-mtls";
+
+		ret = configure_ktls_sock(c, sock);
+		if (ret != 0)
+		{
+			pr_err("wasm_recvmsg: %s %s configure_ktls_sock returned %d", current->comm, get_direction(c), ret);
+			goto bail;
+		}
 	}
 
 	len = size;
@@ -515,10 +665,10 @@ int wasm_recvmsg(struct sock *sock,
 
 	while (!done)
 	{
-		ret = br_sslio_read(&c->ioc, get_read_buffer_for_read(c, len), len);
+		ret = wasm_socket_read(c, get_read_buffer_for_read(c, len), len);
 		if (ret < 0)
 		{
-			const br_ssl_engine_context *ec = c->sc ? &c->sc->eng : &c->cc->eng;
+			const br_ssl_engine_context *ec = c->sc ? &c->sc->eng : &c->cc->eng; // TODO get rid of this
 			// If error happened log it then bail out
 			if (br_ssl_engine_last_error(ec) != 0)
 			{
@@ -535,7 +685,7 @@ int wasm_recvmsg(struct sock *sock,
 		// printk("wasm_recvmsg: br_sslio_read read %d bytes", ret);
 		set_read_buffer_size(c, get_read_buffer_size(c) + ret);
 
-		proxywasm_lock(c->p, c-> pc);
+		proxywasm_lock(c->p, c->pc);
 		wasm_vm_result result;
 		switch (c->direction)
 		{
@@ -606,21 +756,14 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 		}
 		else
 			c->protocol = "no-mtls";
+
+		ret = configure_ktls_sock(c, sock);
+		if (ret != 0)
+		{
+			pr_err("wasm_sendmsg: %s %s configure_ktls_sock returned %d", current->comm, get_direction(c), ret);
+			goto bail;
+		}
 	}
-
-	// get the cipher suite from the context
-	// const br_ssl_session_parameters *params = &c->sc->eng.session;
-	// printk("wasm_sendmsg cipher suite: %d version: %d", params->cipher_suite, params->version);
-
-	// // get the key from the context
-	// const br_x509_certificate *chain = br_ssl_engine_get_chain(&sc->sc->eng);
-	// const br_x509_pkey *pk = &chain->pkey;
-
-	// // get iv from the context
-	// const unsigned char *iv = br_ssl_engine_get_server_iv(&sc->sc->eng);
-
-	// // get the salt from the context
-	// const unsigned char *salt = br_ssl_engine_get_client_random(&sc->sc->eng);
 
 	//	len = copy_from_iter(data, min(size, sizeof(data)), &msg->msg_iter);
 	len = copy_from_iter(get_write_buffer_for_write(c, size), size, &msg->msg_iter);
@@ -655,11 +798,9 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	// printk("wasm_sendmsg: %s br_sslio_write_all get_write_buffer_size = %d", get_direction(c), get_write_buffer_size(c));
 
-	ret = br_sslio_write_all(&c->ioc, get_write_buffer(c), get_write_buffer_size(c));
+	ret = wasm_socket_write(c, get_write_buffer(c), get_write_buffer_size(c));
 	if (ret < 0)
 	{
-		const br_ssl_engine_context *ec = c->sc ? &c->sc->eng : &c->cc->eng;
-		pr_err("wasm_sendmsg: %s br_sslio_write_all error %d", get_direction(c), br_ssl_engine_last_error(ec));
 		goto bail;
 	}
 
@@ -667,14 +808,8 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	set_write_buffer_size(c, 0);
 
-	ret = br_sslio_flush(&c->ioc);
-	if (ret != 0)
-	{
-		pr_err("wasm_sendmsg: br_sslio_flush returned an error");
-		goto bail;
-	}
-
 	ret = size;
+	printk("wasm_sendmsg: %s sent %d bytes", get_direction(c), ret);
 
 bail:
 	return ret;
@@ -698,6 +833,69 @@ void wasm_destroy(struct sock *sk)
 	free_wasm_socket_context(c);
 	sk->sk_user_data = NULL;
 	tcp_v4_destroy_sock(sk);
+}
+
+static int configure_ktls_sock(wasm_socket_context *c, struct sock *sock)
+{
+	int ret;
+
+	br_ssl_engine_context *eng = get_ssl_engine_context(c);
+	br_ssl_session_parameters *params = &eng->session;
+
+	if (params->cipher_suite != BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256)
+	{
+		pr_warn("wasm: configure_ktls: only ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 cipher suite is supported, got %x", params->cipher_suite);
+		return 0;
+	}
+
+	printk("wasm: configure_ktls for %s cipher suite: %x version: %x, iv: %.*s", current->comm, params->cipher_suite, params->version, 12, eng->out.chapol.iv);
+	printk("wasm: configure_ktls for %s cipher suite: %x version: %x, iv: %.*s", current->comm, params->cipher_suite, params->version, 12, eng->in.chapol.iv);
+
+	struct tls12_crypto_info_chacha20_poly1305 crypto_info_tx;
+	crypto_info_tx.info.version = TLS_1_2_VERSION;
+	crypto_info_tx.info.cipher_type = TLS_CIPHER_CHACHA20_POLY1305;
+	memcpy(crypto_info_tx.iv, eng->out.chapol.iv, TLS_CIPHER_CHACHA20_POLY1305_IV_SIZE);
+	memcpy(crypto_info_tx.key, eng->out.chapol.key, TLS_CIPHER_CHACHA20_POLY1305_KEY_SIZE);
+	memcpy(crypto_info_tx.rec_seq, &eng->out.chapol.seq, TLS_CIPHER_CHACHA20_POLY1305_REC_SEQ_SIZE);
+	// memcpy(crypto_info.salt, eng->out.chapol.salt, TLS_CIPHER_CHACHA20_POLY1305_SALT_SIZE);
+
+	struct tls12_crypto_info_chacha20_poly1305 crypto_info_rx;
+	crypto_info_rx.info.version = TLS_1_2_VERSION;
+	crypto_info_rx.info.cipher_type = TLS_CIPHER_CHACHA20_POLY1305;
+	memcpy(crypto_info_rx.iv, eng->in.chapol.iv, TLS_CIPHER_CHACHA20_POLY1305_IV_SIZE);
+	memcpy(crypto_info_rx.key, eng->in.chapol.key, TLS_CIPHER_CHACHA20_POLY1305_KEY_SIZE);
+	memcpy(crypto_info_rx.rec_seq, &eng->in.chapol.seq, TLS_CIPHER_CHACHA20_POLY1305_REC_SEQ_SIZE);
+	// memcpy(crypto_info.salt, eng->out.chapol.salt, TLS_CIPHER_CHACHA20_POLY1305_SALT_SIZE);
+
+	ret = sock->sk_prot->setsockopt(sock, SOL_TCP, TCP_ULP, KERNEL_SOCKPTR("tls"), sizeof("tls"));
+	if (ret != 0)
+	{
+		pr_err("wasm: %s setsockopt TCP_ULP ret: %d", current->comm, ret);
+		return ret;
+	}
+
+	ret = sock->sk_prot->setsockopt(sock, SOL_TLS, TLS_TX, KERNEL_SOCKPTR(&crypto_info_tx), sizeof(crypto_info_tx));
+	if (ret != 0)
+	{
+		pr_err("wasm: %s setsockopt TLS_TX ret: %d", current->comm, ret);
+		return ret;
+	}
+
+	ret = sock->sk_prot->setsockopt(sock, SOL_TLS, TLS_RX, KERNEL_SOCKPTR(&crypto_info_rx), sizeof(crypto_info_rx));
+	if (ret != 0)
+	{
+		pr_err("wasm: %s setsockopt TLS_RX ret: %d", current->comm, ret);
+		return ret;
+	}
+
+	// we have to save the proto here because the setsockopt calls override the tcp protocol
+	// later those methods set by ktls has to be used to read and write data, but first we need to put back ours
+	c->ktls_recvmsg = sock->sk_prot->recvmsg;
+	c->ktls_sendmsg = sock->sk_prot->sendmsg;
+
+	sock->sk_prot = &wasm_prot;
+
+	return 0;
 }
 
 // an enum for the direction
@@ -732,7 +930,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		proxywasm *p = this_cpu_proxywasm();
 		proxywasm_lock(p, NULL);
 
-		wasm_socket_context *sc = new_server_wasm_socket_context(p);
+		wasm_socket_context *sc = new_server_wasm_socket_context(p, client);
 
 		wasm_vm_result res = proxy_on_new_connection(p);
 		if (res.err)
@@ -744,7 +942,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		proxywasm_unlock(p);
 
-		// Sample how to send a command to the userspace agent
+		// // Sample how to send a command to the userspace agent
 		const char *data = "{\"port\": \"8000\"}";
 		command_answer *answer = send_command("accept", data);
 
@@ -908,7 +1106,7 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		proxywasm *p = this_cpu_proxywasm();
 		proxywasm_lock(p, NULL);
 
-		wasm_socket_context *sc = new_client_wasm_socket_context(p);
+		wasm_socket_context *sc = new_client_wasm_socket_context(p, sk);
 
 		wasm_vm_result res = proxy_on_new_connection(p);
 		if (res.err)

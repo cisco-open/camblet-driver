@@ -185,7 +185,7 @@ make insmod
 make logs
 
 # In another terminal start a server
-lima python3 -m http.server
+lima python3 -m http.server --protocol HTTP/1.1
 
 # In another terminal connect to the server (over plaintext, will be TLS terminated by the kernel)
 lima curl -v http://localhost:8000
