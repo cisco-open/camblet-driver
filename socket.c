@@ -87,14 +87,38 @@ static char *get_read_buffer(wasm_socket_context *c)
 	}
 }
 
-static char *get_read_buffer_for_read(wasm_socket_context *c)
+static char *get_read_buffer_for_read(wasm_socket_context *c, int len)
 {
 	if (c->direction == ListenerDirectionInbound)
 	{
+		if (pw_get_downstream_buffer_size(c->pc) + len > pw_get_downstream_buffer_capacity(c->pc))
+		{
+			int new_capacity = pw_get_downstream_buffer_capacity(c->pc) * 2;
+			while (new_capacity < pw_get_downstream_buffer_size(c->pc) + len)
+			{
+				new_capacity *= 2;
+			}
+			char *new_buffer = krealloc(pw_get_downstream_buffer(c->pc), new_capacity, GFP_KERNEL);
+
+			pw_set_downstream_buffer(c->pc, new_buffer);
+			pw_set_downstream_buffer_capacity(c->pc, new_capacity);
+		}
 		return pw_get_downstream_buffer(c->pc) + pw_get_downstream_buffer_size(c->pc);
 	}
 	else
 	{
+		if (pw_get_upstream_buffer_size(c->pc) + len > pw_get_upstream_buffer_capacity(c->pc))
+		{
+			int new_capacity = pw_get_upstream_buffer_capacity(c->pc) * 2;
+			while (new_capacity < pw_get_upstream_buffer_size(c->pc) + len)
+			{
+				new_capacity *= 2;
+			}
+			char *new_buffer = krealloc(pw_get_upstream_buffer(c->pc), new_capacity, GFP_KERNEL);
+
+			pw_set_upstream_buffer(c->pc, new_buffer);
+			pw_set_upstream_buffer_capacity(c->pc, new_capacity);
+		}
 		return pw_get_upstream_buffer(c->pc) + pw_get_upstream_buffer_size(c->pc);
 	}
 }
@@ -434,41 +458,62 @@ int wasm_recvmsg(struct sock *sock,
 			c->protocol = "no-mtls";
 	}
 
-	len = min(size, get_read_buffer_capacity(c));
+	len = size;
+
+	bool end_of_stream = false;
+	bool done = false;
+
 	// printk("wasm_recvmsg: %s br_sslio_read trying to read %d bytes", get_direction(c), len);
-	ret = br_sslio_read(&c->ioc, get_read_buffer_for_read(c), len);
 
-	if (ret <= 0)
+	while (!done)
 	{
-		const br_ssl_engine_context *ec = c->sc ? &c->sc->eng : &c->cc->eng;
-		if (br_ssl_engine_last_error(ec) == 0)
-			ret = 0;
-		pr_err("wasm_recvmsg: %s br_sslio_read error %d", get_direction(c), br_ssl_engine_last_error(ec));
-		goto bail;
-	}
+		ret = br_sslio_read(&c->ioc, get_read_buffer_for_read(c, len), len);
+		// TODO handle ret value 0.
+		if (ret <= 0)
+		{
+			const br_ssl_engine_context *ec = c->sc ? &c->sc->eng : &c->cc->eng;
+			// If error happened log it then bail out
+			if (br_ssl_engine_last_error(ec) != 0)
+			{
+				pr_err("wasm_recvmsg: %s br_sslio_read error %d", get_direction(c), br_ssl_engine_last_error(ec));
+				goto bail;
+			}
+			// If return value is -1 but no error happened then it is end of the stream.
+			else
+			{
+				end_of_stream = true;
+			}
+		}
 
-	// printk("wasm_recvmsg: br_sslio_read read %d bytes", ret);
+		// printk("wasm_recvmsg: br_sslio_read read %d bytes", ret);
+		set_read_buffer_size(c, get_read_buffer_size(c) + ret);
 
-	set_read_buffer_size(c, get_read_buffer_size(c) + ret);
+		proxywasm_lock(c->p, c-> pc);
+		wasm_vm_result result;
+		switch (c->direction)
+		{
+		case ListenerDirectionOutbound:
+			result = proxy_on_upstream_data(c->p, ret, end_of_stream);
+			break;
+		case ListenerDirectionInbound:
+		case ListenerDirectionUnspecified:
+			result = proxy_on_downstream_data(c->p, ret, end_of_stream);
+			break;
+		}
+		proxywasm_unlock(c->p);
 
-	proxywasm_lock(c->p, c->pc);
-	wasm_vm_result result;
-	switch (c->direction)
-	{
-	case ListenerDirectionOutbound:
-		result = proxy_on_upstream_data(c->p, ret, 0);
-		break;
-	case ListenerDirectionInbound:
-	case ListenerDirectionUnspecified:
-		result = proxy_on_downstream_data(c->p, ret, 0);
-		break;
-	}
-	proxywasm_unlock(c->p);
+		if (result.err)
+		{
+			pr_err("wasm_recvmsg: proxy_on_upstream/downstream_data returned an error: %s", result.err);
+			return -1;
+		}
 
-	if (result.err)
-	{
-		pr_err("wasm_recvmsg: proxy_on_upstream/downstream_data returned an error: %s", result.err);
-		return -1;
+		// 0 means Action::Continue
+		// 1 means Action::Pause
+		if (result.data->i32 == 0 || end_of_stream)
+		{
+			done = true;
+		}
 	}
 
 	int read_buffer_size = get_read_buffer_size(c);

@@ -112,13 +112,17 @@ void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i
 WasmResult set_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i32 size, char *value, i32 value_len);
 
 char *pw_get_upstream_buffer(proxywasm_context *p);
+void pw_set_upstream_buffer(proxywasm_context *p, char *new_buffer);
 int pw_get_upstream_buffer_size(proxywasm_context *p);
 void pw_set_upstream_buffer_size(proxywasm_context *p, int size);
 int pw_get_upstream_buffer_capacity(proxywasm_context *p);
+void pw_set_upstream_buffer_capacity(proxywasm_context *p, int capacity);
 
 char *pw_get_downstream_buffer(proxywasm_context *p);
+void pw_set_downstream_buffer(proxywasm_context *p, char *new_buffer);
 int pw_get_downstream_buffer_size(proxywasm_context *p);
 void pw_set_downstream_buffer_size(proxywasm_context *p, int size);
 int pw_get_downstream_buffer_capacity(proxywasm_context *p);
+void pw_set_downstream_buffer_capacity(proxywasm_context *p, int capacity);
 
 #endif

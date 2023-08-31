@@ -756,6 +756,11 @@ char *pw_get_upstream_buffer(proxywasm_context *p)
     return p->upstream_buffer;
 }
 
+void pw_set_upstream_buffer(proxywasm_context *p, char *new_buffer)
+{
+    p->upstream_buffer = new_buffer;
+}
+
 int pw_get_upstream_buffer_size(proxywasm_context *p)
 {
     return p->upstream_buffer_size;
@@ -771,9 +776,18 @@ int pw_get_upstream_buffer_capacity(proxywasm_context *p)
     return p->upstream_buffer_capacity;
 }
 
+void pw_set_upstream_buffer_capacity(proxywasm_context *p, int capacity)
+{
+    p->upstream_buffer_capacity = capacity;
+}
+
 char *pw_get_downstream_buffer(proxywasm_context *p)
 {
     return p->downstream_buffer;
+}
+void pw_set_downstream_buffer(proxywasm_context *p, char *new_buffer)
+{
+    p->downstream_buffer = new_buffer;
 }
 
 int pw_get_downstream_buffer_size(proxywasm_context *p)
@@ -789,4 +803,9 @@ void pw_set_downstream_buffer_size(proxywasm_context *p, int size)
 int pw_get_downstream_buffer_capacity(proxywasm_context *p)
 {
     return p->downstream_buffer_capacity;
+}
+
+void pw_set_downstream_buffer_capacity(proxywasm_context *p, int capacity)
+{
+    p->downstream_buffer_capacity = capacity;
 }
