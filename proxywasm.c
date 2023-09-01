@@ -163,6 +163,11 @@ proxywasm *this_cpu_proxywasm(void)
     return proxywasms[cpu];
 }
 
+static void proxywasm_set_context(proxywasm *p, proxywasm_context *context)
+{
+    p->current_context = context;
+}
+
 void proxywasm_lock(proxywasm *p, proxywasm_context *c)
 {
     wasm_vm_lock(p->vm);
@@ -177,11 +182,6 @@ void proxywasm_unlock(proxywasm *p)
 proxywasm_context *proxywasm_get_context(proxywasm *p)
 {
     return p->current_context;
-}
-
-void proxywasm_set_context(proxywasm *p, proxywasm_context *context)
-{
-    p->current_context = context;
 }
 
 m3ApiRawFunction(proxy_log)
@@ -756,6 +756,11 @@ char *pw_get_upstream_buffer(proxywasm_context *p)
     return p->upstream_buffer;
 }
 
+void pw_set_upstream_buffer(proxywasm_context *p, char *new_buffer)
+{
+    p->upstream_buffer = new_buffer;
+}
+
 int pw_get_upstream_buffer_size(proxywasm_context *p)
 {
     return p->upstream_buffer_size;
@@ -771,9 +776,18 @@ int pw_get_upstream_buffer_capacity(proxywasm_context *p)
     return p->upstream_buffer_capacity;
 }
 
+void pw_set_upstream_buffer_capacity(proxywasm_context *p, int capacity)
+{
+    p->upstream_buffer_capacity = capacity;
+}
+
 char *pw_get_downstream_buffer(proxywasm_context *p)
 {
     return p->downstream_buffer;
+}
+void pw_set_downstream_buffer(proxywasm_context *p, char *new_buffer)
+{
+    p->downstream_buffer = new_buffer;
 }
 
 int pw_get_downstream_buffer_size(proxywasm_context *p)
@@ -789,4 +803,9 @@ void pw_set_downstream_buffer_size(proxywasm_context *p, int size)
 int pw_get_downstream_buffer_capacity(proxywasm_context *p)
 {
     return p->downstream_buffer_capacity;
+}
+
+void pw_set_downstream_buffer_capacity(proxywasm_context *p, int capacity)
+{
+    p->downstream_buffer_capacity = capacity;
 }
