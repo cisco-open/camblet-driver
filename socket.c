@@ -556,9 +556,7 @@ int wasm_recvmsg(struct sock *sock,
 			goto bail;
 		}
 
-		// 0 means Action::Continue
-		// 1 means Action::Pause
-		if (result.data->i32 == 0 || end_of_stream)
+		if (result.data->i32 == Continue || end_of_stream)
 		{
 			done = true;
 		}
@@ -649,9 +647,7 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 		goto bail;
 	}
 
-	// 0 means Action::Continue
-	// 1 means Action::Pause
-	if (result.data->i32 == 1)
+	if (result.data->i32 == Pause)
 	{
 		ret = len;
 		goto bail;
