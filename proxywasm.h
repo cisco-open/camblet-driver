@@ -99,7 +99,6 @@ wasm_vm_result proxywasm_create_context(proxywasm *p);
 wasm_vm_result proxywasm_destroy_context(proxywasm *p);
 
 proxywasm_context *proxywasm_get_context(proxywasm *p);
-void proxywasm_set_context(proxywasm *p, proxywasm_context *context);
 
 // set_property_v is convenience funtion for setting a property on a context, with simple C string paths,
 // use the '.' as delimiter, those will be replaced to a '0' delimiter
