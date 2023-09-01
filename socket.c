@@ -63,6 +63,41 @@ typedef struct
 	char *protocol;
 } wasm_socket_context;
 
+// Struct to hold buffer functions
+static struct buffer_functions
+{
+	int (*get_size)(proxywasm_context *);
+	int (*get_capacity)(proxywasm_context *);
+	void (*set_capacity)(proxywasm_context *, int);
+	void (*set_buffer)(proxywasm_context *, char *);
+	char *(*get_buffer)(proxywasm_context *);
+};
+
+static char *realloc_and_access_buffer(proxywasm_context *c, struct buffer_functions *buff_funcs, int len)
+{
+	char *buffer = buff_funcs->get_buffer(c);
+	int buffer_size = buff_funcs->get_size(c);
+	int buffer_capacity = buff_funcs->get_capacity(c);
+
+	if (buffer_size + len > buffer_capacity)
+	{
+		int new_capacity = buffer_capacity * 2;
+		while (new_capacity < buffer_size + len)
+		{
+			new_capacity *= 2;
+		}
+
+		char *new_buffer = krealloc(buffer, new_capacity, GFP_KERNEL);
+
+		buff_funcs->set_buffer(c, new_buffer);
+		buff_funcs->set_capacity(c, new_capacity);
+
+		buffer = buff_funcs->get_buffer(c);
+	}
+
+	return buffer + buffer_size;
+}
+
 static char *get_direction(wasm_socket_context *c)
 {
 	if (c->direction == ListenerDirectionInbound)
@@ -89,38 +124,30 @@ static char *get_read_buffer(wasm_socket_context *c)
 
 static char *get_read_buffer_for_read(wasm_socket_context *c, int len)
 {
+	struct buffer_functions buffer_funcs;
+
 	if (c->direction == ListenerDirectionInbound)
 	{
-		if (pw_get_downstream_buffer_size(c->pc) + len > pw_get_downstream_buffer_capacity(c->pc))
-		{
-			int new_capacity = pw_get_downstream_buffer_capacity(c->pc) * 2;
-			while (new_capacity < pw_get_downstream_buffer_size(c->pc) + len)
-			{
-				new_capacity *= 2;
-			}
-			char *new_buffer = krealloc(pw_get_downstream_buffer(c->pc), new_capacity, GFP_KERNEL);
+		buffer_funcs.get_buffer = pw_get_downstream_buffer;
+		buffer_funcs.set_buffer = pw_set_downstream_buffer;
 
-			pw_set_downstream_buffer(c->pc, new_buffer);
-			pw_set_downstream_buffer_capacity(c->pc, new_capacity);
-		}
-		return pw_get_downstream_buffer(c->pc) + pw_get_downstream_buffer_size(c->pc);
+		buffer_funcs.get_capacity = pw_get_downstream_buffer_capacity;
+		buffer_funcs.set_capacity = pw_set_downstream_buffer_capacity;
+
+		buffer_funcs.get_size = pw_get_downstream_buffer_size;
 	}
 	else
 	{
-		if (pw_get_upstream_buffer_size(c->pc) + len > pw_get_upstream_buffer_capacity(c->pc))
-		{
-			int new_capacity = pw_get_upstream_buffer_capacity(c->pc) * 2;
-			while (new_capacity < pw_get_upstream_buffer_size(c->pc) + len)
-			{
-				new_capacity *= 2;
-			}
-			char *new_buffer = krealloc(pw_get_upstream_buffer(c->pc), new_capacity, GFP_KERNEL);
+		buffer_funcs.get_buffer = pw_get_upstream_buffer;
+		buffer_funcs.set_buffer = pw_set_upstream_buffer;
 
-			pw_set_upstream_buffer(c->pc, new_buffer);
-			pw_set_upstream_buffer_capacity(c->pc, new_capacity);
-		}
-		return pw_get_upstream_buffer(c->pc) + pw_get_upstream_buffer_size(c->pc);
+		buffer_funcs.get_capacity = pw_get_upstream_buffer_capacity;
+		buffer_funcs.set_capacity = pw_set_upstream_buffer_capacity;
+
+		buffer_funcs.get_size = pw_get_upstream_buffer_size;
 	}
+
+	return realloc_and_access_buffer(c->pc, &buffer_funcs, len);
 }
 
 static int get_read_buffer_capacity(wasm_socket_context *c)
@@ -171,16 +198,32 @@ static char *get_write_buffer(wasm_socket_context *c)
 	}
 }
 
-static char *get_write_buffer_for_write(wasm_socket_context *c)
+static char *get_write_buffer_for_write(wasm_socket_context *c, int len)
 {
+	struct buffer_functions buffer_funcs;
+
 	if (c->direction == ListenerDirectionInbound)
 	{
-		return pw_get_upstream_buffer(c->pc) + pw_get_upstream_buffer_size(c->pc);
+		buffer_funcs.get_buffer = pw_get_upstream_buffer;
+		buffer_funcs.set_buffer = pw_set_upstream_buffer;
+
+		buffer_funcs.get_capacity = pw_get_upstream_buffer_capacity;
+		buffer_funcs.set_capacity = pw_set_upstream_buffer_capacity;
+
+		buffer_funcs.get_size = pw_get_upstream_buffer_size;
 	}
 	else
 	{
-		return pw_get_downstream_buffer(c->pc) + pw_get_downstream_buffer_size(c->pc);
+		buffer_funcs.get_buffer = pw_get_downstream_buffer;
+		buffer_funcs.set_buffer = pw_set_downstream_buffer;
+
+		buffer_funcs.get_capacity = pw_get_downstream_buffer_capacity;
+		buffer_funcs.set_capacity = pw_set_downstream_buffer_capacity;
+
+		buffer_funcs.get_size = pw_get_downstream_buffer_size;
 	}
+
+	return realloc_and_access_buffer(c->pc, &buffer_funcs, len);
 }
 
 static int get_write_buffer_capacity(wasm_socket_context *c)
@@ -459,6 +502,11 @@ int wasm_recvmsg(struct sock *sock,
 	}
 
 	len = size;
+	if (len == 0)
+	{
+		ret = 0;
+		goto bail;
+	}
 
 	bool end_of_stream = false;
 	bool done = false;
@@ -468,8 +516,7 @@ int wasm_recvmsg(struct sock *sock,
 	while (!done)
 	{
 		ret = br_sslio_read(&c->ioc, get_read_buffer_for_read(c, len), len);
-		// TODO handle ret value 0.
-		if (ret <= 0)
+		if (ret < 0)
 		{
 			const br_ssl_engine_context *ec = c->sc ? &c->sc->eng : &c->cc->eng;
 			// If error happened log it then bail out
@@ -505,7 +552,8 @@ int wasm_recvmsg(struct sock *sock,
 		if (result.err)
 		{
 			pr_err("wasm_recvmsg: proxy_on_upstream/downstream_data returned an error: %s", result.err);
-			return -1;
+			ret = -1;
+			goto bail;
 		}
 
 		// 0 means Action::Continue
@@ -577,7 +625,7 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	// const unsigned char *salt = br_ssl_engine_get_client_random(&sc->sc->eng);
 
 	//	len = copy_from_iter(data, min(size, sizeof(data)), &msg->msg_iter);
-	len = copy_from_iter(get_write_buffer_for_write(c), min(size, get_write_buffer_capacity(c)), &msg->msg_iter);
+	len = copy_from_iter(get_write_buffer_for_write(c, size), size, &msg->msg_iter);
 
 	set_write_buffer_size(c, get_write_buffer_size(c) + len);
 
@@ -586,10 +634,10 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	switch (c->direction)
 	{
 	case ListenerDirectionOutbound:
-		result = proxy_on_downstream_data(c->p, len, 0);
+		result = proxy_on_downstream_data(c->p, len, false);
 		break;
 	default:
-		result = proxy_on_upstream_data(c->p, len, 0);
+		result = proxy_on_upstream_data(c->p, len, false);
 		break;
 	}
 	proxywasm_unlock(c->p);
@@ -601,6 +649,14 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 		goto bail;
 	}
 
+	// 0 means Action::Continue
+	// 1 means Action::Pause
+	if (result.data->i32 == 1)
+	{
+		ret = len;
+		goto bail;
+	}
+
 	// printk("wasm_sendmsg: %s br_sslio_write_all get_write_buffer_size = %d", get_direction(c), get_write_buffer_size(c));
 
 	ret = br_sslio_write_all(&c->ioc, get_write_buffer(c), get_write_buffer_size(c));
@@ -608,7 +664,7 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	{
 		const br_ssl_engine_context *ec = c->sc ? &c->sc->eng : &c->cc->eng;
 		pr_err("wasm_sendmsg: %s br_sslio_write_all error %d", get_direction(c), br_ssl_engine_last_error(ec));
-		return ret;
+		goto bail;
 	}
 
 	// printk("wasm_sendmsg: finished %s br_sslio_write_all wrote = %d bytes", get_direction(c), get_write_buffer_size(c));
