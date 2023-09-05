@@ -78,6 +78,8 @@ typedef struct
 						struct msghdr *msg,
 						size_t size);
 
+	void (*ktls_close)(struct sock *sk, long timeout);
+
 } wasm_socket_context;
 
 // Struct to hold buffer functions
@@ -815,25 +817,46 @@ bail:
 	return ret;
 }
 
-void wasm_shutdown(struct sock *sk, int how)
+void wasm_close(struct sock *sk, long timeout)
 {
-	printk("wasm_shutdown: running for sk %p", sk);
+	printk("wasm_close: running for sk %p", sk);
+	// dump_stack();
 	wasm_socket_context *c = sk->sk_user_data;
+	if (c == NULL)
+	{
+		printk("wasm_close: c is NULL");
+		return;
+	}
+	void (*ktls_close)(struct sock *sk, long timeout) = c->ktls_close;
 	free_wasm_socket_context(c);
 	sk->sk_user_data = NULL;
-	printk("wasm_shutdown: tcp_shutdown is running for sk %p", sk);
-	tcp_shutdown(sk, how);
-	printk("wasm_shutdown: tcp_shutdown is done for sk %p", sk);
+	printk("wasm_close: tcp_close is running for sk %p", sk);
+	// if (ktls_close)
+	// 	ktls_close(sk, timeout);
+	// else
+		tcp_close(sk, timeout);
+	printk("wasm_close: tcp_close is done for sk %p", sk);
 }
 
-void wasm_destroy(struct sock *sk)
-{
-	printk("wasm_destroy: running for sk %p", sk);
-	wasm_socket_context *c = sk->sk_user_data;
-	free_wasm_socket_context(c);
-	sk->sk_user_data = NULL;
-	tcp_v4_destroy_sock(sk);
-}
+// void wasm_shutdown(struct sock *sk, int how)
+// {
+// 	printk("wasm_shutdown: running for sk %p", sk);
+// 	wasm_socket_context *c = sk->sk_user_data;
+// 	free_wasm_socket_context(c);
+// 	sk->sk_user_data = NULL;
+// 	printk("wasm_shutdown: tcp_shutdown is running for sk %p", sk);
+// 	tcp_shutdown(sk, how);
+// 	printk("wasm_shutdown: tcp_shutdown is done for sk %p", sk);
+// }
+
+// void wasm_destroy(struct sock *sk)
+// {
+// 	printk("wasm_destroy: running for sk %p", sk);
+// 	wasm_socket_context *c = sk->sk_user_data;
+// 	free_wasm_socket_context(c);
+// 	sk->sk_user_data = NULL;
+// 	tcp_v4_destroy_sock(sk);
+// }
 
 static int configure_ktls_sock(wasm_socket_context *c, struct sock *sock)
 {
@@ -892,6 +915,7 @@ static int configure_ktls_sock(wasm_socket_context *c, struct sock *sock)
 	// later those methods set by ktls has to be used to read and write data, but first we need to put back ours
 	c->ktls_recvmsg = sock->sk_prot->recvmsg;
 	c->ktls_sendmsg = sock->sk_prot->sendmsg;
+	c->ktls_close = sock->sk_prot->close;
 
 	sock->sk_prot = &wasm_prot;
 
@@ -1269,8 +1293,9 @@ int wasm_socket_init(void)
 	memcpy(&wasm_prot, &tcp_prot, sizeof(wasm_prot));
 	wasm_prot.recvmsg = wasm_recvmsg;
 	wasm_prot.sendmsg = wasm_sendmsg;
-	wasm_prot.shutdown = wasm_shutdown;
-	wasm_prot.destroy = wasm_destroy;
+	wasm_prot.close = wasm_close;
+	// wasm_prot.shutdown = wasm_shutdown;
+	// wasm_prot.destroy = wasm_destroy;
 
 	printk(KERN_INFO "WASM socket support loaded.");
 
