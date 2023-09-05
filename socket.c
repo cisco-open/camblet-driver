@@ -942,7 +942,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		proxywasm_unlock(p);
 
-		// // Sample how to send a command to the userspace agent
+		// Sample how to send a command to the userspace agent
 		const char *data = "{\"port\": \"8000\"}";
 		command_answer *answer = send_command("accept", data);
 
