@@ -191,21 +191,7 @@ static int recv_msg_ktls(wasm_socket_context *c, char *buf, size_t size)
 static int
 sock_read(void *ctx, unsigned char *buf, size_t len)
 {
-	for (;;)
-	{
-		ssize_t rlen;
-
-		rlen = recv_msg((struct sock *)ctx, buf, len);
-		if (rlen <= 0)
-		{
-			if (rlen < 0)
-			{
-				continue;
-			}
-			return -1;
-		}
-		return (int)rlen;
-	}
+	return recv_msg((struct sock *)ctx, buf, len);
 }
 
 /*
@@ -234,21 +220,7 @@ sock_write(void *ctx, const unsigned char *buf, size_t len)
 static int
 ktls_sock_read(wasm_socket_context *c, unsigned char *buf, size_t len)
 {
-	for (;;)
-	{
-		ssize_t rlen;
-
-		rlen = recv_msg_ktls(c, buf, len);
-		if (rlen <= 0)
-		{
-			if (rlen < 0)
-			{
-				continue;
-			}
-			return -1;
-		}
-		return (int)rlen;
-	}
+	return recv_msg_ktls(c, buf, len);
 }
 
 static int
@@ -661,28 +633,19 @@ int wasm_recvmsg(struct sock *sock,
 	bool end_of_stream = false;
 	bool done = false;
 
-	// printk("wasm_recvmsg: %s br_sslio_read trying to read %d bytes", get_direction(c), len);
-
 	while (!done)
 	{
 		ret = wasm_socket_read(c, get_read_buffer_for_read(c, len), len);
 		if (ret < 0)
 		{
-			const br_ssl_engine_context *ec = c->sc ? &c->sc->eng : &c->cc->eng; // TODO get rid of this
-			// If error happened log it then bail out
-			if (br_ssl_engine_last_error(ec) != 0)
-			{
-				pr_err("wasm_recvmsg: %s br_sslio_read error %d", get_direction(c), br_ssl_engine_last_error(ec));
-				goto bail;
-			}
-			// If return value is -1 but no error happened then it is end of the stream.
-			else
-			{
-				end_of_stream = true;
-			}
+			pr_err("wasm_recvmsg: %s wasm_socket_read error %d", get_direction(c), ret);
+			goto bail;
+		}
+		else if (ret == 0)
+		{
+			end_of_stream = true;
 		}
 
-		// printk("wasm_recvmsg: br_sslio_read read %d bytes", ret);
 		set_read_buffer_size(c, get_read_buffer_size(c) + ret);
 
 		proxywasm_lock(c->p, c->pc);
@@ -796,15 +759,11 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 		goto bail;
 	}
 
-	// printk("wasm_sendmsg: %s br_sslio_write_all get_write_buffer_size = %d", get_direction(c), get_write_buffer_size(c));
-
 	ret = wasm_socket_write(c, get_write_buffer(c), get_write_buffer_size(c));
 	if (ret < 0)
 	{
 		goto bail;
 	}
-
-	// printk("wasm_sendmsg: finished %s br_sslio_write_all wrote = %d bytes", get_direction(c), get_write_buffer_size(c));
 
 	set_write_buffer_size(c, 0);
 
