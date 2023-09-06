@@ -22,3 +22,12 @@ allow = {
 	allowed_ports[input.port]
 	allowed_commands[input.command]
 }
+
+# to test that our bearssl server is compatible with non-bearssl clients
+allow = {
+	"mtls": false,
+	"permissive": false,
+} {
+	input.port == 7777
+	input.command == "python3"
+}

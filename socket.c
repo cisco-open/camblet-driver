@@ -271,7 +271,10 @@ static int *wasm_socket_read(wasm_socket_context *c, void *dst, size_t len)
 		if (ret < 0)
 		{
 			const br_ssl_engine_context *ec = get_ssl_engine_context(c);
-			pr_err("wasm_socket_read: %s br_sslio_read error %d", get_direction(c), br_ssl_engine_last_error(ec));
+			int last_error = br_ssl_engine_last_error(ec);
+			if (last_error == 0)
+				return 0;
+			pr_err("wasm_socket_read: %s br_sslio_read error %d", get_direction(c), last_error);
 		}
 		return ret;
 	}
