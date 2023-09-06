@@ -76,9 +76,7 @@ jobs:
         # Test bearssl with non-bearssl compatibility
         python3 -m http.server 7000 &
         sleep 1
-        curl -k -v -o /dev/null https://localhost:7000/opa.o
-
-        sudo dmesg -T | tail -100
+        curl -k -v -o /dev/null https://localhost:7000/opa.o || sudo dmesg -T | tail -100
 
         sudo kill -9 $(jobs -p)
         sudo pkill -9 w3k
