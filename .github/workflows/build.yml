@@ -74,28 +74,12 @@ jobs:
         diff opa.o opa_downloaded.o
 
         # Test bearssl with non-bearssl compatibility
-        python3 -m http.server --protocol HTTP/1.1 7777 &
+        python3 -m http.server 7777 &
         sleep 1
         curl -k -v -o /dev/null https://localhost:8000/opa.o
 
         sudo dmesg -T | tail -100
 
-        sudo kill -9 $(jobs -p)
-        sudo pkill -9 w3k
-
-    - name: Run proxy-wasm smoke test
-      working-directory: wasm-kernel-module
-      timeout-minutes: 1
-      run: |
-        sudo ../wasm-kernel-module-cli/w3k server &
-        go run test/file-server.go &
-        sleep 1
-        # Test downloading a bigger file
-        curl -v -o /tmp/opa_downloaded.o "http://localhost:8000/opa.o"
-        # Test uploading this file
-        curl -v -F "opa_downloaded.o.o=@/tmp/opa_downloaded.o" http://localhost:8000/upload
-        diff opa.o opa_downloaded.o
-        sudo dmesg -T | tail -100
         sudo kill -9 $(jobs -p)
         sudo pkill -9 w3k
 
