@@ -28,6 +28,6 @@ allow = {
 	"mtls": false,
 	"permissive": false,
 } {
-	input.port == 7777
+	input.port == 7000
 	input.command == "python3"
 }

@@ -16,6 +16,12 @@ jobs:
         submodules: recursive
         path: wasm-kernel-module
 
+    # - name: Setup upterm session
+    #   uses: lhotari/action-upterm@v1
+    #   with:
+    #     ## limits ssh access and adds the ssh public key for the user which triggered the workflow
+    #     limit-access-to-actor: true
+
     - name: Install/setup prerequisites
       working-directory: wasm-kernel-module
       run: make setup-vm
@@ -52,12 +58,6 @@ jobs:
         make load-opa-policy-wasm
         sudo dmesg -T
 
-    - name: Setup upterm session
-      uses: lhotari/action-upterm@v1
-      with:
-        ## limits ssh access and adds the ssh public key for the user which triggered the workflow
-        limit-access-to-actor: true
-    
     - name: Run proxy-wasm smoke test
       working-directory: wasm-kernel-module
       timeout-minutes: 1
@@ -74,9 +74,9 @@ jobs:
         diff opa.o opa_downloaded.o
 
         # Test bearssl with non-bearssl compatibility
-        python3 -m http.server 7777 &
+        python3 -m http.server 7000 &
         sleep 1
-        curl -k -v -o /dev/null https://localhost:7777/opa.o
+        curl -k -v -o /dev/null https://localhost:7000/opa.o
 
         sudo dmesg -T | tail -100
 
