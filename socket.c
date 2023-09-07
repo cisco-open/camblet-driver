@@ -41,6 +41,7 @@ const char *ALPNs[] = {
 const size_t ALPNs_NUM = sizeof(ALPNs) / sizeof(ALPNs[0]);
 
 static struct proto wasm_prot;
+static struct proto wasm_ktls_prot;
 
 typedef struct
 {
@@ -180,7 +181,7 @@ static int recv_msg_ktls(wasm_socket_context *c, char *buf, size_t size)
 #endif
 								   0, &addr_len);
 
-	// printk("recv_msg -> received %d bytes, sock: %p", received, sock);
+	printk("recv_msg_ktls %s <- wanted %d received %d bytes", current->comm, size, received);
 
 	return received;
 }
@@ -862,7 +863,28 @@ static int configure_ktls_sock(wasm_socket_context *c, struct sock *sock)
 	c->ktls_recvmsg = sock->sk_prot->recvmsg;
 	c->ktls_sendmsg = sock->sk_prot->sendmsg;
 
-	sock->sk_prot = &wasm_prot;
+	int (*setsockopt)(struct sock *sk, int level,
+					int optname, sockptr_t optval,
+					unsigned int optlen);
+	setsockopt = sock->sk_prot->setsockopt;
+
+	int (*getsockopt)(struct sock *sk, int level,
+					int optname, char __user *optval,
+					int __user *option);
+	getsockopt = sock->sk_prot->getsockopt;
+
+	bool (*sock_is_readable)(struct sock *sk);
+	sock_is_readable = sock->sk_prot->sock_is_readable;
+
+	void (*close)(struct sock *sk, long timeout);
+	close = sock->sk_prot->close;
+
+	wasm_ktls_prot.setsockopt = setsockopt;
+	wasm_ktls_prot.getsockopt = getsockopt;
+	wasm_ktls_prot.sock_is_readable = sock_is_readable;
+	wasm_ktls_prot.close = close;
+
+	sock->sk_prot = &wasm_ktls_prot;
 
 	return 0;
 }
@@ -1241,6 +1263,8 @@ int wasm_socket_init(void)
 	wasm_prot.close = wasm_close;
 	wasm_prot.shutdown = wasm_shutdown;
 	wasm_prot.destroy = wasm_destroy;
+
+	memcpy(&wasm_ktls_prot, &wasm_prot, sizeof(wasm_prot));
 
 	printk(KERN_INFO "WASM socket support loaded.");
 
