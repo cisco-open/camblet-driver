@@ -166,14 +166,14 @@ static int recv_msg(struct sock *sock, char *buf, size_t size)
 	return received;
 }
 
-static int recv_msg_ktls(wasm_socket_context *c, char *buf, size_t size)
+static int recv_msg_ktls(wasm_socket_context *c, char *buf, size_t buf_len, size_t size)
 {
 	// printk("recv_msg -> buf %p size %d bytes, sock: %p", buf, size, sock);
 	struct msghdr hdr = {0};
-	struct kvec iov = {.iov_base = buf, .iov_len = size};
+	struct kvec iov = {.iov_base = buf, .iov_len = buf_len};
 	int addr_len = 0;
 
-	iov_iter_kvec(&hdr.msg_iter, READ, &iov, 1, size);
+	iov_iter_kvec(&hdr.msg_iter, READ, &iov, 1, buf_len);
 
 	int received = c->ktls_recvmsg(c->sock, &hdr, size,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
@@ -219,9 +219,9 @@ sock_write(void *ctx, const unsigned char *buf, size_t len)
 }
 
 static int
-ktls_sock_read(wasm_socket_context *c, unsigned char *buf, size_t len)
+ktls_sock_read(wasm_socket_context *c, unsigned char *buf, size_t buf_len, size_t len)
 {
-	return recv_msg_ktls(c, buf, len);
+	return recv_msg_ktls(c, buf, buf_len, len);
 }
 
 static int
@@ -260,11 +260,13 @@ static br_ssl_engine_context *get_ssl_engine_context(wasm_socket_context *c)
 	return c->sc ? &c->sc->eng : &c->cc->eng;
 }
 
+static int get_read_buffer_capacity(wasm_socket_context *c);
+
 static int *wasm_socket_read(wasm_socket_context *c, void *dst, size_t len)
 {
 	if (c->ktls_recvmsg)
 	{
-		return ktls_sock_read(c, dst, len);
+		return ktls_sock_read(c, dst, get_read_buffer_capacity(c), len);
 	}
 	else
 	{
@@ -851,6 +853,15 @@ static int configure_ktls_sock(wasm_socket_context *c, struct sock *sock)
 		return ret;
 	}
 
+	// WIP
+	// unsigned int yes = 1;
+	// ret = sock->sk_prot->setsockopt(sock, SOL_TLS, TLS_TX_ZEROCOPY_RO, KERNEL_SOCKPTR(&yes), sizeof(yes));
+	// if (ret != 0)
+	// {
+	// 	pr_err("wasm: %s setsockopt TLS_TX_ZEROCOPY_RO ret: %d", current->comm, ret);
+	// 	return ret;
+	// }
+
 	ret = sock->sk_prot->setsockopt(sock, SOL_TLS, TLS_RX, KERNEL_SOCKPTR(&crypto_info_rx), sizeof(crypto_info_rx));
 	if (ret != 0)
 	{
@@ -864,14 +875,18 @@ static int configure_ktls_sock(wasm_socket_context *c, struct sock *sock)
 	c->ktls_sendmsg = sock->sk_prot->sendmsg;
 
 	int (*setsockopt)(struct sock *sk, int level,
-					int optname, sockptr_t optval,
-					unsigned int optlen);
+					  int optname, sockptr_t optval,
+					  unsigned int optlen);
 	setsockopt = sock->sk_prot->setsockopt;
 
 	int (*getsockopt)(struct sock *sk, int level,
-					int optname, char __user *optval,
-					int __user *option);
+					  int optname, char __user *optval,
+					  int __user *option);
 	getsockopt = sock->sk_prot->getsockopt;
+
+	int (*sendpage)(struct sock *sk, struct page *page,
+					int offset, size_t size, int flags);
+	sendpage = sock->sk_prot->sendpage;
 
 	bool (*sock_is_readable)(struct sock *sk);
 	sock_is_readable = sock->sk_prot->sock_is_readable;
@@ -881,6 +896,7 @@ static int configure_ktls_sock(wasm_socket_context *c, struct sock *sock)
 
 	wasm_ktls_prot.setsockopt = setsockopt;
 	wasm_ktls_prot.getsockopt = getsockopt;
+	wasm_ktls_prot.sendpage = sendpage;
 	wasm_ktls_prot.sock_is_readable = sock_is_readable;
 	wasm_ktls_prot.close = close;
 
