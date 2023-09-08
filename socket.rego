@@ -13,7 +13,7 @@ INPUT := 0
 OUTPUT := 1
 
 allowed_ports := {8000, 8080}
-allowed_commands := {"curl", "python3", "file-server"}
+allowed_commands := {"curl", "python3", "file-server", "nginx"}
 
 allow = {
 	"mtls": true,
