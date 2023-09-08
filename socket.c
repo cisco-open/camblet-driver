@@ -944,7 +944,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		{
 			pr_err("new_server_wasm_socket_context: failed to create context: %s", res.err);
 			proxywasm_unlock(p);
-			return -1;
+			return NULL;
 		}
 
 		proxywasm_unlock(p);
@@ -975,7 +975,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 				if (result == 0)
 				{
 					pr_err("wasm_accept: error generating rsa keys");
-					return -1;
+					return NULL;
 				}
 			}
 
@@ -983,7 +983,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 			if (len == 0)
 			{
 				pr_err("wasm_accept: error during rsa private der key length calculation");
-				return -1;
+				return NULL;
 			}
 
 			// Allocate memory inside the wasm vm since this data must be available inside the module
@@ -996,7 +996,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 			{
 				pr_err("wasm_accept: wasm_vm_csr_malloc error: %s", malloc_result.err);
 				csr_unlock(csr);
-				return -1;
+				return NULL;
 			}
 
 			uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
@@ -1009,7 +1009,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 			{
 				pr_err("wasm_accept: error during rsa private key der encoding");
 				csr_unlock(csr);
-				return -1;
+				return NULL;
 			}
 
 			wasm_vm_result generated_csr = csr_gen(csr, addr, len);
@@ -1017,7 +1017,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 			{
 				pr_err("wasm_accept: wasm_vm_csr_gen error: %s", generated_csr.err);
 				csr_unlock(csr);
-				return -1;
+				return NULL;
 			}
 
 			wasm_vm_result free_result = csr_free(csr, addr);
@@ -1025,7 +1025,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 			{
 				pr_err("wasm_accept: wasm_vm_csr_free error: %s", free_result.err);
 				csr_unlock(csr);
-				return -1;
+				return NULL;
 			}
 
 			i64 csr_from_module = generated_csr.data->i64;
