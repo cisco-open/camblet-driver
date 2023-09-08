@@ -583,7 +583,48 @@ void dump_msghdr(struct msghdr *msg)
 	printk(KERN_INFO "iovoffset = %zd\n", msg->msg_iter.iov_offset);
 }
 
-static int configure_ktls_sock(wasm_socket_context *c, struct sock *sock);
+static int configure_ktls_sock(wasm_socket_context *c);
+
+static int ensure_tls_handshake(wasm_socket_context *c)
+{
+	int ret = 0;
+	char *protocol = READ_ONCE(c->protocol);
+
+	if (protocol == NULL)
+	{
+		ret = br_sslio_flush(&c->ioc);
+		if (ret == 0)
+		{
+			printk("wasm_socket: %s TLS handshake done", current->comm);
+		}
+		else
+		{
+			pr_err("wasm_socket: %s TLS handshake error %d", current->comm, br_ssl_engine_last_error(&c->sc->eng));
+			return ret;
+		}
+
+		protocol = br_ssl_engine_get_selected_protocol(&c->sc->eng);
+
+		if (protocol)
+		{
+			printk("wasm_socket: %s protocol name: %s", current->comm, protocol);
+			set_property_v(c->pc, "upstream.negotiated_protocol", protocol, strlen(protocol));
+		}
+		else
+			protocol = "no-mtls";
+
+		WRITE_ONCE(c->protocol, protocol);
+
+		ret = configure_ktls_sock(c);
+		if (ret != 0)
+		{
+			pr_err("wasm_socket: %s configure_ktls_sock failed %d", current->comm, ret);
+			return ret;
+		}
+	}
+
+	return ret;
+}
 
 int wasm_recvmsg(struct sock *sock,
 				 struct msghdr *msg,
@@ -598,35 +639,10 @@ int wasm_recvmsg(struct sock *sock,
 
 	wasm_socket_context *c = sock->sk_user_data;
 
-	if (c->protocol == NULL)
+	ret = ensure_tls_handshake(c);
+	if (ret != 0)
 	{
-		ret = br_sslio_flush(&c->ioc);
-		if (ret == 0)
-		{
-			printk("wasm_recvmsg: TLS handshake done");
-		}
-		else
-		{
-			pr_err("wasm_recvmsg: %s TLS handshake error %d", get_direction(c), br_ssl_engine_last_error(&c->sc->eng));
-			goto bail;
-		}
-
-		c->protocol = br_ssl_engine_get_selected_protocol(&c->sc->eng);
-
-		if (c->protocol)
-		{
-			printk("wasm_recvmsg: %s protocol name: %s", get_direction(c), c->protocol);
-			set_property_v(c->pc, "upstream.negotiated_protocol", c->protocol, strlen(c->protocol));
-		}
-		else
-			c->protocol = "no-mtls";
-
-		ret = configure_ktls_sock(c, sock);
-		if (ret != 0)
-		{
-			pr_err("wasm_recvmsg: %s %s configure_ktls_sock returned %d", current->comm, get_direction(c), ret);
-			goto bail;
-		}
+		goto bail;
 	}
 
 	len = size;
@@ -703,35 +719,10 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	wasm_socket_context *c = sock->sk_user_data;
 
-	if (c->protocol == NULL)
+	ret = ensure_tls_handshake(c);
+	if (ret != 0)
 	{
-		ret = br_sslio_flush(&c->ioc);
-		if (ret == 0)
-		{
-			printk("wasm_sendmsg: TLS handshake done");
-		}
-		else
-		{
-			pr_err("wasm_sendmsg: %s TLS handshake error %d", get_direction(c), br_ssl_engine_last_error(&c->sc->eng));
-			goto bail;
-		}
-
-		c->protocol = br_ssl_engine_get_selected_protocol(&c->sc->eng);
-
-		if (c->protocol)
-		{
-			printk("wasm_sendmsg: %s protocol name: %s", get_direction(c), c->protocol);
-			set_property_v(c->pc, "upstream.negotiated_protocol", c->protocol, strlen(c->protocol));
-		}
-		else
-			c->protocol = "no-mtls";
-
-		ret = configure_ktls_sock(c, sock);
-		if (ret != 0)
-		{
-			pr_err("wasm_sendmsg: %s %s configure_ktls_sock returned %d", current->comm, get_direction(c), ret);
-			goto bail;
-		}
+		goto bail;
 	}
 
 	//	len = copy_from_iter(data, min(size, sizeof(data)), &msg->msg_iter);
@@ -807,7 +798,41 @@ void wasm_destroy(struct sock *sk)
 	tcp_v4_destroy_sock(sk);
 }
 
-static int configure_ktls_sock(wasm_socket_context *c, struct sock *sock)
+// analyze tls_main.c to find out what we need to implement: check build_protos()
+void ensure_wasm_ktls_prot(struct sock *sock)
+{
+	void (*close)(struct sock *sk, long timeout) = READ_ONCE(wasm_ktls_prot.close);
+
+	if (close == NULL)
+	{
+		close = sock->sk_prot->close;
+
+		int (*setsockopt)(struct sock *sk, int level,
+						  int optname, sockptr_t optval,
+						  unsigned int optlen);
+		setsockopt = sock->sk_prot->setsockopt;
+
+		int (*getsockopt)(struct sock *sk, int level,
+						  int optname, char __user *optval,
+						  int __user *option);
+		getsockopt = sock->sk_prot->getsockopt;
+
+		int (*sendpage)(struct sock *sk, struct page *page,
+						int offset, size_t size, int flags);
+		sendpage = sock->sk_prot->sendpage;
+
+		bool (*sock_is_readable)(struct sock *sk);
+		sock_is_readable = sock->sk_prot->sock_is_readable;
+
+		wasm_ktls_prot.setsockopt = setsockopt;
+		wasm_ktls_prot.getsockopt = getsockopt;
+		wasm_ktls_prot.sendpage = sendpage;
+		wasm_ktls_prot.sock_is_readable = sock_is_readable;
+		WRITE_ONCE(wasm_ktls_prot.close, close);
+	}
+}
+
+static int configure_ktls_sock(wasm_socket_context *c)
 {
 	int ret;
 
@@ -839,30 +864,29 @@ static int configure_ktls_sock(wasm_socket_context *c, struct sock *sock)
 	memcpy(crypto_info_rx.rec_seq, &eng->in.chapol.seq, TLS_CIPHER_CHACHA20_POLY1305_REC_SEQ_SIZE);
 	// memcpy(crypto_info.salt, eng->out.chapol.salt, TLS_CIPHER_CHACHA20_POLY1305_SALT_SIZE);
 
-	ret = sock->sk_prot->setsockopt(sock, SOL_TCP, TCP_ULP, KERNEL_SOCKPTR("tls"), sizeof("tls"));
+	ret = c->sock->sk_prot->setsockopt(c->sock, SOL_TCP, TCP_ULP, KERNEL_SOCKPTR("tls"), sizeof("tls"));
 	if (ret != 0)
 	{
 		pr_err("wasm: %s setsockopt TCP_ULP ret: %d", current->comm, ret);
 		return ret;
 	}
 
-	ret = sock->sk_prot->setsockopt(sock, SOL_TLS, TLS_TX, KERNEL_SOCKPTR(&crypto_info_tx), sizeof(crypto_info_tx));
+	ret = c->sock->sk_prot->setsockopt(c->sock, SOL_TLS, TLS_TX, KERNEL_SOCKPTR(&crypto_info_tx), sizeof(crypto_info_tx));
 	if (ret != 0)
 	{
 		pr_err("wasm: %s setsockopt TLS_TX ret: %d", current->comm, ret);
 		return ret;
 	}
 
-	// WIP
 	// unsigned int yes = 1;
-	// ret = sock->sk_prot->setsockopt(sock, SOL_TLS, TLS_TX_ZEROCOPY_RO, KERNEL_SOCKPTR(&yes), sizeof(yes));
+	// ret = c->sock->sk_prot->setsockopt(c->sock, SOL_TLS, TLS_TX_ZEROCOPY_RO, KERNEL_SOCKPTR(&yes), sizeof(yes));
 	// if (ret != 0)
 	// {
 	// 	pr_err("wasm: %s setsockopt TLS_TX_ZEROCOPY_RO ret: %d", current->comm, ret);
 	// 	return ret;
 	// }
 
-	ret = sock->sk_prot->setsockopt(sock, SOL_TLS, TLS_RX, KERNEL_SOCKPTR(&crypto_info_rx), sizeof(crypto_info_rx));
+	ret = c->sock->sk_prot->setsockopt(c->sock, SOL_TLS, TLS_RX, KERNEL_SOCKPTR(&crypto_info_rx), sizeof(crypto_info_rx));
 	if (ret != 0)
 	{
 		pr_err("wasm: %s setsockopt TLS_RX ret: %d", current->comm, ret);
@@ -871,36 +895,12 @@ static int configure_ktls_sock(wasm_socket_context *c, struct sock *sock)
 
 	// we have to save the proto here because the setsockopt calls override the tcp protocol
 	// later those methods set by ktls has to be used to read and write data, but first we need to put back ours
-	c->ktls_recvmsg = sock->sk_prot->recvmsg;
-	c->ktls_sendmsg = sock->sk_prot->sendmsg;
+	c->ktls_recvmsg = c->sock->sk_prot->recvmsg;
+	c->ktls_sendmsg = c->sock->sk_prot->sendmsg;
 
-	int (*setsockopt)(struct sock *sk, int level,
-					  int optname, sockptr_t optval,
-					  unsigned int optlen);
-	setsockopt = sock->sk_prot->setsockopt;
+	ensure_wasm_ktls_prot(c->sock);
 
-	int (*getsockopt)(struct sock *sk, int level,
-					  int optname, char __user *optval,
-					  int __user *option);
-	getsockopt = sock->sk_prot->getsockopt;
-
-	int (*sendpage)(struct sock *sk, struct page *page,
-					int offset, size_t size, int flags);
-	sendpage = sock->sk_prot->sendpage;
-
-	bool (*sock_is_readable)(struct sock *sk);
-	sock_is_readable = sock->sk_prot->sock_is_readable;
-
-	void (*close)(struct sock *sk, long timeout);
-	close = sock->sk_prot->close;
-
-	wasm_ktls_prot.setsockopt = setsockopt;
-	wasm_ktls_prot.getsockopt = getsockopt;
-	wasm_ktls_prot.sendpage = sendpage;
-	wasm_ktls_prot.sock_is_readable = sock_is_readable;
-	wasm_ktls_prot.close = close;
-
-	sock->sk_prot = &wasm_ktls_prot;
+	WRITE_ONCE(c->sock->sk_prot, &wasm_ktls_prot);
 
 	return 0;
 }
@@ -1281,6 +1281,7 @@ int wasm_socket_init(void)
 	wasm_prot.destroy = wasm_destroy;
 
 	memcpy(&wasm_ktls_prot, &wasm_prot, sizeof(wasm_prot));
+	wasm_ktls_prot.close = NULL; // mark it as uninitialized
 
 	printk(KERN_INFO "WASM socket support loaded.");
 
