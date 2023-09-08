@@ -78,14 +78,66 @@ wasm_vm_result csr_free(csr_module *csr, i32 ptr)
     return wasm_vm_call_direct(csr->vm, csr->csr_free, ptr);
 }
 
-wasm_vm_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len)
+// Allocates pointer which is valid inside the wasm module and returns it
+static i32 alloc_and_copy_parameter(char *str, i32 str_length, csr_module *csr)
 {
-    wasm_vm_result result = wasm_vm_call_direct(csr->vm, csr->generate_csr, priv_key_buff_ptr, priv_key_buff_len);
+    wasm_vm_result malloc_result = csr_malloc(csr, str_length);
+    i32 addr;
+    if (malloc_result.err)
+    {
+        pr_err("wasm: malloc_result error: %s", malloc_result.err);
+        addr = -1;
+        goto bail;
+    }
+    addr = malloc_result.data->i32;
+    strcpy(wasm_vm_memory(get_csr_module(csr)) + addr, str);
+    bail:
+        return addr;
+}
+
+wasm_vm_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len, csr_parameters *parameters)
+{
+    wasm_vm_result result;
+
+    #define ALLOCATE_AND_CHECK(field) \
+    i32 field##_len = strlen(parameters->field) + 1; \
+    i32 field##_ptr; \
+    field##_ptr = alloc_and_copy_parameter(parameters->field, field##_len, csr); \
+    if (field##_ptr == -1 ) \
+    { \
+        result.err = "wasm: error during allocating ptr with length for " #field; \
+        goto bail; \
+    }
+
+    ALLOCATE_AND_CHECK(subject);
+    ALLOCATE_AND_CHECK(dns);
+    ALLOCATE_AND_CHECK(uri);
+    ALLOCATE_AND_CHECK(email);
+    ALLOCATE_AND_CHECK(ip);
+
+    result = wasm_vm_call_direct(csr->vm, csr->generate_csr, 
+        priv_key_buff_ptr, priv_key_buff_len, 
+        subject_ptr, subject_len,
+        dns_ptr, dns_len,
+        uri_ptr, uri_len,
+        email_ptr, email_len,
+        ip_ptr, ip_len);
     if (result.err != NULL)
     {
         pr_err("wasm: calling csr_gen errored %s\n", result.err);
-        return result;
+        goto bail;
     }
     printk("wasm: result of calling csr_gen %d\n", result.data->i64);
-    return result;
+    bail:
+        i32 pointers[] = {subject_ptr, dns_ptr, uri_ptr, email_ptr, ip_ptr};
+
+        int i;
+        for(i = 0; i < (sizeof(pointers) / sizeof(pointers[0])); i++) {
+            wasm_vm_result free_result = csr_free(csr, subject_ptr);
+            if (free_result.err)
+            {
+                result = free_result;
+            }
+        }
+        return result;
 }
