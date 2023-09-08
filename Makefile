@@ -111,7 +111,7 @@ _debian_deps:
 	sudo apt install -y clang libbpf-dev dwarves build-essential linux-tools-generic golang dkms flex bison
 
 _archlinux_deps:
-	sudo pacman -Syu linux-headers base-devel clang go dkms git
+	sudo pacman -Syu linux-headers base-devel clang go dkms git strace
 
 _install_opa:
 	sudo curl -L -o /usr/local/bin/opa https://openpolicyagent.org/downloads/v0.54.0/opa_linux_$(shell go version | cut -f2 -d'/')_static
