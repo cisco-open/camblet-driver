@@ -58,6 +58,7 @@ typedef struct
 	br_rsa_private_key *rsa_priv;
 	br_rsa_public_key *rsa_pub;
 	br_x509_certificate *cert;
+	csr_parameters *parameters;
 
 	proxywasm_context *pc;
 	proxywasm *p;
@@ -428,6 +429,8 @@ static wasm_socket_context *new_server_wasm_socket_context(proxywasm *p, struct 
 	c->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
 	c->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
 	c->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
+	c->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
+
 	c->sock = sock;
 
 	wasm_vm_result res = proxywasm_create_context(p);
@@ -450,6 +453,8 @@ static wasm_socket_context *new_client_wasm_socket_context(proxywasm *p, struct 
 	c->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
 	c->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
 	c->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
+	c->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
+
 	c->sock = sock;
 
 	wasm_vm_result res = proxywasm_create_context(p);
@@ -501,6 +506,7 @@ static void free_wasm_socket_context(wasm_socket_context *c)
 		kfree(c->rsa_priv);
 		kfree(c->rsa_pub);
 		kfree(c->cert);
+		kfree(c->parameters);
 		kfree(c);
 	}
 }
@@ -974,8 +980,13 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 				csr_unlock(csr);
 				return NULL;
 			}
+			sc->parameters->subject = "CN=banzai.cloud";
+			sc->parameters->dns = "banzaicloud.com";
+			sc->parameters->uri = "banzaicloud";
+			sc->parameters->email = "bmolnar@cisco.com";
+			sc->parameters->ip = "127.0.0.1";
 
-			wasm_vm_result generated_csr = csr_gen(csr, addr, len);
+			wasm_vm_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
 			if (generated_csr.err)
 			{
 				pr_err("wasm_accept: wasm_vm_csr_gen error: %s", generated_csr.err);
@@ -1136,7 +1147,13 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 				return -1;
 			}
 
-			wasm_vm_result generated_csr = csr_gen(csr, addr, len);
+			sc->parameters->subject = "CN=banzai.cloud";
+			sc->parameters->dns = "banzaicloud.com";
+			sc->parameters->uri = "banzaicloud";
+			sc->parameters->email = "bmolnar@cisco.com";
+			sc->parameters->ip = "127.0.0.1";
+
+			wasm_vm_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
 			if (generated_csr.err)
 			{
 				pr_err("wasm_connect: wasm_vm_csr_gen error: %s", generated_csr.err);
