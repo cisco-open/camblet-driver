@@ -116,24 +116,8 @@ static char *realloc_and_access_buffer(proxywasm_context *c, struct buffer_funct
 	return buffer + buffer_size;
 }
 
-static int send_msg(struct sock *sock, void *msg, size_t len)
-{
-	// printk("send_msg -> buf %p size %d bytes, sock: %p", msg, len, sock);
-	struct msghdr hdr = {0};
-	struct kvec iov = {.iov_base = msg, .iov_len = len};
-
-	iov_iter_kvec(&hdr.msg_iter, WRITE, &iov, 1, len);
-
-	int sent = tcp_sendmsg(sock, &hdr, len);
-
-	// printk("send_msg -> sent %d bytes, sock: %p", sent, sock);
-
-	return sent;
-}
-
 static int send_msg_ktls(wasm_socket_context *c, void *msg, size_t len)
 {
-	// printk("send_msg -> buf %p size %d bytes, sock: %p", msg, len, sock);
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = msg, .iov_len = len};
 
@@ -141,14 +125,23 @@ static int send_msg_ktls(wasm_socket_context *c, void *msg, size_t len)
 
 	int sent = c->ktls_sendmsg(c->sock, &hdr, len);
 
-	// printk("send_msg -> sent %d bytes, sock: %p", sent, sock);
+	return sent;
+}
+
+static int send_msg(struct sock *sock, void *msg, size_t len)
+{
+	struct msghdr hdr = {0};
+	struct kvec iov = {.iov_base = msg, .iov_len = len};
+
+	iov_iter_kvec(&hdr.msg_iter, WRITE, &iov, 1, len);
+
+	int sent = tcp_sendmsg(sock, &hdr, len);
 
 	return sent;
 }
 
 static int recv_msg(struct sock *sock, char *buf, size_t size)
 {
-	// printk("recv_msg -> buf %p size %d bytes, sock: %p", buf, size, sock);
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = buf, .iov_len = size};
 	int addr_len = 0;
@@ -161,14 +154,11 @@ static int recv_msg(struct sock *sock, char *buf, size_t size)
 #endif
 							   0, &addr_len);
 
-	// printk("recv_msg -> received %d bytes, sock: %p", received, sock);
-
 	return received;
 }
 
 static int recv_msg_ktls(wasm_socket_context *c, char *buf, size_t buf_len, size_t size)
 {
-	// printk("recv_msg -> buf %p size %d bytes, sock: %p", buf, size, sock);
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = buf, .iov_len = buf_len};
 	int addr_len = 0;
@@ -180,8 +170,6 @@ static int recv_msg_ktls(wasm_socket_context *c, char *buf, size_t buf_len, size
 								   0,
 #endif
 								   0, &addr_len);
-
-	printk("recv_msg_ktls %s <- wanted %d received %d bytes", current->comm, size, received);
 
 	return received;
 }
@@ -725,7 +713,6 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 		goto bail;
 	}
 
-	//	len = copy_from_iter(data, min(size, sizeof(data)), &msg->msg_iter);
 	len = copy_from_iter(get_write_buffer_for_write(c, size), size, &msg->msg_iter);
 
 	set_write_buffer_size(c, get_write_buffer_size(c) + len);
@@ -893,8 +880,9 @@ static int configure_ktls_sock(wasm_socket_context *c)
 		return ret;
 	}
 
-	// we have to save the proto here because the setsockopt calls override the tcp protocol
-	// later those methods set by ktls has to be used to read and write data, but first we need to put back ours
+	// We have to save the proto here because the setsockopt calls override the TCP protocol.
+	// later those methods set by ktls has to be used to read and write data, but first we
+	// need to put back our read and write methods.
 	c->ktls_recvmsg = c->sock->sk_prot->recvmsg;
 	c->ktls_sendmsg = c->sock->sk_prot->sendmsg;
 
@@ -905,7 +893,6 @@ static int configure_ktls_sock(wasm_socket_context *c)
 	return 0;
 }
 
-// an enum for the direction
 typedef enum
 {
 	INPUT,
