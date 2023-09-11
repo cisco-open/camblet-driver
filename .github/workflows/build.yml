@@ -102,6 +102,8 @@ jobs:
         else
           echo "DKMS build failed"
           cat /var/lib/dkms/wasm/0.1.0/build/make.log
+          echo $PATH
+          file /usr/local/bin/opa
           exit 1
         fi
         sudo dkms install -m wasm -v 0.1.0
