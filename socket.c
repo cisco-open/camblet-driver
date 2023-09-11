@@ -150,9 +150,9 @@ static int recv_msg(struct sock *sock, char *buf, size_t size)
 
 	int received = tcp_recvmsg(sock, &hdr, size,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
-                               0,
+							   0,
 #endif
-                               0, &addr_len);
+							   0, &addr_len);
 
 	return received;
 }
@@ -167,9 +167,9 @@ static int recv_msg_ktls(wasm_socket_context *c, char *buf, size_t buf_len, size
 
 	int received = c->ktls_recvmsg(c->sock, &hdr, size,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
-                                   0,
+								   0,
 #endif
-                                   0, &addr_len);
+								   0, &addr_len);
 
 	return received;
 }
