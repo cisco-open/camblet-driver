@@ -93,6 +93,12 @@ jobs:
       run: |
         sudo cp -r . /usr/src/wasm-0.1.0/
         sudo dkms add -m wasm -v 0.1.0
-        sudo dkms build -m wasm -v 0.1.0
+        if sudo dkms build -m wasm -v 0.1.0; then
+          echo "DKMS build succeeded"
+        else
+          echo "DKMS build failed"
+          cat /var/lib/dkms/wasm/0.1.0/build/make.log
+          exit 1
+        fi
         sudo dkms install -m wasm -v 0.1.0
         sudo dmesg -T
