@@ -791,16 +791,18 @@ void ensure_wasm_ktls_prot(struct sock *sock)
 						  int __user *option);
 		getsockopt = sock->sk_prot->getsockopt;
 
+		bool (*sock_is_readable)(struct sock *sk);
+		sock_is_readable = sock->sk_prot->sock_is_readable;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 5, 0)
 		int (*sendpage)(struct sock *sk, struct page *page,
 						int offset, size_t size, int flags);
 		sendpage = sock->sk_prot->sendpage;
 
-		bool (*sock_is_readable)(struct sock *sk);
-		sock_is_readable = sock->sk_prot->sock_is_readable;
-
+		wasm_ktls_prot.sendpage = sendpage;
+#endif
 		wasm_ktls_prot.setsockopt = setsockopt;
 		wasm_ktls_prot.getsockopt = getsockopt;
-		wasm_ktls_prot.sendpage = sendpage;
 		wasm_ktls_prot.sock_is_readable = sock_is_readable;
 		WRITE_ONCE(wasm_ktls_prot.close, close);
 	}
