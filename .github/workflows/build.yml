@@ -64,6 +64,7 @@ jobs:
       run: |
         sudo ../wasm-kernel-module-cli/w3k server &
         go run test/file-server.go &
+        docker run -d --rm -p 8080:80 nginx
         sleep 2
 
         # Test downloading a bigger file
@@ -78,6 +79,9 @@ jobs:
         # python3 -m http.server 7000 &
         # sleep 1
         # curl -k -v -o /dev/null https://localhost:7000/opa.o
+
+        # Test sendfile with NGiNX
+        curl -v http://localhost:8080
 
         sudo dmesg -T | tail -100
 
