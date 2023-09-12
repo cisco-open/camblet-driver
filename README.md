@@ -142,8 +142,13 @@ lima sudo ./w3k server
 
 Then follow the instructions [here](https://github.com/cisco-open/wasm-kernel-module-cli#cli).
 
+## TLS Termination
 
-## TLS Certificates for testing
+The kernel module can terminate TLS connections on certain ports, and forward the plaintext traffic to a user space application. This is useful for example if you want to run a proxy-wasm filter on a TCP connection.
+
+Between two applications - both of them intercepted by this module - the traffic is always encrypted by (kTLS)[https://docs.kernel.org/networking/tls-offload.html]. If one of them is not intercepted by the module but supports the ChaCha20-Poly1305 AEAD - kTLS is used. Otherwise the traffic is encrypted by BearSSL.
+
+### TLS Certificates for testing
 
 You will need `cfssl` for this (`brew install cfssl` on macOS):
 
@@ -174,18 +179,21 @@ brssl chain server.pem
 brssl skey -C server-key.pem
 ```
 
-## Test mTLS
+### Test mTLS
 
 The kernel module offers TLS termination on certain ports selected by a rule-set:
 
 ```bash
+# Edit the rule-set
+vim socket.rego
+
 # Build and insert the module, then follow the logs
 make
 make insmod
 make logs
 
 # In another terminal start a server
-lima python3 -m http.server
+lima python3 -m http.server --protocol HTTP/1.1
 
 # In another terminal connect to the server (over plaintext, will be TLS terminated by the kernel)
 lima curl -v http://localhost:8000

@@ -64,13 +64,27 @@ jobs:
       run: |
         sudo ../wasm-kernel-module-cli/w3k server &
         go run test/file-server.go &
+        docker run -d --rm -p 8080:80 nginx
         sleep 2
+
         # Test downloading a bigger file
-        curl -v -o /tmp/opa_downloaded.o "http://localhost:8000/opa.o"
+        curl -v -o /tmp/opa_downloaded.o http://localhost:8000/opa.o
+
         # Test uploading this file
         curl -v -F "opa_downloaded.o.o=@/tmp/opa_downloaded.o" http://localhost:8000/upload
         diff opa.o opa_downloaded.o
+
+        # Test bearssl with non-bearssl compatibility
+        # TODO somehow this test run locally but not on github
+        # python3 -m http.server 7000 &
+        # sleep 1
+        # curl -k -v -o /dev/null https://localhost:7000/opa.o
+
+        # Test sendfile with NGiNX
+        curl -v http://localhost:8080
+
         sudo dmesg -T | tail -100
+
         sudo kill -9 $(jobs -p)
         sudo pkill -9 w3k
 
@@ -83,6 +97,14 @@ jobs:
       run: |
         sudo cp -r . /usr/src/wasm-0.1.0/
         sudo dkms add -m wasm -v 0.1.0
-        sudo dkms build -m wasm -v 0.1.0
+        if sudo dkms build -m wasm -v 0.1.0; then
+          echo "DKMS build succeeded"
+        else
+          echo "DKMS build failed"
+          cat /var/lib/dkms/wasm/0.1.0/build/make.log
+          echo $PATH
+          file /usr/local/bin/opa
+          exit 1
+        fi
         sudo dkms install -m wasm -v 0.1.0
         sudo dmesg -T

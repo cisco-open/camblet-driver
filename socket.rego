@@ -13,7 +13,7 @@ INPUT := 0
 OUTPUT := 1
 
 allowed_ports := {8000, 8080}
-allowed_commands := {"curl", "python3", "file-server"}
+allowed_commands := {"curl", "python3", "file-server", "nginx"}
 
 allow = {
 	"mtls": true,
@@ -21,4 +21,13 @@ allow = {
 } {
 	allowed_ports[input.port]
 	allowed_commands[input.command]
+}
+
+# to test that our bearssl server is compatible with non-bearssl clients
+allow = {
+	"mtls": false,
+	"permissive": false,
+} {
+	input.port == 7000
+	input.command == "python3"
 }
