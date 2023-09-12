@@ -479,43 +479,45 @@ static wasm_socket_context *new_client_wasm_socket_context(proxywasm *p, struct 
 	return c;
 }
 
-static void free_wasm_socket_context(wasm_socket_context *sc)
+static void free_wasm_socket_context(wasm_socket_context *c)
 {
-	if (sc)
+	if (c)
 	{
-		printk("free_wasm_socket_context: shutting down wasm_socket_context of context id: %p", sc->pc);
+		printk("wasm: shutting down wasm_socket_context of context id: %p", c->pc);
 
-		proxywasm_lock(sc->p, sc->pc);
-		proxywasm_destroy_context(sc->p);
-		proxywasm_unlock(sc->p);
+		proxywasm_lock(c->p, c->pc);
+		proxywasm_destroy_context(c->p);
+		proxywasm_unlock(c->p);
 
-		// TODO we should call br_sslio_close here, but that hangs in non-typed socket mode
-		// br_ssl_engine_close(sc->ioc.engine);
-		// if (br_sslio_close(sc->ioc))
-		// {
-		// 	pr_err("br_sslio_close returned an error");
-		// }
-		if (sc->direction == ListenerDirectionInbound)
+		if (c->ktls_recvmsg == NULL)
 		{
-			kfree(sc->sc);
+			if (br_sslio_close(&c->ioc))
+			{
+				const br_ssl_engine_context *ec = get_ssl_engine_context(c);
+				pr_err("wasm: %s br_sslio_close returned an error: %d", current->comm, br_ssl_engine_last_error(ec));
+			}
+		}
+
+		if (c->direction == ListenerDirectionInbound)
+		{
+			kfree(c->sc);
 		}
 		else
 		{
-			kfree(sc->cc);
+			kfree(c->cc);
 		}
-		if (sc->rsa_priv != NULL)
+		if (c->rsa_priv != NULL)
 		{
-			kfree(sc->rsa_priv->p);
+			kfree(c->rsa_priv->p);
 		}
-		if (sc->rsa_pub != NULL)
+		if (c->rsa_pub != NULL)
 		{
-			kfree(sc->rsa_pub->n);
+			kfree(c->rsa_pub->n);
 		}
-		kfree(sc->rsa_priv);
-		kfree(sc->rsa_pub);
-		kfree(sc->cert);
-
-		kfree(sc);
+		kfree(c->rsa_priv);
+		kfree(c->rsa_pub);
+		kfree(c->cert);
+		kfree(c);
 	}
 }
 
@@ -574,7 +576,8 @@ static int ensure_tls_handshake(wasm_socket_context *c)
 		}
 		else
 		{
-			pr_err("wasm_socket: %s TLS handshake error %d", current->comm, br_ssl_engine_last_error(&c->sc->eng));
+			const br_ssl_engine_context *ec = get_ssl_engine_context(c);
+			pr_err("wasm_socket: %s TLS handshake error %d", current->comm, br_ssl_engine_last_error(ec));
 			return ret;
 		}
 
