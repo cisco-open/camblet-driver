@@ -135,7 +135,7 @@ static int send_msg(struct sock *sock, void *msg, size_t len)
 
 	iov_iter_kvec(&hdr.msg_iter, WRITE, &iov, 1, len);
 
-	int sent = tcp_sendmsg(sock, &hdr, len);
+	int sent = tcp_sendmsg_locked(sock, &hdr, len);
 
 	return sent;
 }
@@ -189,21 +189,7 @@ sock_read(void *ctx, unsigned char *buf, size_t len)
 static int
 sock_write(void *ctx, const unsigned char *buf, size_t len)
 {
-	for (;;)
-	{
-		ssize_t wlen;
-
-		wlen = send_msg((struct sock *)ctx, buf, len);
-		if (wlen <= 0)
-		{
-			if (wlen < 0)
-			{
-				continue;
-			}
-			return -1;
-		}
-		return (int)wlen;
-	}
+	return send_msg((struct sock *)ctx, buf, len);
 }
 
 static int
@@ -483,20 +469,18 @@ static void free_wasm_socket_context(wasm_socket_context *c)
 {
 	if (c)
 	{
-		printk("wasm: shutting down wasm_socket_context of context id: %p", c->pc);
+		printk("wasm: shutting down wasm_socket_context of context %s", current->comm);
 
 		proxywasm_lock(c->p, c->pc);
 		proxywasm_destroy_context(c->p);
 		proxywasm_unlock(c->p);
 
-		if (c->ktls_recvmsg == NULL)
+		if (br_sslio_close(&c->ioc))
 		{
-			if (br_sslio_close(&c->ioc))
-			{
-				const br_ssl_engine_context *ec = get_ssl_engine_context(c);
-				pr_err("wasm: %s br_sslio_close returned an error: %d", current->comm, br_ssl_engine_last_error(ec));
-			}
+			const br_ssl_engine_context *ec = get_ssl_engine_context(c);
+			pr_err("wasm: %s br_sslio_close returned an error: %d", current->comm, br_ssl_engine_last_error(ec));
 		}
+		printk("wasm: %s TLS br_sslio closed", current->comm);
 
 		if (c->direction == ListenerDirectionInbound)
 		{
@@ -759,7 +743,7 @@ void wasm_close(struct sock *sk, long timeout)
 
 void wasm_shutdown(struct sock *sk, int how)
 {
-	printk("wasm_shutdown: running for sk %p", sk);
+	printk("wasm_shutdown: %s running for sk %p", current->comm, sk);
 	wasm_socket_context *c = sk->sk_user_data;
 	free_wasm_socket_context(c);
 	sk->sk_user_data = NULL;
