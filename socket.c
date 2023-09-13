@@ -135,9 +135,7 @@ static int send_msg(struct sock *sock, void *msg, size_t len)
 
 	iov_iter_kvec(&hdr.msg_iter, WRITE, &iov, 1, len);
 
-	int sent = tcp_sendmsg_locked(sock, &hdr, len);
-
-	return sent;
+	return tcp_sendmsg(sock, &hdr, len);
 }
 
 static int recv_msg(struct sock *sock, char *buf, size_t size)
@@ -148,13 +146,11 @@ static int recv_msg(struct sock *sock, char *buf, size_t size)
 
 	iov_iter_kvec(&hdr.msg_iter, READ, &iov, 1, size);
 
-	int received = tcp_recvmsg(sock, &hdr, size,
+	return tcp_recvmsg(sock, &hdr, size,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
 							   0,
 #endif
 							   0, &addr_len);
-
-	return received;
 }
 
 static int recv_msg_ktls(wasm_socket_context *c, char *buf, size_t buf_len, size_t size)
@@ -165,13 +161,11 @@ static int recv_msg_ktls(wasm_socket_context *c, char *buf, size_t buf_len, size
 
 	iov_iter_kvec(&hdr.msg_iter, READ, &iov, 1, buf_len);
 
-	int received = c->ktls_recvmsg(c->sock, &hdr, size,
+	return c->ktls_recvmsg(c->sock, &hdr, size,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
 								   0,
 #endif
 								   0, &addr_len);
-
-	return received;
 }
 
 /*
@@ -475,11 +469,11 @@ static void free_wasm_socket_context(wasm_socket_context *c)
 		proxywasm_destroy_context(c->p);
 		proxywasm_unlock(c->p);
 
-		if (br_sslio_close(&c->ioc))
-		{
-			const br_ssl_engine_context *ec = get_ssl_engine_context(c);
-			pr_err("wasm: %s br_sslio_close returned an error: %d", current->comm, br_ssl_engine_last_error(ec));
-		}
+		// if (br_sslio_close(&c->ioc))
+		// {
+		// 	const br_ssl_engine_context *ec = get_ssl_engine_context(c);
+		// 	pr_err("wasm: %s br_sslio_close returned an error: %d", current->comm, br_ssl_engine_last_error(ec));
+		// }
 		printk("wasm: %s TLS br_sslio closed", current->comm);
 
 		if (c->direction == ListenerDirectionInbound)
