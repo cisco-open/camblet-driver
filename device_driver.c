@@ -37,43 +37,6 @@ enum
 /* Is device open? Used to prevent multiple access to device */
 static atomic_t already_open = ATOMIC_INIT(CDEV_NOT_USED);
 
-static struct command *lookup_in_flight_command(char *id)
-{
-    spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
-
-    struct command *cmd = NULL;
-    struct command *tmp;
-    list_for_each_entry(tmp, &in_flight_command_list, list)
-    {
-        if (strncmp(tmp->uuid.b, id, UUID_SIZE) == 0)
-        {
-            cmd = tmp;
-            break;
-        }
-    }
-
-    spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
-
-    return cmd;
-}
-
-// create a function to get a command from the list (called from the driver), locked with a mutex
-static struct command *get_command(void)
-{
-    struct command *cmd = NULL;
-
-    spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
-    if (!list_empty(&command_list))
-    {
-        cmd = list_first_entry(&command_list, struct command, list);
-        list_del(&cmd->list);
-        list_add_tail(&cmd->list, &in_flight_command_list);
-    }
-    spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
-
-    return cmd;
-}
-
 static int write_command_to_buffer(char *buffer, size_t buffer_size, struct command *cmd)
 {
     char uuid[UUID_SIZE * 2];

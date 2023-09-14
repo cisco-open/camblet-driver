@@ -88,6 +88,43 @@ command_answer *send_connect_command(u16 port)
     return answer;
 }
 
+struct command *lookup_in_flight_command(char *id)
+{
+    spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
+
+    struct command *cmd = NULL;
+    struct command *tmp;
+    list_for_each_entry(tmp, &in_flight_command_list, list)
+    {
+        if (strncmp(tmp->uuid.b, id, UUID_SIZE) == 0)
+        {
+            cmd = tmp;
+            break;
+        }
+    }
+
+    spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
+
+    return cmd;
+}
+
+// create a function to get a command from the list (called from the driver), locked with a mutex
+struct command *get_command(void)
+{
+    struct command *cmd = NULL;
+
+    spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
+    if (!list_empty(&command_list))
+    {
+        cmd = list_first_entry(&command_list, struct command, list);
+        list_del(&cmd->list);
+        list_add_tail(&cmd->list, &in_flight_command_list);
+    }
+    spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
+
+    return cmd;
+}
+
 void free_command_answer(struct command_answer *cmd_answer)
 {
     if (cmd_answer->error)
