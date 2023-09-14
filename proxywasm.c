@@ -194,7 +194,7 @@ m3ApiRawFunction(proxy_log)
 
     m3ApiCheckMem(message_data, message_size);
 
-    printk("proxywasm: [%d] %.*s", log_level, message_size, message_data);
+    printk("proxywasm [%s]: [%d] %.*s", current->comm, log_level, message_size, message_data);
 
     m3ApiReturn(WasmResult_Ok);
 }

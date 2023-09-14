@@ -479,18 +479,23 @@ static void free_wasm_socket_context(wasm_socket_context *c)
 {
 	if (c)
 	{
-		printk("wasm: shutting down wasm_socket_context of context %s", current->comm);
+		printk("wasm: freeing wasm_socket_context of %s", current->comm);
 
 		proxywasm_lock(c->p, c->pc);
 		proxywasm_destroy_context(c->p);
 		proxywasm_unlock(c->p);
 
-		// if (br_sslio_close(&c->ioc))
-		// {
-		// 	const br_ssl_engine_context *ec = get_ssl_engine_context(c);
-		// 	pr_err("wasm: %s br_sslio_close returned an error: %d", current->comm, br_ssl_engine_last_error(ec));
-		// }
-		printk("wasm: %s TLS br_sslio closed", current->comm);
+		if (c->protocol && !c->ktls_sendmsg)
+			// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
+			if (!br_sslio_close(&c->ioc))
+			{
+				const br_ssl_engine_context *ec = get_ssl_engine_context(c);
+				pr_err("wasm: %s br_sslio_close returned an error: %d", current->comm, br_ssl_engine_last_error(ec));
+			}
+			else
+			{
+				printk("wasm: %s br_sslio SSL closed", current->comm);
+			}
 
 		if (c->direction == ListenerDirectionInbound)
 		{
@@ -581,7 +586,7 @@ static int ensure_tls_handshake(wasm_socket_context *c)
 		ret = br_sslio_flush(&c->ioc);
 		if (ret == 0)
 		{
-			printk("wasm_socket: %s TLS handshake done", current->comm);
+			printk("wasm_socket: %s %s TLS handshake done, sk: %p", current->comm, get_direction(c), c->sock);
 		}
 		else
 		{
@@ -751,7 +756,6 @@ int wasm_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	set_write_buffer_size(c, 0);
 
 	ret = size;
-	printk("wasm_sendmsg: %s sent %d bytes", get_direction(c), ret);
 
 bail:
 	return ret;
@@ -759,29 +763,14 @@ bail:
 
 void wasm_close(struct sock *sk, long timeout)
 {
-	printk("wasm_close: %s running for sk %p ", current->comm, sk);
-	wasm_socket_context *c = sk->sk_user_data;
-	free_wasm_socket_context(c);
-	sk->sk_user_data = NULL;
+	wasm_socket_context *c = READ_ONCE(sk->sk_user_data);
+	if (c)
+	{
+		printk("wasm_close: %s running for sk %p ", current->comm, sk);
+		free_wasm_socket_context(c);
+		WRITE_ONCE(sk->sk_user_data, NULL);
+	}
 	tcp_close(sk, timeout);
-}
-
-void wasm_shutdown(struct sock *sk, int how)
-{
-	printk("wasm_shutdown: %s running for sk %p", current->comm, sk);
-	wasm_socket_context *c = sk->sk_user_data;
-	free_wasm_socket_context(c);
-	sk->sk_user_data = NULL;
-	tcp_shutdown(sk, how);
-}
-
-void wasm_destroy(struct sock *sk)
-{
-	printk("wasm_destroy: %s running for sk %p", current->comm, sk);
-	wasm_socket_context *c = sk->sk_user_data;
-	free_wasm_socket_context(c);
-	sk->sk_user_data = NULL;
-	tcp_v4_destroy_sock(sk);
 }
 
 // analyze tls_main.c to find out what we need to implement: check build_protos()
@@ -1361,8 +1350,6 @@ int wasm_socket_init(void)
 	wasm_prot.recvmsg = wasm_recvmsg;
 	wasm_prot.sendmsg = wasm_sendmsg;
 	wasm_prot.close = wasm_close;
-	wasm_prot.shutdown = wasm_shutdown;
-	wasm_prot.destroy = wasm_destroy;
 
 	memcpy(&wasm_ktls_prot, &wasm_prot, sizeof(wasm_prot));
 	wasm_ktls_prot.close = NULL; // mark it as uninitialized

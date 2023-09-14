@@ -261,8 +261,6 @@ wasm_vm_result init_opa_for(wasm_vm *vm, wasm_vm_module *module)
     wasm_vm_try_get_function(builtinsFunc, wasm_vm_get_function(vm, module->name, "builtins"));
     opa->vm = vm;
 
-    printk("got all functions");
-
     result = wasm_vm_call_direct(vm, builtinsFunc);
     if (result.err)
         goto error;
