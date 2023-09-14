@@ -40,6 +40,9 @@ typedef struct command
     wait_queue_head_t wait_queue;
 };
 
+struct command *lookup_in_flight_command(char *id);
+struct command *get_command(void);
+
 // protect the command list with a mutex
 static DEFINE_SPINLOCK(command_list_lock);
 static unsigned long command_list_lock_flags;
