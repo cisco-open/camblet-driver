@@ -13,6 +13,8 @@
 
 #include "task_context.h"
 
+#define COMMAND_TIMEOUT_SECONDS 1
+
 typedef struct command_answer
 {
     char *error;
@@ -25,5 +27,23 @@ command_answer *send_command(char *name, char *data, task_context *context);
 
 command_answer *send_accept_command(u16 port);
 command_answer *send_connect_command(u16 port);
+
+// create a linked list for outgoing commands
+typedef struct command
+{
+    struct list_head list;
+    char *name;
+    char *data;
+    task_context *context;
+    uuid_t uuid;
+    struct command_answer *answer;
+    wait_queue_head_t wait_queue;
+};
+
+// protect the command list with a mutex
+static DEFINE_SPINLOCK(command_list_lock);
+static unsigned long command_list_lock_flags;
+static LIST_HEAD(command_list);
+static LIST_HEAD(in_flight_command_list);
 
 #endif

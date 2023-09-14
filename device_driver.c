@@ -25,7 +25,6 @@
 /* Global variables are declared as static, so are global within the file. */
 
 #define DEFAULT_MODULE_ENTRYPOINT "main"
-#define COMMAND_TIMEOUT_SECONDS 1
 
 static int major; /* major number assigned to our device driver */
 
@@ -37,24 +36,6 @@ enum
 
 /* Is device open? Used to prevent multiple access to device */
 static atomic_t already_open = ATOMIC_INIT(CDEV_NOT_USED);
-
-// create a linked list for outgoing commands
-typedef struct command
-{
-    struct list_head list;
-    char *name;
-    char *data;
-    task_context *context;
-    uuid_t uuid;
-    struct command_answer *answer;
-    wait_queue_head_t wait_queue;
-};
-
-// protect the command list with a mutex
-static DEFINE_SPINLOCK(command_list_lock);
-static unsigned long command_list_lock_flags;
-static LIST_HEAD(command_list);
-static LIST_HEAD(in_flight_command_list);
 
 static struct command *lookup_in_flight_command(char *id)
 {
@@ -74,72 +55,6 @@ static struct command *lookup_in_flight_command(char *id)
     spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
 
     return cmd;
-}
-
-void free_command_answer(struct command_answer *cmd_answer)
-{
-    if (cmd_answer->error)
-    {
-        kfree(cmd_answer->error);
-    }
-
-    if (cmd_answer->answer)
-    {
-        kfree(cmd_answer->answer);
-    }
-
-    kfree(cmd_answer);
-}
-
-// create a function to add a command to the list (called from the VM), locked with a spinlock
-command_answer *send_command(char *name, char *data, task_context *context)
-{
-    struct command *cmd = kmalloc(sizeof(struct command), GFP_KERNEL);
-
-    uuid_gen(&cmd->uuid);
-    cmd->name = name;
-    cmd->data = data;
-    cmd->context = context;
-    init_waitqueue_head(&cmd->wait_queue);
-
-    spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
-    list_add_tail(&cmd->list, &command_list);
-    spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
-
-    DEFINE_WAIT(wait);
-
-    // wait until the command is processed
-    printk("wasm: waiting for command to be processed");
-
-    // wait for the command to be processed
-    prepare_to_wait(&cmd->wait_queue, &wait, TASK_INTERRUPTIBLE);
-    // Sleep until the condition is true or the timeout expires
-    unsigned long timeout = msecs_to_jiffies(COMMAND_TIMEOUT_SECONDS * 1000);
-    schedule_timeout(timeout);
-
-    finish_wait(&cmd->wait_queue, &wait);
-
-    if (cmd->answer == NULL)
-    {
-        printk(KERN_ERR "wasm: command answer timeout");
-
-        cmd->answer = kmalloc(sizeof(struct command_answer), GFP_KERNEL);
-        cmd->answer->error = kmalloc(strlen("timeout") + 1, GFP_KERNEL);
-        strcpy(cmd->answer->error, "timeout");
-    }
-
-    spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
-    list_del(&cmd->list);
-    spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
-
-    command_answer *cmd_answer = cmd->answer;
-    if (cmd->context)
-    {
-        free_task_context(cmd->context);
-    }
-    kfree(cmd);
-
-    return cmd_answer;
 }
 
 // create a function to get a command from the list (called from the driver), locked with a mutex
