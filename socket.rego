@@ -12,8 +12,8 @@ package socket
 INPUT := 0
 OUTPUT := 1
 
-allowed_ports := {8000, 8080}
-allowed_commands := {"curl", "python3", "file-server", "nginx"}
+allowed_ports := {8000, 8080, 5001}
+allowed_commands := {"curl", "python3", "file-server", "nginx", "iperf"}
 
 allow = {
 	"mtls": true,
