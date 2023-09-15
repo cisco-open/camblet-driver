@@ -9,17 +9,17 @@
  */
 #include <linux/slab.h>
 
-void *strndup(void *v_dst, const void *v_src, size_t len)
+char *strndup(const char *str, size_t size)
 {
-    v_dst = kmalloc(len, GFP_KERNEL);
-    memcpy(v_dst, v_src, len);
+    char *dst = kmalloc(size, GFP_KERNEL);
+    memcpy(dst, str, size);
 
-    return v_dst;
+    return dst;
 }
 
-void *strdup(void *v_dst, const void *v_src)
+char *strdup(const char *str)
 {
-    int len = strlen(v_src);
+    int len = strlen(str);
 
-    return strndup(v_dst, v_src, len);
+    return strndup(str, len);
 }

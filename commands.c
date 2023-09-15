@@ -103,7 +103,7 @@ csr_sign_answer *send_csrsign_command(unsigned char *csr)
 
     if (answer->error)
     {
-        strdup(csr_sign_answer->error, answer->error);
+        csr_sign_answer->error = strdup(answer->error);
     }
 
     if (answer->answer)
