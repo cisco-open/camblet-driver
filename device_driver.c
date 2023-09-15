@@ -13,7 +13,7 @@
 #include <linux/version.h>
 #include <linux/wait.h>
 
-#include "third-party/base64/base64.h"
+#include "base64.h"
 #include "device_driver.h"
 #include "json.h"
 #include "opa.h"

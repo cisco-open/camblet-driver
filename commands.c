@@ -9,11 +9,10 @@
  */
 #include <linux/slab.h>
 #include <linux/uuid.h>
-#include <linux/slab.h>
 
 #include "commands.h"
 #include "json.h"
-#include "third-party/base64/base64.h"
+#include "base64.h"
 
 // create a function to add a command to the list (called from the VM), locked with a spinlock
 command_answer *send_command(char *name, char *data, task_context *context)
