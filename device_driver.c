@@ -13,7 +13,7 @@
 #include <linux/version.h>
 #include <linux/wait.h>
 
-#include "base64.h"
+#include "third-party/base64/base64.h"
 #include "device_driver.h"
 #include "json.h"
 #include "opa.h"
@@ -433,7 +433,7 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
     // wait until command is available
     while (c == NULL)
     {
-        if (msleep_interruptible(1000) > 0)
+        if (msleep_interruptible(25) > 0)
         {
             return -EINTR;
         }
