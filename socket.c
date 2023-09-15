@@ -44,6 +44,9 @@ const size_t ALPNs_NUM = sizeof(ALPNs) / sizeof(ALPNs[0]);
 static struct proto wasm_prot;
 static struct proto wasm_ktls_prot;
 
+static const br_rsa_private_key *rsa_priv;
+static const br_rsa_public_key *rsa_pub;
+
 typedef struct
 {
 	union
@@ -60,6 +63,11 @@ typedef struct
 	br_rsa_public_key *rsa_pub;
 	br_x509_certificate *cert;
 	csr_parameters *parameters;
+
+	br_x509_certificate *chain;
+	size_t chain_len;
+	br_x509_trust_anchor *trust_anchors;
+	size_t trust_anchors_len;
 
 	proxywasm_context *pc;
 	proxywasm *p;
@@ -150,9 +158,9 @@ static int recv_msg(struct sock *sock, char *buf, size_t size)
 
 	return tcp_recvmsg(sock, &hdr, size,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
-							   0,
+					   0,
 #endif
-							   0, &addr_len);
+					   0, &addr_len);
 }
 
 static int recv_msg_ktls(wasm_socket_context *c, char *buf, size_t buf_len, size_t size)
@@ -165,9 +173,9 @@ static int recv_msg_ktls(wasm_socket_context *c, char *buf, size_t buf_len, size
 
 	return c->ktls_recvmsg(c->sock, &hdr, size,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
-								   0,
+						   0,
 #endif
-								   0, &addr_len);
+						   0, &addr_len);
 }
 
 /*
@@ -424,6 +432,8 @@ static wasm_socket_context *new_server_wasm_socket_context(proxywasm *p, struct 
 	c->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
 	c->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
 	c->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
+	c->chain = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
+	c->trust_anchors = kzalloc(sizeof(br_x509_trust_anchor), GFP_KERNEL);
 	c->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
 
 	c->sock = sock;
@@ -490,19 +500,33 @@ static void free_wasm_socket_context(wasm_socket_context *c)
 		{
 			kfree(c->cc);
 		}
-		if (c->rsa_priv != NULL)
-		{
-			kfree(c->rsa_priv->p);
-		}
-		if (c->rsa_pub != NULL)
-		{
-			kfree(c->rsa_pub->n);
-		}
+
+		// if (c->rsa_priv != NULL)
+		// {
+		// 	kfree(c->rsa_priv->p);
+		// }
+		// if (c->rsa_pub != NULL)
+		// {
+		// 	kfree(c->rsa_pub->n);
+		// }
+
 		kfree(c->rsa_priv);
 		kfree(c->rsa_pub);
 		kfree(c->cert);
 		kfree(c->parameters);
 		kfree(c);
+	}
+}
+
+void dump_array(unsigned char array[], size_t len)
+{
+	size_t u;
+
+	printk("");
+
+	for (u = 0; u < len; u++)
+	{
+		printk(KERN_CONT "%x, ", array[u]);
 	}
 }
 
@@ -903,6 +927,9 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		wasm_socket_context *sc = new_server_wasm_socket_context(p, client);
 
+		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
+		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
+
 		wasm_vm_result res = proxy_on_new_connection(p);
 		if (res.err)
 		{
@@ -929,7 +956,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		// We should not only check for empty cert but we must check the certs validity
 		// TODO must set the certificate to avoid new cert generation every time
-		if (sc->cert->data_len == 1234) // turn off csr generation for now
+		if (sc->chain_len == 0)
 		{
 			// generating certificate signing request
 			if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
@@ -942,8 +969,8 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 				}
 			}
 
-			size_t len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
-			if (len == 0)
+			int len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
+			if (len <= 0)
 			{
 				pr_err("wasm_accept: error during rsa private der key length calculation");
 				return NULL;
@@ -967,13 +994,14 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 
 			unsigned char *der = mem + addr;
 
-			size_t error = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
-			if (error = 0)
+			int error = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
+			if (error <= 0)
 			{
 				pr_err("wasm_accept: error during rsa private key der encoding");
 				csr_unlock(csr);
 				return NULL;
 			}
+
 			sc->parameters->subject = "CN=banzai.cloud";
 			sc->parameters->dns = "banzaicloud.com";
 			sc->parameters->uri = "banzaicloud";
@@ -1002,6 +1030,23 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 			unsigned char *csr_ptr = (i32)(csr_from_module >> 32) + mem;
 
 			csr_unlock(csr);
+
+			csr_sign_answer *csr_sign_answer;
+			csr_sign_answer = send_csrsign_command(csr_ptr);
+			if (csr_sign_answer->error)
+			{
+				pr_err("wasm_accept: csr sign answer error: %s", csr_sign_answer->error);
+				kfree(csr_sign_answer->error);
+			}
+			else
+			{
+				sc->trust_anchors = csr_sign_answer->trust_anchors;
+				sc->trust_anchors_len = csr_sign_answer->trust_anchors_len;
+				sc->chain = csr_sign_answer->chain;
+				sc->chain_len = csr_sign_answer->chain_len;
+			}
+
+			kfree(csr_sign_answer);
 		}
 		/*
 		 * Initialise the context with the cipher suites and
@@ -1017,17 +1062,32 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
 		 */
 #if !RSA_OR_EC
-		br_ssl_server_init_full_rsa(sc->sc, CHAIN, CHAIN_LEN, &RSA);
+		if (sc->chain_len > 0)
+		{
+			pr_info("wasm_accept: use cert from agent");
+			br_ssl_server_init_full_rsa(sc->sc, sc->chain, sc->chain_len, sc->rsa_priv);
+		}
+		else
+		{
+			br_ssl_server_init_full_rsa(sc->sc, CHAIN, CHAIN_LEN, &RSA);
+		}
 
 		// mTLS enablement
 		if (opa_socket.mtls)
 		{
-			br_x509_minimal_init_full(&sc->xc, TAs, TAs_NUM);
+			if (sc->chain_len > 0)
+			{
+				br_x509_minimal_init_full(&sc->xc, sc->trust_anchors, sc->trust_anchors_len);
+				br_ssl_server_set_trust_anchor_names_alt(sc->sc, sc->trust_anchors, sc->trust_anchors_len);
+			}
+			else
+			{
+				br_x509_minimal_init_full(&sc->xc, TAs, TAs_NUM);
+				br_ssl_server_set_trust_anchor_names_alt(sc->sc, TAs, TAs_NUM);
+			}
+
 			br_ssl_engine_set_x509(&sc->sc->eng, &sc->xc.vtable);
-
 			br_ssl_engine_set_default_rsavrfy(&sc->sc->eng);
-
-			br_ssl_server_set_trust_anchor_names_alt(sc->sc, TAs, TAs_NUM);
 		}
 #elif
 		br_ssl_server_init_full_ec(sc->sc, CHAIN, CHAIN_LEN, BR_KEYTYPE_EC, &EC);
@@ -1083,6 +1143,9 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 		wasm_socket_context *sc = new_client_wasm_socket_context(p, sk);
 
+		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
+		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
+
 		wasm_vm_result res = proxy_on_new_connection(p);
 		if (res.err)
 		{
@@ -1108,7 +1171,7 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 		// We should not only check for empty cert but we must check the certs validity
 		// TODO must set the certificate to avoid new cert generation every time
-		if (sc->cert->data_len == 1234) // turn off csr generation for now
+		if (sc->chain_len == 0)
 		{
 			// generating certificate signing request
 			if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
@@ -1121,8 +1184,8 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 				}
 			}
 
-			size_t len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
-			if (len == 0)
+			int len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
+			if (len <= 0)
 			{
 				pr_err("wasm_connect: error during rsa private der key length calculation");
 				return -1;
@@ -1146,8 +1209,8 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 			unsigned char *der = mem + addr;
 
-			size_t error = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
-			if (error = 0)
+			int error = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
+			if (error <= 0)
 			{
 				pr_err("wasm_connect: error during rsa private key der encoding");
 				csr_unlock(csr);
@@ -1182,6 +1245,23 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			unsigned char *csr_ptr = (i32)(csr_from_module >> 32) + mem;
 
 			csr_unlock(csr);
+
+			csr_sign_answer *csr_sign_answer;
+			csr_sign_answer = send_csrsign_command(csr_ptr);
+			if (csr_sign_answer->error)
+			{
+				pr_err("wasm_connect: csr sign answer error: %s", csr_sign_answer->error);
+				kfree(csr_sign_answer->error);
+			}
+			else
+			{
+				sc->trust_anchors = csr_sign_answer->trust_anchors;
+				sc->trust_anchors_len = csr_sign_answer->trust_anchors_len;
+				sc->chain = csr_sign_answer->chain;
+				sc->chain_len = csr_sign_answer->chain_len;
+			}
+
+			kfree(csr_sign_answer);
 		}
 
 		/*
@@ -1197,15 +1277,32 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		 *   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
 		 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
 		 */
-		br_ssl_client_init_full(sc->cc, &sc->xc, TAs, TAs_NUM);
 
+		if (sc->chain_len > 0)
+		{
+			pr_info("wasm_connect: use cert from agent");
+			br_ssl_client_init_full(sc->cc, &sc->xc, sc->trust_anchors, sc->trust_anchors_len);
+		}
+		else
+		{
+			br_ssl_client_init_full(sc->cc, &sc->xc, TAs, TAs_NUM);
+		}
+
+		// br_ssl_client_init_full(sc->cc, &sc->xc, TAs, TAs_NUM);
 		// br_x509_minimal_init_full(sc->xc, TAs, TAs_NUM);
 		// br_ssl_engine_set_x509(&sc->cc->eng, &sc->xc->vtable);
 
 		// mTLS enablement
 		if (opa_socket.mtls)
 		{
-			br_ssl_client_set_single_rsa(sc->cc, CHAIN, CHAIN_LEN, &RSA, br_rsa_pkcs1_sign_get_default());
+			if (sc->chain_len > 0)
+			{
+				br_ssl_client_set_single_rsa(sc->cc, sc->chain, sc->chain_len, sc->rsa_priv, br_rsa_pkcs1_sign_get_default());
+			}
+			else
+			{
+				br_ssl_client_set_single_rsa(sc->cc, CHAIN, CHAIN_LEN, &RSA, br_rsa_pkcs1_sign_get_default());
+			}
 		}
 
 		/*
@@ -1270,6 +1367,16 @@ int wasm_socket_init(void)
 	memcpy(&wasm_ktls_prot, &wasm_prot, sizeof(wasm_prot));
 	wasm_ktls_prot.close = NULL; // mark it as uninitialized
 
+	//- generate global tls key
+	rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
+	rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
+	u_int32_t result = generate_rsa_keys(rsa_priv, rsa_pub);
+	if (result == 0)
+	{
+		pr_err("wasm_accept: error generating rsa keys");
+		return -1;
+	}
+
 	printk(KERN_INFO "WASM socket support loaded.");
 
 	return 0;
@@ -1279,6 +1386,10 @@ void wasm_socket_exit(void)
 {
 	tcp_prot.accept = accept;
 	tcp_prot.connect = connect;
+
+	//- free global tls key
+	kfree(rsa_priv);
+	kfree(rsa_pub);
 
 	printk(KERN_INFO "WASM socket support unloaded.");
 }

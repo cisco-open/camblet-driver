@@ -38,8 +38,8 @@ uint32_t generate_rsa_keys(br_rsa_private_key *rsa_priv, br_rsa_public_key *rsa_
 {
     br_rsa_keygen rsa_keygen = br_rsa_keygen_get_default();
 
-	unsigned char *raw_priv_key = kmalloc(BR_RSA_KBUF_PRIV_SIZE(RSA_BIT_LENGHT), GFP_KERNEL);
-	unsigned char *raw_pub_key = kmalloc(BR_RSA_KBUF_PUB_SIZE(RSA_BIT_LENGHT), GFP_KERNEL);
+    unsigned char *raw_priv_key = kmalloc(BR_RSA_KBUF_PRIV_SIZE(RSA_BIT_LENGHT), GFP_KERNEL);
+    unsigned char *raw_pub_key = kmalloc(BR_RSA_KBUF_PUB_SIZE(RSA_BIT_LENGHT), GFP_KERNEL);
 
     return rsa_keygen(&hmac_drbg_ctx.vtable, rsa_priv, raw_priv_key, rsa_pub, raw_pub_key, RSA_BIT_LENGHT, RSA_PUB_EXP);
 }
@@ -47,17 +47,18 @@ uint32_t generate_rsa_keys(br_rsa_private_key *rsa_priv, br_rsa_public_key *rsa_
 // BearSSL RSA Keygen related functions
 // Encodes rsa private key to pkcs8 der format and returns it's lenght.
 // If the der parameter is set to NULL then it computes only the length
-size_t encode_rsa_priv_key_to_der(unsigned char *der, br_rsa_private_key *rsa_priv, br_rsa_public_key *rsa_pub)
+int encode_rsa_priv_key_to_der(unsigned char *der, br_rsa_private_key *rsa_priv, br_rsa_public_key *rsa_pub)
 {
     br_rsa_compute_privexp rsa_priv_exp_comp = br_rsa_compute_privexp_get_default();
     size_t priv_exponent_size = rsa_priv_exp_comp(NULL, rsa_priv, RSA_PUB_EXP);
     if (priv_exponent_size == 0)
     {
-        pr_err("rsa_tools:error happened during priv_exponent lenght calculation");
+        pr_err("rsa_tools: error happened during priv_exponent lenght calculation");
         return -1;
     }
     unsigned char priv_exponent[priv_exponent_size];
-    if (rsa_priv_exp_comp(priv_exponent, rsa_priv, RSA_PUB_EXP) != priv_exponent_size)
+    size_t pexp = rsa_priv_exp_comp(priv_exponent, rsa_priv, RSA_PUB_EXP);
+    if (pexp != priv_exponent_size)
     {
         pr_err("rsa_tools: error happened during priv_exponent generation");
         return -1;

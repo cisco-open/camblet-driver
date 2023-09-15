@@ -9,9 +9,11 @@
  */
 #include <linux/slab.h>
 #include <linux/uuid.h>
+#include <linux/slab.h>
 
 #include "commands.h"
 #include "json.h"
+#include "third-party/base64/base64.h"
 
 // create a function to add a command to the list (called from the VM), locked with a spinlock
 command_answer *send_command(char *name, char *data, task_context *context)
@@ -31,7 +33,7 @@ command_answer *send_command(char *name, char *data, task_context *context)
     DEFINE_WAIT(wait);
 
     // wait until the command is processed
-    printk("wasm: waiting for command to be processed");
+    printk("wasm: waiting for command [%s] to be processed", name);
 
     // wait for the command to be processed
     prepare_to_wait(&cmd->wait_queue, &wait, TASK_INTERRUPTIBLE);
@@ -43,7 +45,7 @@ command_answer *send_command(char *name, char *data, task_context *context)
 
     if (cmd->answer == NULL)
     {
-        printk(KERN_ERR "wasm: command answer timeout");
+        printk(KERN_ERR "wasm: command [%s] answer timeout", name);
 
         cmd->answer = kmalloc(sizeof(struct command_answer), GFP_KERNEL);
         cmd->answer->error = kmalloc(strlen("timeout") + 1, GFP_KERNEL);
@@ -86,6 +88,79 @@ command_answer *send_connect_command(u16 port)
     command_answer *answer = send_command("connect", json_serialize_to_string(root_value), get_task_context());
 
     return answer;
+}
+
+csr_sign_answer *send_csrsign_command(unsigned char *csr)
+{
+    JSON_Value *root_value = json_value_init_object();
+    JSON_Object *root_object = json_value_get_object(root_value);
+
+    json_object_set_string(root_object, "csr", csr);
+
+    command_answer *answer = send_command("csr_sign", json_serialize_to_string(root_value), get_task_context());
+
+    csr_sign_answer *csr_sign_answer = kmalloc(sizeof(struct csr_sign_answer), GFP_KERNEL);
+
+    if (answer->error)
+    {
+        csr_sign_answer->error = answer->error;
+    }
+
+    if (answer->answer)
+    {
+        JSON_Value *json = NULL;
+        json = json_parse_string(answer->answer);
+        JSON_Object *root = json_value_get_object(json);
+
+        JSON_Array *trust_anchors = json_object_get_array(root, "trust_anchors");
+        csr_sign_answer->trust_anchors_len = json_array_get_count(trust_anchors);
+        csr_sign_answer->trust_anchors = kmalloc(csr_sign_answer->trust_anchors_len * sizeof *csr_sign_answer->trust_anchors, GFP_KERNEL);
+
+        size_t destlen;
+        size_t srclen;
+
+        size_t u;
+        for (u = 0; u < csr_sign_answer->trust_anchors_len; u++)
+        {
+            JSON_Object *ta = json_array_get_object(trust_anchors, u);
+
+            csr_sign_answer->trust_anchors[u].flags = BR_X509_TA_CA;
+            csr_sign_answer->trust_anchors[u].pkey.key_type = BR_KEYTYPE_RSA;
+
+            // RAW (DN)
+            char *raw_subject = json_object_get_string(ta, "rawSubject");
+            srclen = strlen(raw_subject);
+            csr_sign_answer->trust_anchors[u].dn.data = kmalloc(srclen, GFP_KERNEL);
+            csr_sign_answer->trust_anchors[u].dn.len = base64_decode(csr_sign_answer->trust_anchors[u].dn.data, srclen, raw_subject, srclen);
+
+            // RSA_N
+            char *rsa_n = json_object_dotget_string(ta, "publicKey.RSA_N");
+            srclen = strlen(rsa_n);
+            csr_sign_answer->trust_anchors[u].pkey.key.rsa.n = kmalloc(srclen, GFP_KERNEL);
+            csr_sign_answer->trust_anchors[u].pkey.key.rsa.nlen = base64_decode(csr_sign_answer->trust_anchors[u].pkey.key.rsa.n, srclen, rsa_n, srclen);
+
+            // RSA_E
+            char *rsa_e = json_object_dotget_string(ta, "publicKey.RSA_E");
+            srclen = strlen(rsa_e);
+            csr_sign_answer->trust_anchors[u].pkey.key.rsa.e = kmalloc(srclen, GFP_KERNEL);
+            csr_sign_answer->trust_anchors[u].pkey.key.rsa.elen = base64_decode(csr_sign_answer->trust_anchors[u].pkey.key.rsa.e, srclen, rsa_e, srclen);
+        }
+
+        csr_sign_answer->chain = kmalloc(1 * sizeof *csr_sign_answer->chain, GFP_KERNEL);
+        csr_sign_answer->chain_len = 1;
+
+        char *raw = json_object_dotget_string(root, "certificate.raw");
+        srclen = strlen(raw);
+        csr_sign_answer->chain[0].data = kmalloc(srclen, GFP_KERNEL);
+        csr_sign_answer->chain[0].data_len = base64_decode(csr_sign_answer->chain[0].data, srclen, raw, srclen);
+
+        if (json)
+        {
+            json_value_free(json);
+        }
+    }
+
+    return csr_sign_answer;
 }
 
 struct command *lookup_in_flight_command(char *id)
