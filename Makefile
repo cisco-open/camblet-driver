@@ -66,7 +66,8 @@ wasm-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  proxywasm.o \
 			  socket.o \
 			  task_context.o \
-			  commands.o
+			  commands.o \
+			  string.o
 
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
