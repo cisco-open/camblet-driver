@@ -10,5 +10,5 @@
 
 #include <linux/slab.h>
 
-void *strndup(void *v_dst, const void *v_src, size_t len);
-void *strdup(void *v_dst, const void *v_src);
+char *strdup(const char *str);
+char *strndup(const char *str, size_t size);
