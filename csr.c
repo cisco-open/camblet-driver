@@ -90,23 +90,23 @@ static i32 alloc_and_copy_parameter(char *str, i32 str_length, csr_module *csr)
         goto bail;
     }
     addr = malloc_result.data->i32;
-    strcpy(wasm_vm_memory(get_csr_module(csr)) + addr, str);
-    bail:
-        return addr;
+    strncpy(wasm_vm_memory(get_csr_module(csr)) + addr, str, str_length);
+bail:
+    return addr;
 }
 
 wasm_vm_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len, csr_parameters *parameters)
 {
     wasm_vm_result result;
 
-    #define ALLOCATE_AND_CHECK(field) \
-    i32 field##_len = strlen(parameters->field) + 1; \
-    i32 field##_ptr; \
-    field##_ptr = alloc_and_copy_parameter(parameters->field, field##_len, csr); \
-    if (field##_ptr == -1 ) \
-    { \
+#define ALLOCATE_AND_CHECK(field)                                                 \
+    i32 field##_len = strlen(parameters->field);                                  \
+    i32 field##_ptr;                                                              \
+    field##_ptr = alloc_and_copy_parameter(parameters->field, field##_len, csr);  \
+    if (field##_ptr == -1)                                                        \
+    {                                                                             \
         result.err = "wasm: error during allocating ptr with length for " #field; \
-        goto bail; \
+        goto bail;                                                                \
     }
 
     ALLOCATE_AND_CHECK(subject);
@@ -115,29 +115,30 @@ wasm_vm_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff
     ALLOCATE_AND_CHECK(email);
     ALLOCATE_AND_CHECK(ip);
 
-    result = wasm_vm_call_direct(csr->vm, csr->generate_csr, 
-        priv_key_buff_ptr, priv_key_buff_len, 
-        subject_ptr, subject_len,
-        dns_ptr, dns_len,
-        uri_ptr, uri_len,
-        email_ptr, email_len,
-        ip_ptr, ip_len);
+    result = wasm_vm_call_direct(csr->vm, csr->generate_csr,
+                                 priv_key_buff_ptr, priv_key_buff_len,
+                                 subject_ptr, subject_len,
+                                 dns_ptr, dns_len,
+                                 uri_ptr, uri_len,
+                                 email_ptr, email_len,
+                                 ip_ptr, ip_len);
     if (result.err != NULL)
     {
         pr_err("wasm: calling csr_gen errored %s\n", result.err);
         goto bail;
     }
     printk("wasm: result of calling csr_gen %d\n", result.data->i64);
-    bail:
-        i32 pointers[] = {subject_ptr, dns_ptr, uri_ptr, email_ptr, ip_ptr};
+bail:
+    i32 pointers[] = {subject_ptr, dns_ptr, uri_ptr, email_ptr, ip_ptr};
 
-        int i;
-        for(i = 0; i < (sizeof(pointers) / sizeof(pointers[0])); i++) {
-            wasm_vm_result free_result = csr_free(csr, subject_ptr);
-            if (free_result.err)
-            {
-                result = free_result;
-            }
+    int i;
+    for (i = 0; i < (sizeof(pointers) / sizeof(pointers[0])); i++)
+    {
+        wasm_vm_result free_result = csr_free(csr, pointers[i]);
+        if (free_result.err)
+        {
+            result = free_result;
         }
-        return result;
+    }
+    return result;
 }
