@@ -13,6 +13,7 @@
 #include "commands.h"
 #include "json.h"
 #include "base64.h"
+#include "string.h"
 
 // create a function to add a command to the list (called from the VM), locked with a spinlock
 command_answer *send_command(char *name, char *data, task_context *context)
@@ -102,7 +103,7 @@ csr_sign_answer *send_csrsign_command(unsigned char *csr)
 
     if (answer->error)
     {
-        csr_sign_answer->error = answer->error;
+        strdup(csr_sign_answer->error, answer->error);
     }
 
     if (answer->answer)
@@ -157,10 +158,9 @@ csr_sign_answer *send_csrsign_command(unsigned char *csr)
         {
             json_value_free(json);
         }
-
-        kfree(answer->answer);
-        kfree(answer);
     }
+
+    free_command_answer(answer);
 
     return csr_sign_answer;
 }
