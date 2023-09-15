@@ -157,6 +157,9 @@ csr_sign_answer *send_csrsign_command(unsigned char *csr)
         {
             json_value_free(json);
         }
+
+        kfree(answer->answer);
+        kfree(answer);
     }
 
     return csr_sign_answer;
