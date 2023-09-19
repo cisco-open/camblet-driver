@@ -15,6 +15,12 @@
 #include "base64.h"
 #include "string.h"
 
+// protect the command list with a mutex
+static DEFINE_SPINLOCK(command_list_lock);
+static unsigned long command_list_lock_flags;
+static LIST_HEAD(command_list);
+static LIST_HEAD(in_flight_command_list);
+
 // create a function to add a command to the list (called from the VM), locked with a spinlock
 command_answer *send_command(char *name, char *data, task_context *context)
 {
