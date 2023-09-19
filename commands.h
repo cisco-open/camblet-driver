@@ -54,10 +54,4 @@ typedef struct command
 struct command *lookup_in_flight_command(char *id);
 struct command *get_command(void);
 
-// protect the command list with a mutex
-static DEFINE_SPINLOCK(command_list_lock);
-static unsigned long command_list_lock_flags;
-static LIST_HEAD(command_list);
-static LIST_HEAD(in_flight_command_list);
-
 #endif
