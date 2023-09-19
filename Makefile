@@ -117,8 +117,8 @@ _archlinux_deps:
 	sudo pacman -Syu linux-headers base-devel clang go dkms git strace bc
 
 _install_opa:
-	sudo curl -L -o /usr/local/bin/opa https://openpolicyagent.org/downloads/v0.54.0/opa_linux_$(shell go version | cut -f2 -d'/')_static
-	sudo chmod +x /usr/local/bin/opa
+	sudo curl -L -o /usr/bin/opa https://openpolicyagent.org/downloads/v0.54.0/opa_linux_$(shell go version | cut -f2 -d'/')_static
+	sudo chmod +x /usr/bin/opa
 
 setup-vm: _debian_deps _install_opa
 	sudo cp /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
