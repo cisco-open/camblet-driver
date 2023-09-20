@@ -928,17 +928,18 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 	}
 	else
 	{
-		printk("wasm_accept_v6: uid: %d app: %s", current_uid().val, current->comm);
 		client = accept_v6(sk, flags, err, kern);
 		prot = &wasm_v6_prot;
 	}
 
 	u16 port = (u16)(sk->sk_portpair >> 16);
-	printk("wasm_accept: uid: %d app: %s on port: %d", current_uid().val, current->comm, port);
 
 	opa_socket_context opa_socket = socket_eval(port, OUTPUT, current->comm, current_uid().val);
 	if (client && opa_socket.allowed)
 	{
+		u16 client_port = (u16)(client->sk_portpair);
+		printk("wasm_accept: uid: %d app: %s on ports: %d <- %d", current_uid().val, current->comm, port, client_port);
+
 		proxywasm *p = this_cpu_proxywasm();
 		proxywasm_lock(p, NULL);
 
@@ -1146,7 +1147,6 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
 	u16 port = ntohs(usin->sin_port);
-	printk("wasm_connect: uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
 
 	int ret;
 	struct proto *prot;
@@ -1161,6 +1161,8 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		ret = connect_v6(sk, uaddr, addr_len);
 		prot = &wasm_v6_prot;
 	}
+
+	printk("wasm_connect: uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
 
 	opa_socket_context opa_socket = socket_eval(port, OUTPUT, current->comm, current_uid().val);
 	if (ret == 0 && opa_socket.allowed)
@@ -1428,6 +1430,9 @@ void wasm_socket_exit(void)
 {
 	tcp_prot.accept = accept;
 	tcp_prot.connect = connect;
+
+	tcpv6_prot.accept = accept_v6;
+	tcpv6_prot.connect = connect_v6;
 
 	//- free global tls key
 	kfree(rsa_priv);
