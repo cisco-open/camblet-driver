@@ -8,8 +8,8 @@
  * modified, or distributed except according to those terms.
  */
 
-#ifndef wasm_module_h
-#define wasm_module_h
+#ifndef wasm_h
+#define wasm_h
 
 #include "m3_core.h"
 #include "m3_env.h"
@@ -18,7 +18,7 @@
 
 #define FATAL(msg, ...)                                                    \
     {                                                                      \
-        printk(KERN_CRIT "wasm: Error: [Fatal] " msg "\n", ##__VA_ARGS__); \
+        printk(KERN_CRIT "nasp: Error: [Fatal] " msg "\n", ##__VA_ARGS__); \
     }
 
 #define PRIi32 "i"

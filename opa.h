@@ -11,7 +11,7 @@
 #ifndef opa_h
 #define opa_h
 
-#include "runtime.h"
+#include "wasm.h"
 
 #define OPA_MODULE "opa"
 

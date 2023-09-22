@@ -71,7 +71,7 @@ static i32 trace(opa_wrapper *opa, i32 _ctx, i32 arg1)
         return 0;
     }
 
-    printk("wasm: opa: Note %s", (char *)(mem + result.data->i32));
+    printk("nasp: opa: Note %s", (char *)(mem + result.data->i32));
 
     result = opa_malloc(opa, sizeof(true));
     if (result.err)
@@ -96,7 +96,7 @@ static int parse_opa_builtins(opa_wrapper *opa, char *json)
     {
         JSON_Object *object = json_object(root_value);
         int builtins = json_object_get_count(object);
-        printk("wasm: opa module builtins = %s", json);
+        printk("nasp: opa module builtins = %s", json);
 
         // indexing starts from 1 for some reason, so we need one bigger array
         opa->builtins = kzalloc(builtins + 1 * sizeof(void *), GFP_KERNEL);
@@ -116,7 +116,7 @@ static int parse_opa_builtins(opa_wrapper *opa, char *json)
             }
             else
             {
-                printk(KERN_WARNING "wasm: this opa module uses an unsupported builtin function: %s", name);
+                printk(KERN_WARNING "nasp: this opa module uses an unsupported builtin function: %s", name);
             }
         }
 
@@ -176,7 +176,7 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
 m3ApiRawFunction(opa_abort)
 {
     m3ApiGetArgMem(char *, addr);
-    pr_err("wasm: opa_abort: %s", addr);
+    pr_err("nasp: opa_abort: %s", addr);
     m3ApiTrap(m3Err_trapAbort);
 }
 
@@ -196,13 +196,13 @@ m3ApiRawFunction(opa_builtin0)
 
     opa_wrapper *opa = (opa_wrapper *)_ctx->userdata;
 
-    printk("wasm: calling opa_builtin0 %d", builtin_id);
+    printk("nasp: calling opa_builtin0 %d", builtin_id);
 
     i32 (*builtin)(opa_wrapper *, i32) = opa->builtins[builtin_id];
 
     if (!builtin)
     {
-        pr_err("wasm: opa_builtin0 %d not found", builtin_id);
+        pr_err("nasp: opa_builtin0 %d not found", builtin_id);
         m3ApiTrap(m3Err_trapAbort);
     }
 
@@ -219,13 +219,13 @@ m3ApiRawFunction(opa_builtin1)
 
     opa_wrapper *opa = (opa_wrapper *)_ctx->userdata;
 
-    printk("wasm: calling opa_builtin1 %d", builtin_id);
+    printk("nasp: calling opa_builtin1 %d", builtin_id);
 
     i32 (*builtin)(opa_wrapper *, i32, i32) = opa->builtins[builtin_id];
 
     if (!builtin)
     {
-        pr_err("wasm: opa_builtin1 %d not found", builtin_id);
+        pr_err("nasp: opa_builtin1 %d not found", builtin_id);
         m3ApiTrap(m3Err_trapAbort);
     }
 
@@ -315,14 +315,14 @@ int this_cpu_opa_eval(const char *input)
     wasm_vm_result result;
 
     opa_wrapper *opa = this_cpu_opa();
-    printk("wasm: opa %s.eval input: %s", opa->eval->module->name, input);
+    printk("nasp: opa %s.eval input: %s", opa->eval->module->name, input);
 
     wasm_vm_lock(opa->vm);
 
     if (!opa)
     {
         ret = true;
-        pr_warn("wasm: opa policy module not loaded, eval always evalautes to true");
+        pr_warn("nasp: opa policy module not loaded, eval always evalautes to true");
         goto cleanup;
     }
 
@@ -348,7 +348,7 @@ int this_cpu_opa_eval(const char *input)
     char *json = (char *)(memory + result.data->i32);
     ret = parse_opa_eval_result(json);
 
-    printk("wasm: opa %s.eval result: %s -> %d", opa->eval->module->name, json, ret);
+    printk("nasp: opa %s.eval result: %s -> %d", opa->eval->module->name, json, ret);
 
 cleanup:
     if (inputAddr != 0)
@@ -370,13 +370,13 @@ opa_socket_context this_cpu_opa_socket_eval(const char *input)
     wasm_vm_result result;
 
     opa_wrapper *opa = this_cpu_opa();
-    printk("wasm: opa %s.eval input: %s", opa->eval->module->name, input);
+    printk("nasp: opa %s.eval input: %s", opa->eval->module->name, input);
 
     wasm_vm_lock(opa->vm);
 
     if (!opa)
     {
-        pr_warn("wasm: opa socket policy module not loaded, eval always evaluates to NULL");
+        pr_warn("nasp: opa socket policy module not loaded, eval always evaluates to NULL");
         goto cleanup;
     }
 
@@ -402,7 +402,7 @@ opa_socket_context this_cpu_opa_socket_eval(const char *input)
     char *json = (char *)(memory + result.data->i32);
     ret = parse_opa_socket_eval_result(json);
 
-    printk("wasm: opa %s.eval result: %s -> %d", opa->eval->module->name, json, ret.allowed);
+    printk("nasp: opa %s.eval result: %s -> %d", opa->eval->module->name, json, ret.allowed);
 
 cleanup:
     if (inputAddr != 0)

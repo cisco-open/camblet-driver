@@ -11,7 +11,7 @@
 #ifndef proxywasm_h
 #define proxywasm_h
 
-#include "runtime.h"
+#include "wasm.h"
 
 #define PROXY_WASM "proxywasm"
 

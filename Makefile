@@ -36,8 +36,8 @@ ccflags-remove-y += -Wdeclaration-after-statement
 VERBOSE := 1
 
 # obj-m specifies we're a kernel module.
-obj-m += wasm.o
-wasm-objs :=  third-party/wasm3/source/m3_api_libc.o \
+obj-m += nasp.o
+nasp-objs :=  third-party/wasm3/source/m3_api_libc.o \
               third-party/wasm3/source/m3_compile.o \
 			  third-party/wasm3/source/m3_api_meta_wasi.o \
 			  third-party/wasm3/source/m3_api_tracer.o \
@@ -60,7 +60,7 @@ wasm-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  hashtable.o \
 			  csr.o \
 			  rsa_tools.o \
-			  runtime.o \
+			  wasm.o \
 			  worker_thread.o \
 			  opa.o \
 			  proxywasm.o \
@@ -94,19 +94,21 @@ help:
 logs:
 	sudo dmesg -T --follow
 
-insmod-bearssl:
+insmod-tls:
+	sudo modprobe tls
+	
+insmod-bearssl: insmod-tls
 	sudo insmod third-party/BearSSL/bearssl.ko
 
 insmod: insmod-bearssl
-	sudo modprobe tls
-	sudo insmod wasm.ko
+	sudo insmod nasp.ko
 
 insmod-no-proxywasm: insmod-bearssl
-	sudo insmod wasm.ko proxywasm_modules=0
+	sudo insmod nasp.ko proxywasm_modules=0
 
 rmmod:
-	sudo rmmod wasm
-	sudo rm -f /run/wasm.socket
+	sudo rmmod nasp
+	sudo rm -f /run/nasp.socket
 	sudo rmmod bearssl
 
 _debian_deps:

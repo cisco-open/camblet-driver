@@ -19,7 +19,7 @@
 #include "opa.h"
 #include "proxywasm.h"
 #include "csr.h"
-#include "runtime.h"
+#include "wasm.h"
 #include "commands.h"
 
 /* Global variables are declared as static, so are global within the file. */
@@ -70,7 +70,7 @@ static int write_command_to_buffer(char *buffer, size_t buffer_size, struct comm
     length = strlen(serialized_string);
     if (length > buffer_size)
     {
-        printk(KERN_ERR "wasm: command buffer too small: %d", length);
+        printk(KERN_ERR "nasp: command buffer too small: %d", length);
         length = -1;
         goto cleanup;
     }
@@ -104,11 +104,11 @@ int chardev_init(void)
 
     if (major < 0)
     {
-        pr_alert("wasm: Registering char device failed with %d", major);
+        pr_alert("nasp: Registering char device failed with %d", major);
         return major;
     }
 
-    pr_info("wasm: I was assigned major number %d.", major);
+    pr_info("nasp: I was assigned major number %d.", major);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
     cls = class_create(THIS_MODULE, DEVICE_NAME);
@@ -118,7 +118,7 @@ int chardev_init(void)
 
     device_create(cls, NULL, MKDEV(major, 0), NULL, DEVICE_NAME);
 
-    pr_info("wasm: Device created on /dev/%s", DEVICE_NAME);
+    pr_info("nasp: Device created on /dev/%s", DEVICE_NAME);
 
     return SUCCESS;
 }
@@ -188,7 +188,7 @@ wasm_vm_result load_module(char *name, char *code, unsigned length, char *entryp
 
         if (entrypoint)
         {
-            printk("wasm: calling module entrypoint: %s", entrypoint);
+            printk("nasp: calling module entrypoint: %s", entrypoint);
 
             result = wasm_vm_call(vm, name, entrypoint);
             // if we can't find the implicit main entrypoint, that is not an issue
@@ -200,14 +200,14 @@ wasm_vm_result load_module(char *name, char *code, unsigned length, char *entryp
                 return result;
             }
 
-            printk("wasm: module entrypoint finished");
+            printk("nasp: module entrypoint finished");
 
             result.err = NULL;
         }
 
         if (strstr(name, OPA_MODULE) != NULL)
         {
-            printk("wasm: initializing opa for %s", name);
+            printk("nasp: initializing opa for %s", name);
             result = init_opa_for(vm, module);
             if (result.err)
             {
@@ -218,7 +218,7 @@ wasm_vm_result load_module(char *name, char *code, unsigned length, char *entryp
         }
         else if (strstr(name, PROXY_WASM) != NULL)
         {
-            printk("wasm: initializing proxywasm for %s", name);
+            printk("nasp: initializing proxywasm for %s", name);
             result = init_proxywasm_for(vm, module);
             if (result.err)
             {
@@ -229,7 +229,7 @@ wasm_vm_result load_module(char *name, char *code, unsigned length, char *entryp
         }
         else if (strstr(name, CSR_MODULE) != NULL)
         {
-            printk("wasm: initializing csr module for %s", name);
+            printk("nasp: initializing csr module for %s", name);
             result = init_csr_for(vm, module);
             if (result.err)
             {
@@ -257,12 +257,12 @@ int parse_json_from_buffer(void)
         JSON_Object *root = json_value_get_object(json);
         char *command = json_object_get_string(root, "command");
 
-        printk("wasm: command %s", command);
+        printk("nasp: command %s", command);
 
         if (strcmp("load", command) == 0)
         {
             char *name = json_object_get_string(root, "name");
-            printk("wasm: loading module: %s", name);
+            printk("nasp: loading module: %s", name);
 
             char *code = json_object_get_string(root, "code");
             int length = base64_decode(device_buffer, DEVICE_BUFFER_SIZE, code, strlen(code));
@@ -276,7 +276,7 @@ int parse_json_from_buffer(void)
             char *entrypoint = json_object_get_string(root, "entrypoint");
             if (entrypoint == NULL)
             {
-                printk("wasm: setting default module entrypoint \"%s\"", DEFAULT_MODULE_ENTRYPOINT);
+                printk("nasp: setting default module entrypoint \"%s\"", DEFAULT_MODULE_ENTRYPOINT);
                 entrypoint = DEFAULT_MODULE_ENTRYPOINT;
             }
 
@@ -290,7 +290,7 @@ int parse_json_from_buffer(void)
         }
         else if (strcmp("reset", command) == 0)
         {
-            printk("wasm: reseting vm");
+            printk("nasp: reseting vm");
 
             wasm_vm_result result = reset_vms();
             if (result.err)
@@ -304,7 +304,7 @@ int parse_json_from_buffer(void)
         {
             char *base64_id = json_object_get_string(root, "id");
 
-            printk("wasm: command answer parsing, id: %s", base64_id);
+            printk("nasp: command answer parsing, id: %s", base64_id);
 
             char command_id[UUID_SIZE * 2];
             int length = base64_decode(command_id, UUID_SIZE * 2, base64_id, strlen(base64_id));
@@ -319,7 +319,7 @@ int parse_json_from_buffer(void)
 
             if (cmd == NULL)
             {
-                printk(KERN_ERR "wasm: command %d not found", command_id);
+                printk(KERN_ERR "nasp: command %d not found", command_id);
                 status = -1;
                 goto cleanup;
             }
@@ -365,7 +365,7 @@ int parse_json_from_buffer(void)
                 goto cleanup;
             }
 
-            printk("wasm: proxy_on_context_create result %d", result.data->i32);
+            printk("nasp: proxy_on_context_create result %d", result.data->i32);
 
             result = proxy_on_new_connection(proxywasm);
             if (result.err)
@@ -374,7 +374,7 @@ int parse_json_from_buffer(void)
                 goto cleanup;
             }
 
-            printk("wasm: proxy_on_new_connection result %d", result.data->i32);
+            printk("nasp: proxy_on_new_connection result %d", result.data->i32);
 
             result = proxy_on_downstream_data(proxywasm, 128, false);
             if (result.err)
@@ -385,7 +385,7 @@ int parse_json_from_buffer(void)
         }
         else
         {
-            printk(KERN_ERR "wasm: command not implemented: %s", command);
+            printk(KERN_ERR "nasp: command not implemented: %s", command);
             status = -1;
             goto cleanup;
         }
@@ -403,7 +403,7 @@ cleanup:
 /* Called when a process closes the device file. */
 static int device_release(struct inode *inode, struct file *file)
 {
-    printk(KERN_INFO "wasm: device has been released");
+    printk(KERN_INFO "nasp: device has been released");
 
     device_buffer_size = 0;
 
@@ -427,7 +427,7 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
                            size_t length,       /* length of the buffer     */
                            loff_t *offset)
 {
-    printk("wasm: device_read: length: %lu offset: %llu", length, *offset);
+    printk("nasp: device_read: length: %lu offset: %llu", length, *offset);
 
     struct command *c = get_command();
     // wait until command is available
@@ -446,7 +446,7 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
         return -EFAULT;
     }
 
-    printk("wasm: the command json is done: %s", device_out_buffer);
+    printk("nasp: the command json is done: %s", device_out_buffer);
 
     int bytes_read = 0;
     int bytes_to_read = json_length; // min(length, c->size - *offset);
@@ -480,7 +480,7 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
         bytes_to_write = maxbytes;
 
     bytes_writen = bytes_to_write - copy_from_user(device_buffer + device_buffer_size, buffer, bytes_to_write);
-    printk(KERN_INFO "wasm: device has been written %d", bytes_writen);
+    printk(KERN_INFO "nasp: device has been written %d", bytes_writen);
     *offset += bytes_writen;
     device_buffer_size += bytes_writen;
 
@@ -506,7 +506,7 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
         int status = parse_json_from_buffer();
         if (status != 0)
         {
-            printk(KERN_ERR "wasm: parse_json_from_buffer failed: %d", status);
+            printk(KERN_ERR "nasp: parse_json_from_buffer failed: %d", status);
             return -1;
         }
 

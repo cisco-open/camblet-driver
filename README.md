@@ -1,6 +1,6 @@
-# wasm-kernel-module
+# nasp-kernel-module
 
-[![Makefile CI](https://github.com/cisco-open/wasm-kernel-module/actions/workflows/build.yml/badge.svg)](https://github.com/cisco-open/wasm-kernel-module/actions/workflows/build.yml)
+[![Makefile CI](https://github.com/cisco-open/nasp-kernel-module/actions/workflows/build.yml/badge.svg)](https://github.com/cisco-open/nasp-kernel-module/actions/workflows/build.yml)
 
 This Linux Kernel module runs and exposes a [Wasm](https://webassembly.org) runtime as a proof of concept for checking:
 - Wasm is capable of running the kernel space
@@ -29,8 +29,8 @@ Current restrictions for kernel-space wasm3:
 Checkout the code before you start:
 
 ```bash
-git clone --recurse-submodules https://github.com/cisco-open/wasm-kernel-module.git
-cd wasm-kernel-module
+git clone --recurse-submodules https://github.com/cisco-open/nasp-kernel-module.git
+cd nasp-kernel-module
 ```
 
 ### Lima
@@ -100,7 +100,7 @@ make setup-dev-env
 
 *This assumes that you have created a development environment according to the previous section.*
 
-Build the kernel modules(BearSSL and WASM):
+Build the kernel modules(BearSSL and NASP):
 
 ```bash
 # Enter the VM
@@ -110,13 +110,13 @@ lima
 make -j$(nproc)
 ```
 
-Load the kernel modules(BearSSL and WASM):
+Load the kernel modules(BearSSL and NASP):
 
 ```bash
 make insmod
 ```
 
-Unload the kernel modules(BearSSL and WASM):
+Unload the kernel modules(BearSSL and NASP):
 
 ```bash
 make rmmod
@@ -128,19 +128,19 @@ Follow the kernel logs:
 make logs
 ```
 
-Install the [CLI](https://github.com/cisco-open/wasm-kernel-module-cli) for the kernel module:
+Install the [CLI](https://github.com/cisco-open/nasp-kernel-module-cli) for the kernel module:
 
 ```bash
 # You can build the module on your workstation
-git clone https://github.com/cisco-open/wasm-kernel-module-cli.git
-cd wasm-kernel-module-cli
+git clone https://github.com/cisco-open/nasp-kernel-module-cli.git
+cd nasp-kernel-module-cli
 make build-cli
 
 # But you need to run it in the VM, where the device is exposed
 lima sudo ./w3k server
 ```
 
-Then follow the instructions [here](https://github.com/cisco-open/wasm-kernel-module-cli#cli).
+Then follow the instructions [here](https://github.com/cisco-open/nasp-kernel-module-cli#cli).
 
 ## TLS Termination
 
@@ -203,16 +203,16 @@ lima curl -v http://localhost:8000
 
 Linux kernel modules need to be built against a specified kernel version, this is when dynamic kernel module support, [DKMS](https://github.com/dell/dkms) comes in handy. The DKMS framework enables you to automatically re-build kernel modules into the current kernel tree as you upgrade your kernel.
 
-The Wasm kernel module has support for DKMS, you can use it in the following way currently:
+The NASP kernel module has support for DKMS, you can use it in the following way currently:
 
 ```bash
-sudo git clone --recurse-submodule --branch dkms https://github.com/cisco-open/wasm-kernel-module.git /usr/src/wasm-0.1.0/
+sudo git clone --recurse-submodule --branch dkms https://github.com/cisco-open/nasp-kernel-module.git /usr/src/nasp-0.1.0/
 
 # Add the kernel module to the DKMS source control
-sudo dkms add -m wasm -v 0.1.0
+sudo dkms add -m nasp -v 0.1.0
 
 # Build and install the kernel module against the current kernel version
-sudo dkms install -m wasm -v 0.1.0
+sudo dkms install -m nasp -v 0.1.0
 
 # Check the logs that the module got loaded
 sudo dmesg -T
@@ -221,6 +221,6 @@ sudo dmesg -T
 Un-installation is very simple as well:
 
 ```bash
-sudo dkms uninstall -m wasm -v 0.1.0
-sudo dkms remove -m wasm -v 0.1.0
+sudo dkms uninstall -m nasp -v 0.1.0
+sudo dkms remove -m nasp -v 0.1.0
 ```

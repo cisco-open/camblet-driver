@@ -21,7 +21,7 @@ static struct socket *sock;
 static struct socket *c_sock;
 static bool c_connected = false;
 
-static char *sock_path = "/run/wasm.socket";
+static char *sock_path = "/run/nasp.socket";
 
 module_param(sock_path, charp, 0000);
 MODULE_PARM_DESC(sock_path, "communication socket path");
@@ -75,18 +75,18 @@ err:
 
 static void accept_work(struct work_struct *dummy)
 {
-    printk("wasm: waiting for client connection...");
+    printk("nasp: waiting for client connection...");
 
     int ret;
 
     ret = kernel_accept(sock, &c_sock, 0);
     if (ret)
     {
-        pr_err("wasm: kernel_accept failed: %d", ret);
+        pr_err("nasp: kernel_accept failed: %d", ret);
     }
     else
     {
-        printk("wasm: accepted connection from socket");
+        printk("nasp: accepted connection from socket");
         c_connected = true;
     }
 }
@@ -112,12 +112,12 @@ void submit_metric_handler(struct work_struct *work)
     int ret = send_msg(c_sock, my_work->metric_line, my_work->metric_line_len);
     if (ret < 0)
     {
-        pr_err("wasm: message send failed: %d\n", ret);
+        pr_err("nasp: message send failed: %d\n", ret);
         if (c_sock != NULL)
         {
             kernel_sock_shutdown(c_sock, SHUT_RDWR);
             c_connected = false;
-            pr_err("wasm: socket closed");
+            pr_err("nasp: socket closed");
             schedule_work(&sock_accept);
         }
     }
@@ -128,11 +128,11 @@ void submit_metric_handler(struct work_struct *work)
 
 void submit_metric(char *metric_line, size_t metric_line_len)
 {
-    printk("wasm: submit_metric: %.*s", (int)metric_line_len, metric_line);
+    printk("nasp: submit_metric: %.*s", (int)metric_line_len, metric_line);
 
     if (!c_connected)
     {
-        printk("wasm: submit_metric: no clients, dropping metric");
+        printk("nasp: submit_metric: no clients, dropping metric");
         kfree(metric_line);
         return;
     }
@@ -149,12 +149,12 @@ void submit_metric(char *metric_line, size_t metric_line_len)
 
 int worker_thread_init(void)
 {
-    printk("wasm: initializing socket workqueue module");
+    printk("nasp: initializing socket workqueue module");
 
     int ret = make_server_socket();
     if (ret)
     {
-        pr_err("wasm: server socket creation failed: %d", ret);
+        pr_err("nasp: server socket creation failed: %d", ret);
         return ret;
     }
 
@@ -163,7 +163,7 @@ int worker_thread_init(void)
 
 void worker_thread_exit(void)
 {
-    printk("wasm: socket workqueue module unload");
+    printk("nasp: socket workqueue module unload");
     if (sock)
         kernel_sock_shutdown(sock, SHUT_RDWR);
 }

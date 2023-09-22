@@ -1,7 +1,7 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
-vbox_name = "wasm"
+vbox_name = "nasp"
 
 unless Vagrant.has_plugin?("vagrant-vbguest")
   vbguest_installed = false

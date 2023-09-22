@@ -28,14 +28,14 @@
     proxywasm_filter *f;                                                               \
     for (f = p->filters; f != NULL; f = f->next)                                       \
     {                                                                                  \
-        printk("wasm: calling %s " #CALL, f->name);                                    \
+        printk("nasp: calling %s " #CALL, f->name);                                    \
         result = CALL;                                                                 \
         if (result.err != NULL)                                                        \
         {                                                                              \
-            pr_err("wasm: calling %s " #CALL " error: %s\n", f->name, result.err);     \
+            pr_err("nasp: calling %s " #CALL " error: %s\n", f->name, result.err);     \
             return result;                                                             \
         }                                                                              \
-        printk("wasm: result of calling %s " #CALL ": %d", f->name, result.data->i32); \
+        printk("nasp: result of calling %s " #CALL ": %d", f->name, result.data->i32); \
     }                                                                                  \
     return result;
 
@@ -195,7 +195,7 @@ m3ApiRawFunction(proxy_log)
 
     m3ApiCheckMem(message_data, message_size);
 
-    printk("proxywasm [%s]: [%d] %.*s", current->comm, log_level, message_size, message_data);
+    printk("nasp: proxywasm [%s] [%d] %.*s", current->comm, log_level, message_size, message_data);
 
     m3ApiReturn(WasmResult_Ok);
 }
@@ -208,7 +208,7 @@ m3ApiRawFunction(proxy_set_tick_period_milliseconds)
 
     proxywasm_filter *filter = _ctx->userdata;
 
-    printk("wasm: calling proxy_set_tick_period_milliseconds %d", tick_period);
+    printk("nasp: calling proxy_set_tick_period_milliseconds %d", tick_period);
 
     filter->proxywasm->current_context->tick_period = tick_period;
 
@@ -231,7 +231,7 @@ m3ApiRawFunction(proxy_get_property)
 
     char *value = NULL;
     int value_len;
-    // printk("wasm: calling proxy_get_property in %s '%.*s' (%d) return values -> %p %p", filter->name, property_path_size, property_path_data, property_path_size, return_property_value_data, return_property_value_size);
+    // printk("nasp: calling proxy_get_property in %s '%.*s' (%d) return values -> %p %p", filter->name, property_path_size, property_path_data, property_path_size, return_property_value_data, return_property_value_size);
 
     get_property(filter->proxywasm->current_context, property_path_data, property_path_size, &value, &value_len);
 
@@ -244,7 +244,7 @@ m3ApiRawFunction(proxy_get_property)
             return m3Err_mallocFailed;
         }
 
-        // printk("wasm: proxy_on_memory_allocate returned %d, value points to %p, *return_property_value_data -> %d", result.data->i32, value, *return_property_value_data);
+        // printk("nasp: proxy_on_memory_allocate returned %d, value points to %p, *return_property_value_data -> %d", result.data->i32, value, *return_property_value_data);
 
         int wasm_ptr = result.data->i32;
 
@@ -254,12 +254,12 @@ m3ApiRawFunction(proxy_get_property)
         *return_property_value_data = wasm_ptr;
         *return_property_value_size = value_len;
 
-        // printk("wasm: proxy_get_property ready, value_len: %d, return_property_value_data -> %d", value_len, *return_property_value_data);
+        // printk("nasp: proxy_get_property ready, value_len: %d, return_property_value_data -> %d", value_len, *return_property_value_data);
 
         m3ApiReturn(WasmResult_Ok);
     }
 
-    // printk("wasm: proxy_get_property WasmResult_NotFound");
+    // printk("nasp: proxy_get_property WasmResult_NotFound");
     m3ApiReturn(WasmResult_NotFound);
 }
 
@@ -279,7 +279,7 @@ m3ApiRawFunction(proxy_set_property)
 
     proxywasm_filter *filter = _ctx->userdata;
 
-    // printk("wasm: calling proxy_set_property '%.*s' (%d) -> %.*s (%d)", property_path_size, property_path_data, property_path_size, property_value_size, property_value_data, property_value_size);
+    // printk("nasp: calling proxy_set_property '%.*s' (%d) -> %.*s (%d)", property_path_size, property_path_data, property_path_size, property_value_size, property_value_data, property_value_size);
 
     set_property(filter->proxywasm->current_context, property_path_data, property_path_size, property_value_data, property_value_size);
 
@@ -301,7 +301,7 @@ m3ApiRawFunction(proxy_get_buffer_bytes)
 
     char *value = NULL;
     int value_len = 0;
-    // printk("wasm: calling proxy_get_buffer_bytes buffer_type '%d' (start: %d, max_size: %d)", buffer_type, start, max_size);
+    // printk("nasp: calling proxy_get_buffer_bytes buffer_type '%d' (start: %d, max_size: %d)", buffer_type, start, max_size);
 
     get_buffer_bytes(filter->proxywasm->current_context, buffer_type, start, max_size, &value, &value_len);
 
@@ -314,7 +314,7 @@ m3ApiRawFunction(proxy_get_buffer_bytes)
             return m3Err_mallocFailed;
         }
 
-        // printk("wasm: proxy_on_memory_allocate returned %d, value points to %p, size -> %d", result.data->i32, value, value_len);
+        // printk("nasp: proxy_on_memory_allocate returned %d, value points to %p, size -> %d", result.data->i32, value, value_len);
 
         int wasm_ptr = result.data->i32;
 
@@ -324,12 +324,12 @@ m3ApiRawFunction(proxy_get_buffer_bytes)
         *return_buffer_data = wasm_ptr;
         *return_buffer_size = value_len;
 
-        // printk("wasm: get_buffer_bytes ready, value_len: %d, return_buffer_data -> %d", value_len, *return_buffer_data);
+        // printk("nasp: get_buffer_bytes ready, value_len: %d, return_buffer_data -> %d", value_len, *return_buffer_data);
 
         m3ApiReturn(WasmResult_Ok);
     }
 
-    printk("wasm: [%d] calling proxy_get_buffer_bytes buffer_type '%d'", filter->proxywasm->current_context->id, buffer_type);
+    printk("nasp: [%d] calling proxy_get_buffer_bytes buffer_type '%d'", filter->proxywasm->current_context->id, buffer_type);
 
     m3ApiReturn(WasmResult_NotFound);
 }
@@ -396,7 +396,7 @@ void print_property_key(const char *func, const char *key, int key_len)
             c = '.';
         buf[key_len] = c;
     }
-    printk("wasm: %s key: %s", func, buf);
+    printk("nasp: %s key: %s", func, buf);
 }
 
 wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
@@ -410,7 +410,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
         proxywasms[wasm_vm_cpu(vm)] = proxywasm;
 
         proxywasm_context *root_context = new_proxywasm_context(NULL);
-        printk("wasm: root_context_id %d", root_context->id);
+        printk("nasp: root_context_id %d", root_context->id);
 
         proxywasm->root_context = root_context;
         proxywasm->current_context = root_context;
@@ -530,13 +530,13 @@ wasm_vm_result proxywasm_destroy_context(proxywasm *p)
         result = wasm_vm_call_direct(p->vm, f->proxy_on_done, p->current_context->id);
         if (result.err != NULL)
         {
-            pr_err("wasm: calling %s.proxy_on_done errored %s", f->name, result.err);
+            pr_err("nasp: calling %s.proxy_on_done errored %s", f->name, result.err);
         }
 
         result = wasm_vm_call_direct(p->vm, f->proxy_on_delete, p->current_context->id);
         if (result.err != NULL)
         {
-            pr_err("wasm: calling %s.proxy_on_delete errored %s", f->name, result.err);
+            pr_err("nasp: calling %s.proxy_on_delete errored %s", f->name, result.err);
         }
     }
 
@@ -580,7 +580,7 @@ void set_property(proxywasm_context *p, const char *key, int key_len, const char
     struct property_h_node *cur, *node = kmalloc(sizeof(struct property_h_node), GFP_KERNEL);
     uint32_t key_i = xxh32(key, key_len, 0);
     print_property_key("set_property", key, key_len);
-    printk("wasm: set_property key hash %u, key len: %d, value: '%.*s'", key_i, key_len, value_len, value);
+    printk("nasp: set_property key hash %u, key len: %d, value: '%.*s'", key_i, key_len, value_len, value);
 
     node->key_len = key_len;
     memcpy(node->key, key, key_len);
@@ -597,7 +597,7 @@ void get_property(proxywasm_context *p, const char *key, int key_len, char **val
     property_h_node *temp = NULL;
     uint32_t key_i = xxh32(key, key_len, 0);
     // print_property_key("get_property", key, key_len);
-    // printk("wasm: context [%d] key hash %u, key len: %d key: '%.*s'", p->id, key_i, key_len, key_len, key);
+    // printk("nasp: context [%d] key hash %u, key len: %d key: '%.*s'", p->id, key_i, key_len, key_len, key);
 
     hash_for_each_possible(p->properties, cur, node, key_i, HASHTABLE_BITS)
     {
@@ -612,18 +612,18 @@ void get_property(proxywasm_context *p, const char *key, int key_len, char **val
     {
         if (p->parent != NULL)
         {
-            // printk("wasm: '%.*s' key not found, searching in parent", key_len, key);
+            // printk("nasp: '%.*s' key not found, searching in parent", key_len, key);
             get_property(p->parent, key, key_len, value, value_len);
         }
         else
         {
-            printk("wasm: '%.*s' key not found", key_len, key);
+            printk("nasp: '%.*s' key not found", key_len, key);
         }
 
         return;
     }
 
-    // printk("wasm: '%.*s' key found, value: %.*s", key_len, key, temp->value_len, temp->value);
+    // printk("nasp: '%.*s' key found, value: %.*s", key_len, key, temp->value_len, temp->value);
 
     *value = temp->value;
     *value_len = temp->value_len;
@@ -631,7 +631,7 @@ void get_property(proxywasm_context *p, const char *key, int key_len, char **val
 
 void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i32 max_size, char **value, i32 *value_len)
 {
-    // printk("wasm: [%d] get_buffer_bytes BufferType: %d, start: %d, max_size: %d", p->id, buffer_type, start, max_size);
+    // printk("nasp: [%d] get_buffer_bytes BufferType: %d, start: %d, max_size: %d", p->id, buffer_type, start, max_size);
 
     switch (buffer_type)
     {
@@ -644,7 +644,7 @@ void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i
         *value_len = min(max_size, p->upstream_buffer_size - start);
         break;
     default:
-        pr_err("wasm: get_buffer_bytes: unknown buffer type %d", buffer_type);
+        pr_err("nasp: get_buffer_bytes: unknown buffer type %d", buffer_type);
         break;
     }
 }
@@ -656,7 +656,7 @@ WasmResult set_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 st
     switch (buffer_type)
     {
     case DownstreamData:
-        // printk("wasm: [%d] set_buffer_bytes BufferType: %d, start: %d, size: %d, value_len: %d, buffer_size: %d", p->id, buffer_type, start, size, value_len, p->downstream_buffer_size);
+        // printk("nasp: [%d] set_buffer_bytes BufferType: %d, start: %d, size: %d, value_len: %d, buffer_size: %d", p->id, buffer_type, start, size, value_len, p->downstream_buffer_size);
 
         if (start == 0)
         {
@@ -696,11 +696,11 @@ WasmResult set_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 st
             result = WasmResult_BadArgument;
         }
 
-        // printk("wasm: [%d] set_buffer_bytes: done downstream buffer size: %d", p->id, p->downstream_buffer_size);
+        // printk("nasp: [%d] set_buffer_bytes: done downstream buffer size: %d", p->id, p->downstream_buffer_size);
 
         break;
     case UpstreamData:
-        // printk("wasm: [%d] set_buffer_bytes BufferType: %d, start: %d, size: %d, value_len: %d, buffer_size: %d", p->id, buffer_type, start, size, value_len, p->upstream_buffer_size);
+        // printk("nasp: [%d] set_buffer_bytes BufferType: %d, start: %d, size: %d, value_len: %d, buffer_size: %d", p->id, buffer_type, start, size, value_len, p->upstream_buffer_size);
 
         if (start == 0)
         {
@@ -740,11 +740,11 @@ WasmResult set_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 st
             result = WasmResult_BadArgument;
         }
 
-        // printk("wasm: [%d] set_buffer_bytes: done upstream buffer size: %d", p->id, p->upstream_buffer_size);
+        // printk("nasp: [%d] set_buffer_bytes: done upstream buffer size: %d", p->id, p->upstream_buffer_size);
 
         break;
     default:
-        pr_err("wasm: set_buffer_bytes: unknown buffer type %d", buffer_type);
+        pr_err("nasp: set_buffer_bytes: unknown buffer type %d", buffer_type);
         result = WasmResult_NotFound;
         break;
     }

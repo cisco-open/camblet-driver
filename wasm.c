@@ -10,7 +10,7 @@
 
 #include <linux/slab.h>
 
-#include "runtime.h"
+#include "wasm.h"
 #include "worker_thread.h"
 #include "hashtable.h"
 
@@ -104,7 +104,7 @@ wasm_vm_result wasm_vm_new_per_cpu(void)
     int cpu = 0;
     for_each_possible_cpu(cpu)
     {
-        printk("wasm: creating vm for cpu %d", cpu);
+        printk("nasp: creating vm for cpu %d", cpu);
         vms[cpu] = wasm_vm_new(cpu);
     }
     return wasm_vm_result_ok;
@@ -117,7 +117,7 @@ wasm_vm_result wasm_vm_destroy_per_cpu(void)
         int cpu = 0;
         for_each_possible_cpu(cpu)
         {
-            printk("wasm: destroying vm for cpu %d", cpu);
+            printk("nasp: destroying vm for cpu %d", cpu);
             wasm_vm_destroy(vms[cpu]);
         }
     }
@@ -133,7 +133,7 @@ static void wasm_vm_print_backtrace(wasm_vm_function *func)
         return;
     }
 
-    pr_err("wasm: backtrace:");
+    pr_err("nasp: backtrace:");
 
     int frameCount = 0;
     IM3BacktraceFrame curr = info->frames;
@@ -418,7 +418,7 @@ m3ApiRawFunction(m3_ext_submit_metric)
     char *metric_line = (char *)kmalloc(i_size, GFP_ATOMIC);
     if (!metric_line)
     {
-        pr_err("wasm: cannot allocate memory for metric_line");
+        pr_err("nasp: cannot allocate memory for metric_line");
         m3ApiReturn(-1);
     }
 
@@ -537,11 +537,11 @@ static M3Result m3_link_all(IM3Module module)
 
 static void *print_module_symbols(IM3Module module, void * i_info)
 {
-    printk("wasm:   module = %s\n", module->name);
+    printk("nasp:   module = %s\n", module->name);
     int i;
     for (i = 0; i < module->numGlobals; i++)
     {
-        printk("wasm:     global -> %s", module->globals[i].name);
+        printk("nasp:     global -> %s", module->globals[i].name);
     }
     for (i = 0; i < module->numFunctions; i++)
     {
@@ -550,7 +550,7 @@ static void *print_module_symbols(IM3Module module, void * i_info)
         bool isImported = f->import.moduleUtf8 || f->import.fieldUtf8;
 
         if (isImported)
-            printk("wasm:     import -> %s.%s", f->import.moduleUtf8, f->names[0]);
+            printk("nasp:     import -> %s.%s", f->import.moduleUtf8, f->names[0]);
     }
     for (i = 0; i < module->numFunctions; i++)
     {
@@ -558,7 +558,7 @@ static void *print_module_symbols(IM3Module module, void * i_info)
 
         if (f->export_name != NULL)
         {
-            printk("wasm:     function -> %s(%d) -> %d", f->export_name, f->funcType->numArgs, f->funcType->numRets);
+            printk("nasp:     function -> %s(%d) -> %d", f->export_name, f->funcType->numArgs, f->funcType->numRets);
         }
     }
 
@@ -567,7 +567,7 @@ static void *print_module_symbols(IM3Module module, void * i_info)
 
 void wasm_vm_dump_symbols(wasm_vm *vm)
 {
-    printk("wasm: vm for cpu = %d\n", vm->cpu);
+    printk("nasp: vm for cpu = %d\n", vm->cpu);
     int i;
     for (i = 0; i < vm->_num_runtimes; i++)
         ForEachModule(vm->_runtimes[i], print_module_symbols, NULL);

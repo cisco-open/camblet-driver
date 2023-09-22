@@ -18,7 +18,7 @@
 
 #include "device_driver.h"
 #include "netfilter.h"
-#include "runtime.h"
+#include "wasm.h"
 #include "worker_thread.h"
 #include "opa.h"
 #include "socket.h"
@@ -67,9 +67,9 @@ static const struct btf_kfunc_id_set bpf_opa_kfunc_set = {
 
 #endif
 
-static int __init wasm_init(void)
+static int __init nasp_init(void)
 {
-    pr_info("%s: module loaded at 0x%p running on %d CPUs", THIS_MODULE->name, wasm_init, nr_cpu_ids);
+    pr_info("%s: module loaded at 0x%p running on %d CPUs", THIS_MODULE->name, nasp_init, nr_cpu_ids);
 
     wasm_vm_result result = wasm_vm_new_per_cpu();
     if (result.err)
@@ -83,7 +83,7 @@ static int __init wasm_init(void)
     // ret += start_netfilter_submodule();
     // ret += worker_thread_init();
     ret += chardev_init();
-    ret += wasm_socket_init();
+    ret += socket_init();
 
     if (proxywasm_modules)
     {
@@ -125,16 +125,16 @@ static int __init wasm_init(void)
     return ret;
 }
 
-static void __exit wasm_exit(void)
+static void __exit nasp_exit(void)
 {
-    wasm_socket_exit();
+    socket_exit();
     chardev_exit();
     // stop_netfilter_submodule();
     // worker_thread_exit();
     wasm_vm_destroy_per_cpu();
 
-    pr_info("%s: module unloaded from 0x%p", THIS_MODULE->name, wasm_exit);
+    pr_info("%s: module unloaded from 0x%p", THIS_MODULE->name, nasp_exit);
 }
 
-module_init(wasm_init);
-module_exit(wasm_exit);
+module_init(nasp_init);
+module_exit(nasp_exit);
