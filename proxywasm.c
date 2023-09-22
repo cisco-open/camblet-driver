@@ -8,6 +8,7 @@
  * modified, or distributed except according to those terms.
  */
 
+#include <linux/uaccess.h>
 #include <linux/hashtable.h>
 #include <linux/xxhash.h>
 
@@ -22,20 +23,20 @@
 #define hash_for_each_possible(name, obj, member, key, bits) \
     hlist_for_each_entry(obj, &name[hash_min(key, bits)], member)
 
-#define FOR_ALL_FILTERS(CALL)                                                           \
-    wasm_vm_result result;                                                              \
-    proxywasm_filter *f;                                                                \
-    for (f = p->filters; f != NULL; f = f->next)                                        \
-    {                                                                                   \
-        printk("wasm: calling %s "#CALL, f->name);                               \
-        result = CALL;                                                                  \
-        if (result.err != NULL)                                                         \
-        {                                                                               \
-            pr_err("wasm: calling %s "#CALL" error: %s\n", f->name, result.err); \
-            return result;                                                              \
-        }                                                                               \
-        printk("wasm: result of calling %s "#CALL": %d", f->name, result.data->i32);   \
-    }                                                                                   \
+#define FOR_ALL_FILTERS(CALL)                                                          \
+    wasm_vm_result result;                                                             \
+    proxywasm_filter *f;                                                               \
+    for (f = p->filters; f != NULL; f = f->next)                                       \
+    {                                                                                  \
+        printk("wasm: calling %s " #CALL, f->name);                                    \
+        result = CALL;                                                                 \
+        if (result.err != NULL)                                                        \
+        {                                                                              \
+            pr_err("wasm: calling %s " #CALL " error: %s\n", f->name, result.err);     \
+            return result;                                                             \
+        }                                                                              \
+        printk("wasm: result of calling %s " #CALL ": %d", f->name, result.data->i32); \
+    }                                                                                  \
     return result;
 
 typedef struct property_h_node
@@ -186,7 +187,7 @@ proxywasm_context *proxywasm_get_context(proxywasm *p)
 
 m3ApiRawFunction(proxy_log)
 {
-    m3ApiReturnType(i32)
+    m3ApiReturnType(i32);
 
     m3ApiGetArg(i32, log_level);
     m3ApiGetArgMem(char *, message_data);
