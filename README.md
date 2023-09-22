@@ -128,25 +128,25 @@ Follow the kernel logs:
 make logs
 ```
 
-Install the [CLI](https://github.com/cisco-open/nasp-kernel-module-cli) for the kernel module:
+Install the [CLI](https://github.com/cisco-open/nasp) for the kernel module:
 
 ```bash
 # You can build the module on your workstation
-git clone https://github.com/cisco-open/nasp-kernel-module-cli.git
-cd nasp-kernel-module-cli
+git clone https://github.com/cisco-open/nasp.git
+cd nasp
 make build-cli
 
 # But you need to run it in the VM, where the device is exposed
 lima sudo ./w3k server
 ```
 
-Then follow the instructions [here](https://github.com/cisco-open/nasp-kernel-module-cli#cli).
+Then follow the instructions [here](https://github.com/cisco-open/nasp#cli).
 
 ## TLS Termination
 
 The kernel module can terminate TLS connections on certain ports, and forward the plaintext traffic to a user space application. This is useful for example if you want to run a proxy-wasm filter on a TCP connection.
 
-Between two applications - both of them intercepted by this module - the traffic is always encrypted by (kTLS)[https://docs.kernel.org/networking/tls-offload.html]. If one of them is not intercepted by the module but supports the ChaCha20-Poly1305 AEAD - kTLS is used. Otherwise the traffic is encrypted by BearSSL.
+Between two applications - both of them intercepted by this module - the traffic is always encrypted by [kTLS](https://docs.kernel.org/networking/tls-offload.html). If one of them is not intercepted by the module but supports the ChaCha20-Poly1305 AEAD - kTLS is used. Otherwise the traffic is encrypted by BearSSL.
 
 ### TLS Certificates for testing
 

@@ -49,9 +49,9 @@ typedef struct command
     uuid_t uuid;
     struct command_answer *answer;
     wait_queue_head_t wait_queue;
-};
+} command;
 
-struct command *lookup_in_flight_command(char *id);
-struct command *get_command(void);
+command *lookup_in_flight_command(char *id);
+command *get_command(void);
 
 #endif

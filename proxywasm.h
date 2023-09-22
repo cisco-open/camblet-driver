@@ -8,9 +8,10 @@
  * modified, or distributed except according to those terms.
  */
 
-#ifndef proxywasm_h
-#define proxywasm_h
+#ifndef PROXYWASM_H
+#define PROXYWASM_H
 
+#include "buffer.h"
 #include "wasm.h"
 
 #define PROXY_WASM "proxywasm"
@@ -85,6 +86,7 @@ proxywasm *proxywasm_for_vm(wasm_vm *vm);
 proxywasm *this_cpu_proxywasm(void);
 void proxywasm_lock(proxywasm *p, proxywasm_context *c);
 void proxywasm_unlock(proxywasm *p);
+void proxywasm_set_context(proxywasm *p, proxywasm_context *context);
 
 wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module);
 
@@ -95,7 +97,7 @@ wasm_vm_result proxy_on_upstream_data(proxywasm *p, i32 data_size, bool end_of_s
 wasm_vm_result proxy_on_downstream_connection_close(proxywasm *p, PeerType peer_type);
 wasm_vm_result proxy_on_upstream_connection_close(proxywasm *p, PeerType peer_type);
 
-wasm_vm_result proxywasm_create_context(proxywasm *p);
+wasm_vm_result proxywasm_create_context(proxywasm *p, buffer_t *upstream_buffer, buffer_t *downstream_buffer);
 wasm_vm_result proxywasm_destroy_context(proxywasm *p);
 
 proxywasm_context *proxywasm_get_context(proxywasm *p);
@@ -109,19 +111,5 @@ void get_property(proxywasm_context *p, const char *key, int key_len, char **val
 void set_property(proxywasm_context *p, const char *key, int key_len, const char *value, int value_len);
 void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i32 max_size, char **value, i32 *value_len);
 WasmResult set_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i32 size, char *value, i32 value_len);
-
-char *pw_get_upstream_buffer(proxywasm_context *p);
-void pw_set_upstream_buffer(proxywasm_context *p, char *new_buffer);
-int pw_get_upstream_buffer_size(proxywasm_context *p);
-void pw_set_upstream_buffer_size(proxywasm_context *p, int size);
-int pw_get_upstream_buffer_capacity(proxywasm_context *p);
-void pw_set_upstream_buffer_capacity(proxywasm_context *p, int capacity);
-
-char *pw_get_downstream_buffer(proxywasm_context *p);
-void pw_set_downstream_buffer(proxywasm_context *p, char *new_buffer);
-int pw_get_downstream_buffer_size(proxywasm_context *p);
-void pw_set_downstream_buffer_size(proxywasm_context *p, int size);
-int pw_get_downstream_buffer_capacity(proxywasm_context *p);
-void pw_set_downstream_buffer_capacity(proxywasm_context *p, int capacity);
 
 #endif

@@ -12,6 +12,7 @@
 #include <linux/hashtable.h>
 #include <linux/xxhash.h>
 
+#include "buffer.h"
 #include "proxywasm.h"
 
 // We need to use dynamic hashtables, so we have to hack a bit around hashing macros:
@@ -67,16 +68,11 @@ typedef struct proxywasm_context
     proxywasm_context *parent;
 
     // plaintext proxywasm buffers
-    char *upstream_buffer;
-    int upstream_buffer_capacity;
-    int upstream_buffer_size;
-
-    char *downstream_buffer;
-    int downstream_buffer_capacity;
-    int downstream_buffer_size;
+    buffer_t *upstream_buffer;
+    buffer_t *downstream_buffer;
 } proxywasm_context;
 
-proxywasm_context *new_proxywasm_context(proxywasm_context *parent)
+static proxywasm_context *new_proxywasm_context(proxywasm_context *parent, buffer_t *upstream_buffer, buffer_t *downstream_buffer)
 {
     proxywasm_context *context = kzalloc(sizeof(struct proxywasm_context), GFP_KERNEL);
 
@@ -86,12 +82,8 @@ proxywasm_context *new_proxywasm_context(proxywasm_context *parent)
     context->id = new_context_id();
     context->parent = parent;
 
-    context->upstream_buffer_capacity = 16 * 1024;
-    context->upstream_buffer_size = 0;
-    context->upstream_buffer = kzalloc(context->upstream_buffer_capacity, GFP_KERNEL);
-    context->downstream_buffer_capacity = 16 * 1024;
-    context->downstream_buffer_size = 0;
-    context->downstream_buffer = kzalloc(context->downstream_buffer_capacity, GFP_KERNEL);
+    context->upstream_buffer = upstream_buffer;
+    context->downstream_buffer = downstream_buffer;
 
     return context;
 }
@@ -99,8 +91,6 @@ proxywasm_context *new_proxywasm_context(proxywasm_context *parent)
 void free_proxywasm_context(proxywasm_context *context)
 {
     kfree(context->properties);
-    kfree(context->upstream_buffer);
-    kfree(context->downstream_buffer);
     kfree(context);
 }
 
@@ -164,7 +154,7 @@ proxywasm *this_cpu_proxywasm(void)
     return proxywasms[cpu];
 }
 
-static void proxywasm_set_context(proxywasm *p, proxywasm_context *context)
+void proxywasm_set_context(proxywasm *p, proxywasm_context *context)
 {
     p->current_context = context;
 }
@@ -409,7 +399,7 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
         proxywasm->vm = vm;
         proxywasms[wasm_vm_cpu(vm)] = proxywasm;
 
-        proxywasm_context *root_context = new_proxywasm_context(NULL);
+        proxywasm_context *root_context = new_proxywasm_context(NULL, NULL, NULL);
         printk("nasp: root_context_id %d", root_context->id);
 
         proxywasm->root_context = root_context;
@@ -514,9 +504,9 @@ error:
     return wasm_vm_result_ok;
 }
 
-wasm_vm_result proxywasm_create_context(proxywasm *p)
+wasm_vm_result proxywasm_create_context(proxywasm *p, buffer_t *upstream_buffer, buffer_t *downstream_buffer)
 {
-    proxywasm_context *context = new_proxywasm_context(p->root_context);
+    proxywasm_context *context = new_proxywasm_context(p->root_context, upstream_buffer, downstream_buffer);
     p->current_context = context;
     FOR_ALL_FILTERS(wasm_vm_call_direct(p->vm, f->proxy_on_context_create, p->current_context->id, p->root_context->id));
 }
@@ -636,12 +626,12 @@ void get_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 start, i
     switch (buffer_type)
     {
     case DownstreamData:
-        *value = p->downstream_buffer + start;
-        *value_len = min(max_size, p->downstream_buffer_size - start);
+        *value = p->downstream_buffer->data + start;
+        *value_len = min(max_size, p->downstream_buffer->size - start);
         break;
     case UpstreamData:
-        *value = p->upstream_buffer + start;
-        *value_len = min(max_size, p->upstream_buffer_size - start);
+        *value = p->upstream_buffer->data + start;
+        *value_len = min(max_size, p->upstream_buffer->size - start);
         break;
     default:
         pr_err("nasp: get_buffer_bytes: unknown buffer type %d", buffer_type);
@@ -656,7 +646,7 @@ WasmResult set_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 st
     switch (buffer_type)
     {
     case DownstreamData:
-        // printk("nasp: [%d] set_buffer_bytes BufferType: %d, start: %d, size: %d, value_len: %d, buffer_size: %d", p->id, buffer_type, start, size, value_len, p->downstream_buffer_size);
+        // printk("nasp: [%d] set_buffer_bytes BufferType: %d, start: %d, size: %d, value_len: %d, buffer_size: %d", p->id, buffer_type, start, size, value_len, p->downstream_buffer->size);
 
         if (start == 0)
         {
@@ -665,38 +655,38 @@ WasmResult set_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 st
                 // realloc if needed
                 // if (p->buffer_size + value_len > p->buffer_size)
                 // {
-                //     p->buffer = krealloc(p->buffer, p->buffer_size + value_len, GFP_KERNEL);
+                //     p->buffer = krealloc(p->buffer->data, p->buffer_size + value_len, GFP_KERNEL);
                 // }
 
                 // prepend
-                memmove(p->downstream_buffer + value_len, p->downstream_buffer, p->downstream_buffer_size);
-                memcpy(p->downstream_buffer, value, value_len);
-                p->downstream_buffer_size += value_len;
+                memmove(p->downstream_buffer->data + value_len, p->downstream_buffer->data, p->downstream_buffer->size);
+                memcpy(p->downstream_buffer->data, value, value_len);
+                p->downstream_buffer->size += value_len;
             }
             else
             {
                 // // realloc if needed
                 // if (value_len > p->buffer_size)
                 // {
-                //     p->buffer = krealloc(p->buffer, value_len, GFP_KERNEL);
+                //     p->buffer = krealloc(p->buffer->data, value_len, GFP_KERNEL);
                 // }
 
-                memcpy(p->downstream_buffer, value, value_len);
-                p->downstream_buffer_size = value_len;
+                memcpy(p->downstream_buffer->data, value, value_len);
+                p->downstream_buffer->size = value_len;
             }
         }
-        else if (start >= p->downstream_buffer_size)
+        else if (start >= p->downstream_buffer->size)
         {
             // TODO handle realloc here
-            memcpy(p->downstream_buffer + p->downstream_buffer_size, value, value_len);
-            p->downstream_buffer_size += value_len;
+            memcpy(p->downstream_buffer->data + p->downstream_buffer->size, value, value_len);
+            p->downstream_buffer->size += value_len;
         }
         else
         {
             result = WasmResult_BadArgument;
         }
 
-        // printk("nasp: [%d] set_buffer_bytes: done downstream buffer size: %d", p->id, p->downstream_buffer_size);
+        // printk("nasp: [%d] set_buffer_bytes: done downstream buffer size: %d", p->id, p->downstream_buffer->size);
 
         break;
     case UpstreamData:
@@ -709,13 +699,13 @@ WasmResult set_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 st
                 // realloc if needed
                 // if (p->buffer_size + value_len > p->buffer_size)
                 // {
-                //     p->buffer = krealloc(p->buffer, p->buffer_size + value_len, GFP_KERNEL);
+                //     p->buffer = krealloc(p->buffer->data, p->buffer->size + value_len, GFP_KERNEL);
                 // }
 
                 // prepend
-                memmove(p->upstream_buffer + value_len, p->upstream_buffer, p->upstream_buffer_size);
-                memcpy(p->upstream_buffer, value, value_len);
-                p->upstream_buffer_size += value_len;
+                memmove(p->upstream_buffer->data + value_len, p->upstream_buffer->data, p->upstream_buffer->size);
+                memcpy(p->upstream_buffer->data, value, value_len);
+                p->upstream_buffer->size += value_len;
             }
             else
             {
@@ -725,15 +715,15 @@ WasmResult set_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 st
                 //     p->buffer = krealloc(p->buffer, value_len, GFP_KERNEL);
                 // }
 
-                memcpy(p->upstream_buffer, value, value_len);
-                p->upstream_buffer_size = value_len;
+                memcpy(p->upstream_buffer->data, value, value_len);
+                p->upstream_buffer->size = value_len;
             }
         }
-        else if (start >= p->upstream_buffer_size)
+        else if (start >= p->upstream_buffer->size)
         {
             // TODO handle realloc here
-            memcpy(p->upstream_buffer + p->upstream_buffer_size, value, value_len);
-            p->upstream_buffer_size += value_len;
+            memcpy(p->upstream_buffer->data + p->upstream_buffer->size, value, value_len);
+            p->upstream_buffer->size += value_len;
         }
         else
         {
@@ -750,63 +740,4 @@ WasmResult set_buffer_bytes(proxywasm_context *p, BufferType buffer_type, i32 st
     }
 
     return result;
-}
-
-char *pw_get_upstream_buffer(proxywasm_context *p)
-{
-    return p->upstream_buffer;
-}
-
-void pw_set_upstream_buffer(proxywasm_context *p, char *new_buffer)
-{
-    p->upstream_buffer = new_buffer;
-}
-
-int pw_get_upstream_buffer_size(proxywasm_context *p)
-{
-    return p->upstream_buffer_size;
-}
-
-void pw_set_upstream_buffer_size(proxywasm_context *p, int size)
-{
-    p->upstream_buffer_size = size;
-}
-
-int pw_get_upstream_buffer_capacity(proxywasm_context *p)
-{
-    return p->upstream_buffer_capacity;
-}
-
-void pw_set_upstream_buffer_capacity(proxywasm_context *p, int capacity)
-{
-    p->upstream_buffer_capacity = capacity;
-}
-
-char *pw_get_downstream_buffer(proxywasm_context *p)
-{
-    return p->downstream_buffer;
-}
-void pw_set_downstream_buffer(proxywasm_context *p, char *new_buffer)
-{
-    p->downstream_buffer = new_buffer;
-}
-
-int pw_get_downstream_buffer_size(proxywasm_context *p)
-{
-    return p->downstream_buffer_size;
-}
-
-void pw_set_downstream_buffer_size(proxywasm_context *p, int size)
-{
-    p->downstream_buffer_size = size;
-}
-
-int pw_get_downstream_buffer_capacity(proxywasm_context *p)
-{
-    return p->downstream_buffer_capacity;
-}
-
-void pw_set_downstream_buffer_capacity(proxywasm_context *p, int capacity)
-{
-    p->downstream_buffer_capacity = capacity;
 }
