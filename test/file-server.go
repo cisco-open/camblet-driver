@@ -4,7 +4,6 @@ import (
 	"io"
 	"log"
 	"mime/multipart"
-	"net"
 	"net/http"
 	"os"
 )
@@ -55,11 +54,9 @@ func main() {
 
 	http.Handle("/", http.FileServer(http.Dir("./")))
 
-	ls, err := net.Listen("tcp4", ":8000")
+	log.Println("Listening on 0.0.0.0:8000...")
+	err := http.ListenAndServe(":8000", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	log.Println("Listening on 0.0.0.0:8000...")
-	log.Fatal(http.Serve(ls, nil))
 }

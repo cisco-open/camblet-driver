@@ -13,6 +13,7 @@
 #include <linux/uaccess.h>
 #include <net/protocol.h>
 #include <net/tcp.h>
+#include <net/transp_v6.h>
 #include <net/tls.h>
 #include <net/sock.h>
 #include <net/ip.h>
@@ -43,6 +44,8 @@ const size_t ALPNs_NUM = sizeof(ALPNs) / sizeof(ALPNs[0]);
 
 static struct proto wasm_prot;
 static struct proto wasm_ktls_prot;
+static struct proto wasm_v6_prot;
+static struct proto wasm_v6_ktls_prot;
 
 static const br_rsa_private_key *rsa_priv;
 static const br_rsa_public_key *rsa_pub;
@@ -774,9 +777,9 @@ void wasm_close(struct sock *sk, long timeout)
 }
 
 // analyze tls_main.c to find out what we need to implement: check build_protos()
-void ensure_wasm_ktls_prot(struct sock *sock)
+void ensure_wasm_ktls_prot(struct sock *sock, struct proto *wasm_ktls_prot)
 {
-	void (*close)(struct sock *sk, long timeout) = READ_ONCE(wasm_ktls_prot.close);
+	void (*close)(struct sock *sk, long timeout) = READ_ONCE(wasm_ktls_prot->close);
 
 	if (close == NULL)
 	{
@@ -800,12 +803,12 @@ void ensure_wasm_ktls_prot(struct sock *sock)
 						int offset, size_t size, int flags);
 		sendpage = sock->sk_prot->sendpage;
 
-		wasm_ktls_prot.sendpage = sendpage;
+		wasm_ktls_prot->sendpage = sendpage;
 #endif
-		wasm_ktls_prot.setsockopt = setsockopt;
-		wasm_ktls_prot.getsockopt = getsockopt;
-		wasm_ktls_prot.sock_is_readable = sock_is_readable;
-		WRITE_ONCE(wasm_ktls_prot.close, close);
+		wasm_ktls_prot->setsockopt = setsockopt;
+		wasm_ktls_prot->getsockopt = getsockopt;
+		wasm_ktls_prot->sock_is_readable = sock_is_readable;
+		WRITE_ONCE(wasm_ktls_prot->close, close);
 	}
 }
 
@@ -876,9 +879,19 @@ static int configure_ktls_sock(wasm_socket_context *c)
 	c->ktls_recvmsg = c->sock->sk_prot->recvmsg;
 	c->ktls_sendmsg = c->sock->sk_prot->sendmsg;
 
-	ensure_wasm_ktls_prot(c->sock);
+	struct proto *ktls_prot;
+	if (c->sock->sk_family == AF_INET)
+	{
+		ktls_prot = &wasm_ktls_prot;
+	}
+	else
+	{
+		ktls_prot = &wasm_v6_ktls_prot;
+	}
 
-	WRITE_ONCE(c->sock->sk_prot, &wasm_ktls_prot);
+	ensure_wasm_ktls_prot(c->sock, ktls_prot);
+
+	WRITE_ONCE(c->sock->sk_prot, ktls_prot);
 
 	return 0;
 }
@@ -898,19 +911,35 @@ static opa_socket_context socket_eval(u16 port, direction direction, const char 
 }
 
 struct sock *(*accept)(struct sock *sk, int flags, int *err, bool kern);
-
 int (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
+
+struct sock *(*accept_v6)(struct sock *sk, int flags, int *err, bool kern);
+int (*connect_v6)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 
 struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 {
-	u16 port = (u16)(sk->sk_portpair >> 16);
-	printk("wasm_accept: uid: %d app: %s on port: %d", current_uid().val, current->comm, port);
+	struct sock *client;
+	struct proto *prot;
 
-	struct sock *client = accept(sk, flags, err, kern);
+	if (sk->sk_family == AF_INET)
+	{
+		client = accept(sk, flags, err, kern);
+		prot = &wasm_prot;
+	}
+	else
+	{
+		client = accept_v6(sk, flags, err, kern);
+		prot = &wasm_v6_prot;
+	}
+
+	u16 port = (u16)(sk->sk_portpair >> 16);
 
 	opa_socket_context opa_socket = socket_eval(port, OUTPUT, current->comm, current_uid().val);
 	if (client && opa_socket.allowed)
 	{
+		u16 client_port = (u16)(client->sk_portpair);
+		printk("wasm_accept: uid: %d app: %s on ports: %d <- %d", current_uid().val, current->comm, port, client_port);
+
 		proxywasm *p = this_cpu_proxywasm();
 		proxywasm_lock(p, NULL);
 
@@ -1108,7 +1137,7 @@ struct sock *wasm_accept(struct sock *sk, int flags, int *err, bool kern)
 		client->sk_user_data = sc;
 
 		// and overwrite the socket protocol with our own
-		client->sk_prot = &wasm_prot;
+		client->sk_prot = prot;
 	}
 
 	return client;
@@ -1118,9 +1147,22 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
 	u16 port = ntohs(usin->sin_port);
-	printk("wasm_connect: uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
 
-	int ret = connect(sk, uaddr, addr_len);
+	int ret;
+	struct proto *prot;
+
+	if (sk->sk_family == AF_INET)
+	{
+		ret = connect(sk, uaddr, addr_len);
+		prot = &wasm_prot;
+	}
+	else
+	{
+		ret = connect_v6(sk, uaddr, addr_len);
+		prot = &wasm_v6_prot;
+	}
+
+	printk("wasm_connect: uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
 
 	opa_socket_context opa_socket = socket_eval(port, OUTPUT, current->comm, current_uid().val);
 	if (ret == 0 && opa_socket.allowed)
@@ -1324,7 +1366,7 @@ int wasm_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 		// We should save the ssl context here to the socket
 		sk->sk_user_data = sc;
-		sk->sk_prot = &wasm_prot;
+		sk->sk_prot = prot;
 	}
 
 	return ret;
@@ -1339,12 +1381,19 @@ int wasm_socket_init(void)
 		return err;
 	}
 
-	// let's overwrite tcp_port with our own implementation
+	// let's overwrite tcp_prot with our own implementation
 	accept = tcp_prot.accept;
 	connect = tcp_prot.connect;
 
+	// let's overwrite tcp_prot with our own implementation
+	accept_v6 = tcpv6_prot.accept;
+	connect_v6 = tcpv6_prot.connect;
+
 	tcp_prot.accept = wasm_accept;
 	tcp_prot.connect = wasm_connect;
+
+	tcpv6_prot.accept = wasm_accept;
+	tcpv6_prot.connect = wasm_connect;
 
 	memcpy(&wasm_prot, &tcp_prot, sizeof(wasm_prot));
 	wasm_prot.recvmsg = wasm_recvmsg;
@@ -1353,6 +1402,14 @@ int wasm_socket_init(void)
 
 	memcpy(&wasm_ktls_prot, &wasm_prot, sizeof(wasm_prot));
 	wasm_ktls_prot.close = NULL; // mark it as uninitialized
+
+	memcpy(&wasm_v6_prot, &tcpv6_prot, sizeof(wasm_v6_prot));
+	wasm_v6_prot.recvmsg = wasm_recvmsg;
+	wasm_v6_prot.sendmsg = wasm_sendmsg;
+	wasm_v6_prot.close = wasm_close;
+
+	memcpy(&wasm_v6_ktls_prot, &wasm_v6_prot, sizeof(wasm_v6_prot));
+	wasm_v6_ktls_prot.close = NULL; // mark it as uninitialized
 
 	//- generate global tls key
 	rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
@@ -1373,6 +1430,9 @@ void wasm_socket_exit(void)
 {
 	tcp_prot.accept = accept;
 	tcp_prot.connect = connect;
+
+	tcpv6_prot.accept = accept_v6;
+	tcpv6_prot.connect = connect_v6;
 
 	//- free global tls key
 	kfree(rsa_priv);
