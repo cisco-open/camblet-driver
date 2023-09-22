@@ -54,6 +54,7 @@ nasp-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  third-party/wasm3/source/m3_parse.o \
 			  third-party/base64/base64.o \
 			  third-party/parson/json.o \
+			  buffer.o \
 			  device_driver.o \
 			  main.o \
 			  netfilter.o \
@@ -103,8 +104,8 @@ insmod-bearssl: insmod-tls
 insmod: insmod-bearssl
 	sudo insmod nasp.ko
 
-insmod-no-proxywasm: insmod-bearssl
-	sudo insmod nasp.ko proxywasm_modules=0
+insmod-with-proxywasm: insmod-bearssl
+	sudo insmod nasp.ko proxywasm_modules=1
 
 rmmod:
 	sudo rmmod nasp

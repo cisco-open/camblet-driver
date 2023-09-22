@@ -37,57 +37,15 @@ enum
 /* Is device open? Used to prevent multiple access to device */
 static atomic_t already_open = ATOMIC_INIT(CDEV_NOT_USED);
 
-static int write_command_to_buffer(char *buffer, size_t buffer_size, struct command *cmd)
-{
-    char uuid[UUID_SIZE * 2];
-    int length = base64_encode(uuid, UUID_SIZE * 2, cmd->uuid.b, UUID_SIZE);
-    if (length < 0)
-    {
-        FATAL("base64_encode of id failed");
-        goto cleanup;
-    }
-
-    JSON_Value *root_value = json_value_init_object();
-    JSON_Object *root_object = json_value_get_object(root_value);
-
-    if (cmd->context)
-    {
-        JSON_Value *context_value = json_value_init_object();
-        JSON_Object *context_object = json_value_get_object(context_value);
-        json_object_set_number(context_object, "uid", cmd->context->uid.val);
-        json_object_set_number(context_object, "gid", cmd->context->gid.val);
-        json_object_set_string(context_object, "command_path", cmd->context->command_path);
-        json_object_set_string(context_object, "command_name", cmd->context->command_name);
-        json_object_set_value(root_object, "context", context_value);
-    }
-
-    json_object_set_string(root_object, "id", uuid);
-    json_object_set_string(root_object, "command", cmd->name);
-    json_object_set_string(root_object, "data", cmd->data);
-
-    char *serialized_string = json_serialize_to_string(root_value);
-
-    length = strlen(serialized_string);
-    if (length > buffer_size)
-    {
-        printk(KERN_ERR "nasp: command buffer too small: %d", length);
-        length = -1;
-        goto cleanup;
-    }
-
-    strcpy(buffer, serialized_string);
-
-cleanup:
-    json_free_serialized_string(serialized_string);
-    json_value_free(root_value);
-
-    return length;
-}
-
 static char device_buffer[DEVICE_BUFFER_SIZE];
 static size_t device_buffer_size = 0;
 
 static char device_out_buffer[64 * 1024];
+
+static int device_open(struct inode *, struct file *);
+static int device_release(struct inode *, struct file *);
+static ssize_t device_read(struct file *, char __user *, size_t, loff_t *);
+static ssize_t device_write(struct file *, const char __user *, size_t, loff_t *);
 
 static struct class *cls;
 
@@ -352,37 +310,6 @@ int parse_json_from_buffer(void)
 
             wake_up_interruptible(&cmd->wait_queue);
         }
-        else if (strcmp("proxywasm_test", command) == 0)
-        {
-            // TODO test only
-            // Create a new non-root context
-            proxywasm *proxywasm = this_cpu_proxywasm();
-
-            wasm_vm_result result = proxywasm_create_context(proxywasm);
-            if (result.err)
-            {
-                FATAL("proxywasm_create_context for module failed: %s", result.err)
-                goto cleanup;
-            }
-
-            printk("nasp: proxy_on_context_create result %d", result.data->i32);
-
-            result = proxy_on_new_connection(proxywasm);
-            if (result.err)
-            {
-                FATAL("proxy_on_new_connection for module failed: %s", result.err)
-                goto cleanup;
-            }
-
-            printk("nasp: proxy_on_new_connection result %d", result.data->i32);
-
-            result = proxy_on_downstream_data(proxywasm, 128, false);
-            if (result.err)
-            {
-                FATAL("proxy_on_downstream_data for module failed: %s", result.err)
-                goto cleanup;
-            }
-        }
         else
         {
             printk(KERN_ERR "nasp: command not implemented: %s", command);
@@ -416,6 +343,53 @@ static int device_release(struct inode *inode, struct file *file)
     module_put(THIS_MODULE);
 
     return 0;
+}
+
+static int write_command_to_buffer(char *buffer, size_t buffer_size, struct command *cmd)
+{
+    char uuid[UUID_SIZE * 2];
+    int length = base64_encode(uuid, UUID_SIZE * 2, cmd->uuid.b, UUID_SIZE);
+    if (length < 0)
+    {
+        FATAL("base64_encode of id failed");
+        goto cleanup;
+    }
+
+    JSON_Value *root_value = json_value_init_object();
+    JSON_Object *root_object = json_value_get_object(root_value);
+
+    if (cmd->context)
+    {
+        JSON_Value *context_value = json_value_init_object();
+        JSON_Object *context_object = json_value_get_object(context_value);
+        json_object_set_number(context_object, "uid", cmd->context->uid.val);
+        json_object_set_number(context_object, "gid", cmd->context->gid.val);
+        json_object_set_string(context_object, "command_path", cmd->context->command_path);
+        json_object_set_string(context_object, "command_name", cmd->context->command_name);
+        json_object_set_value(root_object, "context", context_value);
+    }
+
+    json_object_set_string(root_object, "id", uuid);
+    json_object_set_string(root_object, "command", cmd->name);
+    json_object_set_string(root_object, "data", cmd->data);
+
+    char *serialized_string = json_serialize_to_string(root_value);
+
+    length = strlen(serialized_string);
+    if (length > buffer_size)
+    {
+        printk(KERN_ERR "nasp: command buffer too small: %d", length);
+        length = -1;
+        goto cleanup;
+    }
+
+    strcpy(buffer, serialized_string);
+
+cleanup:
+    json_free_serialized_string(serialized_string);
+    json_value_free(root_value);
+
+    return length;
 }
 
 /*

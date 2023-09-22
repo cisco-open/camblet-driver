@@ -2,9 +2,9 @@
  * Copyright (c) 2023 Cisco and/or its affiliates. All rights reserved.
  *
  * SPDX-License-Identifier: MIT OR GPL-2.0-only
- * 
+ *
  * Licensed under the MIT license <LICENSE.MIT or https://opensource.org/licenses/MIT> or the GPLv2 license
- * <LICENSE.GPL or https://opensource.org/license/gpl-2-0>, at your option. This file may not be copied, 
+ * <LICENSE.GPL or https://opensource.org/license/gpl-2-0>, at your option. This file may not be copied,
  * modified, or distributed except according to those terms.
  */
 
@@ -33,7 +33,7 @@ MODULE_LICENSE("Dual MIT/GPL");
 MODULE_DESCRIPTION("A kernel module that exposes a Wasm VM");
 MODULE_VERSION("0.1");
 
-static bool proxywasm_modules = true;
+static bool proxywasm_modules = false;
 module_param(proxywasm_modules, bool, 0644);
 MODULE_PARM_DESC(proxywasm_modules, "Enable/disable the proxywasm modules");
 
@@ -100,20 +100,20 @@ static int __init nasp_init(void)
             FATAL("load_module -> proxywasm_stats_filter: %s", result.err);
             return -1;
         }
+    }
 
-        result = load_module("csr_module", module_csr, size_module_csr, NULL);
-        if (result.err)
-        {
-            FATAL("load_module -> csr_module: %s", result.err);
-            return -1;
-        }
+    result = load_module("csr_module", module_csr, size_module_csr, NULL);
+    if (result.err)
+    {
+        FATAL("load_module -> csr_module: %s", result.err);
+        return -1;
+    }
 
-        result = load_module("socket_opa", socket_wasm, socket_wasm_len, NULL);
-        if (result.err)
-        {
-            FATAL("load_module -> socket_opa: %s", result.err);
-            return -1;
-        }
+    result = load_module("socket_opa", socket_wasm, socket_wasm_len, NULL);
+    if (result.err)
+    {
+        FATAL("load_module -> socket_opa: %s", result.err);
+        return -1;
     }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)

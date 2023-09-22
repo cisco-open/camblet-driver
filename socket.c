@@ -19,13 +19,13 @@
 #include <net/ip.h>
 
 #include "bearssl.h"
-#include "device_driver.h"
-#include "proxywasm.h"
-#include "csr.h"
-#include "socket.h"
-#include "rsa_tools.h"
-#include "opa.h"
 #include "commands.h"
+#include "csr.h"
+#include "device_driver.h"
+#include "opa.h"
+#include "proxywasm.h"
+#include "rsa_tools.h"
+#include "socket.h"
 
 #define RSA_OR_EC 0
 
@@ -72,10 +72,13 @@ typedef struct
 	br_x509_trust_anchor *trust_anchors;
 	size_t trust_anchors_len;
 
-	proxywasm_context *pc;
 	proxywasm *p;
+	proxywasm_context *pc;
 	i64 direction;
 	char *protocol;
+
+	buffer_t *read_buffer;
+	buffer_t *write_buffer;
 
 	struct sock *sock;
 
@@ -94,51 +97,29 @@ typedef struct
 
 } nasp_socket;
 
-// Struct to hold buffer functions
-static struct buffer_functions
-{
-	int (*get_size)(proxywasm_context *);
-	int (*get_capacity)(proxywasm_context *);
-	void (*set_capacity)(proxywasm_context *, int);
-	void (*set_buffer)(proxywasm_context *, char *);
-	char *(*get_buffer)(proxywasm_context *);
-};
-
-static char *realloc_and_access_buffer(proxywasm_context *c, struct buffer_functions *buff_funcs, int len)
-{
-	char *buffer = buff_funcs->get_buffer(c);
-	int buffer_size = buff_funcs->get_size(c);
-	int buffer_capacity = buff_funcs->get_capacity(c);
-
-	if (buffer_size + len > buffer_capacity)
-	{
-		int new_capacity = buffer_capacity * 2;
-		while (new_capacity < buffer_size + len)
-		{
-			new_capacity *= 2;
-		}
-
-		char *new_buffer = krealloc(buffer, new_capacity, GFP_KERNEL);
-
-		buff_funcs->set_buffer(c, new_buffer);
-		buff_funcs->set_capacity(c, new_capacity);
-
-		buffer = buff_funcs->get_buffer(c);
-	}
-
-	return buffer + buffer_size;
-}
-
-static int send_msg_ktls(nasp_socket *c, void *msg, size_t len)
+static int send_msg_ktls(nasp_socket *s, void *msg, size_t len)
 {
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = msg, .iov_len = len};
 
 	iov_iter_kvec(&hdr.msg_iter, WRITE, &iov, 1, len);
 
-	int sent = c->ktls_sendmsg(c->sock, &hdr, len);
+	return s->ktls_sendmsg(s->sock, &hdr, len);
+}
 
-	return sent;
+static int recv_msg_ktls(nasp_socket *s, char *buf, size_t buf_len, size_t size)
+{
+	struct msghdr hdr = {0};
+	struct kvec iov = {.iov_base = buf, .iov_len = buf_len};
+	int addr_len = 0;
+
+	iov_iter_kvec(&hdr.msg_iter, READ, &iov, 1, buf_len);
+
+	return s->ktls_recvmsg(s->sock, &hdr, size,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
+						   0,
+#endif
+						   0, &addr_len);
 }
 
 static int send_msg(struct sock *sock, void *msg, size_t len)
@@ -166,26 +147,10 @@ static int recv_msg(struct sock *sock, char *buf, size_t size)
 					   0, &addr_len);
 }
 
-static int recv_msg_ktls(nasp_socket *c, char *buf, size_t buf_len, size_t size)
-{
-	struct msghdr hdr = {0};
-	struct kvec iov = {.iov_base = buf, .iov_len = buf_len};
-	int addr_len = 0;
-
-	iov_iter_kvec(&hdr.msg_iter, READ, &iov, 1, buf_len);
-
-	return c->ktls_recvmsg(c->sock, &hdr, size,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
-						   0,
-#endif
-						   0, &addr_len);
-}
-
 /*
  * Low-level data read callback for the simplified SSL I/O API.
  */
-static int
-sock_read(void *ctx, unsigned char *buf, size_t len)
+static int sock_read(void *ctx, unsigned char *buf, size_t len)
 {
 	return recv_msg((struct sock *)ctx, buf, len);
 }
@@ -193,27 +158,24 @@ sock_read(void *ctx, unsigned char *buf, size_t len)
 /*
  * Low-level data write callback for the simplified SSL I/O API.
  */
-static int
-sock_write(void *ctx, const unsigned char *buf, size_t len)
+static int sock_write(void *ctx, const unsigned char *buf, size_t len)
 {
 	return send_msg((struct sock *)ctx, buf, len);
 }
 
-static int
-ktls_sock_read(nasp_socket *c, unsigned char *buf, size_t buf_len, size_t len)
+static int ktls_sock_read(nasp_socket *s, unsigned char *buf, size_t buf_len, size_t len)
 {
-	return recv_msg_ktls(c, buf, buf_len, len);
+	return recv_msg_ktls(s, buf, buf_len, len);
 }
 
-static int
-ktls_sock_write(nasp_socket *c, const unsigned char *buf, size_t len)
+static int ktls_sock_write(nasp_socket *s, const unsigned char *buf, size_t len)
 {
-	return send_msg_ktls(c, buf, len);
+	return send_msg_ktls(s, buf, len);
 }
 
-static char *get_direction(nasp_socket *c)
+static char *get_direction(nasp_socket *s)
 {
-	if (c->direction == ListenerDirectionInbound)
+	if (s->direction == ListenerDirectionInbound)
 	{
 		return "server";
 	}
@@ -223,51 +185,51 @@ static char *get_direction(nasp_socket *c)
 	}
 }
 
-static br_ssl_engine_context *get_ssl_engine_context(nasp_socket *c)
+static br_ssl_engine_context *get_ssl_engine_context(nasp_socket *s)
 {
-	return c->sc ? &c->sc->eng : &c->cc->eng;
+	return s->direction == ListenerDirectionInbound ? &s->sc->eng : &s->cc->eng;
 }
 
-static int get_read_buffer_capacity(nasp_socket *c);
+static int get_read_buffer_capacity(nasp_socket *s);
 
-static int *nasp_socket_read(nasp_socket *c, void *dst, size_t len)
+static int nasp_socket_read(nasp_socket *s, void *dst, size_t len)
 {
-	if (c->ktls_recvmsg)
+	if (s->ktls_recvmsg)
 	{
-		return ktls_sock_read(c, dst, get_read_buffer_capacity(c), len);
+		return ktls_sock_read(s, dst, get_read_buffer_capacity(s), len);
 	}
 	else
 	{
-		int ret = br_sslio_read(&c->ioc, dst, len);
+		int ret = br_sslio_read(&s->ioc, dst, len);
 		if (ret < 0)
 		{
-			const br_ssl_engine_context *ec = get_ssl_engine_context(c);
+			const br_ssl_engine_context *ec = get_ssl_engine_context(s);
 			int last_error = br_ssl_engine_last_error(ec);
 			if (last_error == 0)
 				return 0;
-			pr_err("nasp_socket_read: %s br_sslio_read error %d", get_direction(c), last_error);
+			pr_err("nasp_socket_read: %s br_sslio_read error %d", get_direction(s), last_error);
 		}
 		return ret;
 	}
 }
 
-static int *nasp_socket_write(nasp_socket *c, void *src, size_t len)
+static int nasp_socket_write(nasp_socket *s, void *src, size_t len)
 {
-	if (c->ktls_sendmsg)
+	if (s->ktls_sendmsg)
 	{
-		return ktls_sock_write(c, src, len); // TODO not sure if this is a write all!
+		return ktls_sock_write(s, src, len); // TODO not sure if this is a write all!
 	}
 	else
 	{
-		int ret = br_sslio_write_all(&c->ioc, src, len);
+		int ret = br_sslio_write_all(&s->ioc, src, len);
 		if (ret < 0)
 		{
-			const br_ssl_engine_context *ec = get_ssl_engine_context(c);
-			pr_err("nasp: socket_write: %s br_sslio_write_all error %d", get_direction(c), br_ssl_engine_last_error(ec));
+			const br_ssl_engine_context *ec = get_ssl_engine_context(s);
+			pr_err("nasp: socket_write: %s br_sslio_write_all error %d", get_direction(s), br_ssl_engine_last_error(ec));
 			return ret;
 		}
 
-		ret = br_sslio_flush(&c->ioc);
+		ret = br_sslio_flush(&s->ioc);
 		if (ret != 0)
 		{
 			pr_err("nasp: socket_write: br_sslio_flush returned an error %d", ret);
@@ -276,223 +238,69 @@ static int *nasp_socket_write(nasp_socket *c, void *src, size_t len)
 	}
 }
 
-static char *get_read_buffer(nasp_socket *c)
+static char *get_read_buffer(nasp_socket *s)
 {
-	if (c->direction == ListenerDirectionInbound)
-	{
-		return pw_get_downstream_buffer(c->pc);
-	}
-	else
-	{
-		return pw_get_upstream_buffer(c->pc);
-	}
+	return s->read_buffer->data;
 }
 
-static char *get_read_buffer_for_read(nasp_socket *c, int len)
+static char *get_read_buffer_for_read(nasp_socket *s, int len)
 {
-	struct buffer_functions buffer_funcs;
-
-	if (c->direction == ListenerDirectionInbound)
-	{
-		buffer_funcs.get_buffer = pw_get_downstream_buffer;
-		buffer_funcs.set_buffer = pw_set_downstream_buffer;
-
-		buffer_funcs.get_capacity = pw_get_downstream_buffer_capacity;
-		buffer_funcs.set_capacity = pw_set_downstream_buffer_capacity;
-
-		buffer_funcs.get_size = pw_get_downstream_buffer_size;
-	}
-	else
-	{
-		buffer_funcs.get_buffer = pw_get_upstream_buffer;
-		buffer_funcs.set_buffer = pw_set_upstream_buffer;
-
-		buffer_funcs.get_capacity = pw_get_upstream_buffer_capacity;
-		buffer_funcs.set_capacity = pw_set_upstream_buffer_capacity;
-
-		buffer_funcs.get_size = pw_get_upstream_buffer_size;
-	}
-
-	return realloc_and_access_buffer(c->pc, &buffer_funcs, len);
+	return buffer_access(s->read_buffer, len);
 }
 
-static int get_read_buffer_capacity(nasp_socket *c)
+static int get_read_buffer_capacity(nasp_socket *s)
 {
-	if (c->direction == ListenerDirectionInbound)
-	{
-		return pw_get_downstream_buffer_capacity(c->pc) - pw_get_downstream_buffer_size(c->pc);
-	}
-	else
-	{
-		return pw_get_upstream_buffer_capacity(c->pc) - pw_get_upstream_buffer_size(c->pc);
-	}
+	return s->read_buffer->capacity - s->read_buffer->size;
 }
 
-static int get_read_buffer_size(nasp_socket *c)
+static int get_read_buffer_size(nasp_socket *s)
 {
-	if (c->direction == ListenerDirectionInbound)
-	{
-		return pw_get_downstream_buffer_size(c->pc);
-	}
-	else
-	{
-		return pw_get_upstream_buffer_size(c->pc);
-	}
+	return s->read_buffer->size;
 }
 
-static void set_read_buffer_size(nasp_socket *c, int size)
+static void set_read_buffer_size(nasp_socket *s, int size)
 {
-	if (c->direction == ListenerDirectionInbound)
-	{
-		pw_set_downstream_buffer_size(c->pc, size);
-	}
-	else
-	{
-		pw_set_upstream_buffer_size(c->pc, size);
-	}
+	s->read_buffer->size = size;
 }
 
-static char *get_write_buffer(nasp_socket *c)
+static char *get_write_buffer(nasp_socket *s)
 {
-	if (c->direction == ListenerDirectionInbound)
-	{
-		return pw_get_upstream_buffer(c->pc);
-	}
-	else
-	{
-		return pw_get_downstream_buffer(c->pc);
-	}
+	return s->write_buffer->data;
 }
 
-static char *get_write_buffer_for_write(nasp_socket *c, int len)
+static char *get_write_buffer_for_write(nasp_socket *s, int len)
 {
-	struct buffer_functions buffer_funcs;
-
-	if (c->direction == ListenerDirectionInbound)
-	{
-		buffer_funcs.get_buffer = pw_get_upstream_buffer;
-		buffer_funcs.set_buffer = pw_set_upstream_buffer;
-
-		buffer_funcs.get_capacity = pw_get_upstream_buffer_capacity;
-		buffer_funcs.set_capacity = pw_set_upstream_buffer_capacity;
-
-		buffer_funcs.get_size = pw_get_upstream_buffer_size;
-	}
-	else
-	{
-		buffer_funcs.get_buffer = pw_get_downstream_buffer;
-		buffer_funcs.set_buffer = pw_set_downstream_buffer;
-
-		buffer_funcs.get_capacity = pw_get_downstream_buffer_capacity;
-		buffer_funcs.set_capacity = pw_set_downstream_buffer_capacity;
-
-		buffer_funcs.get_size = pw_get_downstream_buffer_size;
-	}
-
-	return realloc_and_access_buffer(c->pc, &buffer_funcs, len);
+	return buffer_access(s->write_buffer, len);
 }
 
-static int get_write_buffer_capacity(nasp_socket *c)
+static int get_write_buffer_size(nasp_socket *s)
 {
-	if (c->direction == ListenerDirectionInbound)
-	{
-		return pw_get_upstream_buffer_capacity(c->pc) - pw_get_upstream_buffer_size(c->pc);
-	}
-	else
-	{
-		return pw_get_downstream_buffer_capacity(c->pc) - pw_get_downstream_buffer_size(c->pc);
-	}
+	return s->write_buffer->size;
 }
 
-static int get_write_buffer_size(nasp_socket *c)
+static void set_write_buffer_size(nasp_socket *s, int size)
 {
-	if (c->direction == ListenerDirectionInbound)
-	{
-		return pw_get_upstream_buffer_size(c->pc);
-	}
-	else
-	{
-		return pw_get_downstream_buffer_size(c->pc);
-	}
+	s->write_buffer->size = size;
 }
 
-static void set_write_buffer_size(nasp_socket *c, int size)
+static void nasp_socket_free(nasp_socket *s)
 {
-	if (c->direction == ListenerDirectionInbound)
-	{
-		pw_set_upstream_buffer_size(c->pc, size);
-	}
-	else
-	{
-		pw_set_downstream_buffer_size(c->pc, size);
-	}
-}
-
-static nasp_socket *nasp_socket_accept(proxywasm *p, struct sock *sock)
-{
-	nasp_socket *c = kzalloc(sizeof(nasp_socket), GFP_KERNEL);
-	c->sc = kmalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
-	c->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
-	c->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
-	c->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
-	c->chain = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
-	c->trust_anchors = kzalloc(sizeof(br_x509_trust_anchor), GFP_KERNEL);
-	c->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
-
-	c->sock = sock;
-
-	wasm_vm_result res = proxywasm_create_context(p);
-	if (res.err)
-	{
-		pr_err("nasp: nasp_socket_accept failed to create context: %s", res.err);
-		return NULL;
-	}
-	c->pc = proxywasm_get_context(p);
-	c->p = p;
-	c->direction = ListenerDirectionInbound;
-	set_property_v(c->pc, "listener_direction", (char *)&c->direction, sizeof(c->direction));
-	return c;
-}
-
-static nasp_socket *nasp_socket_connect(proxywasm *p, struct sock *sock)
-{
-	nasp_socket *c = kzalloc(sizeof(nasp_socket), GFP_KERNEL);
-	c->cc = kmalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
-	c->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
-	c->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
-	c->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
-	c->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
-
-	c->sock = sock;
-
-	wasm_vm_result res = proxywasm_create_context(p);
-	if (res.err)
-	{
-		pr_err("nasp: nasp_socket_connect failed to create context: %s", res.err);
-		return NULL;
-	}
-	c->pc = proxywasm_get_context(p);
-	c->p = p;
-	c->direction = ListenerDirectionOutbound;
-	set_property_v(c->pc, "listener_direction", (char *)&c->direction, sizeof(c->direction));
-	return c;
-}
-
-static void nasp_socket_free(nasp_socket *c)
-{
-	if (c)
+	if (s)
 	{
 		printk("nasp: freeing nasp_socket of %s", current->comm);
 
-		proxywasm_lock(c->p, c->pc);
-		proxywasm_destroy_context(c->p);
-		proxywasm_unlock(c->p);
+		if (s->p)
+		{
+			proxywasm_lock(s->p, s->pc);
+			proxywasm_destroy_context(s->p);
+			proxywasm_unlock(s->p);
+		}
 
-		if (c->protocol && !c->ktls_sendmsg)
+		if (s->protocol && !s->ktls_sendmsg)
 			// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
-			if (!br_sslio_close(&c->ioc))
+			if (!br_sslio_close(&s->ioc))
 			{
-				const br_ssl_engine_context *ec = get_ssl_engine_context(c);
+				const br_ssl_engine_context *ec = get_ssl_engine_context(s);
 				pr_err("nasp: %s br_sslio_close returned an error: %d", current->comm, br_ssl_engine_last_error(ec));
 			}
 			else
@@ -500,13 +308,13 @@ static void nasp_socket_free(nasp_socket *c)
 				printk("nasp: %s br_sslio SSL closed", current->comm);
 			}
 
-		if (c->direction == ListenerDirectionInbound)
+		if (s->direction == ListenerDirectionInbound)
 		{
-			kfree(c->sc);
+			kfree(s->sc);
 		}
 		else
 		{
-			kfree(c->cc);
+			kfree(s->cc);
 		}
 
 		// if (c->rsa_priv != NULL)
@@ -518,12 +326,105 @@ static void nasp_socket_free(nasp_socket *c)
 		// 	kfree(c->rsa_pub->n);
 		// }
 
-		kfree(c->rsa_priv);
-		kfree(c->rsa_pub);
-		kfree(c->cert);
-		kfree(c->parameters);
-		kfree(c);
+		buffer_free(s->read_buffer);
+		buffer_free(s->write_buffer);
+
+		kfree(s->rsa_priv);
+		kfree(s->rsa_pub);
+		kfree(s->cert);
+		kfree(s->parameters);
+		kfree(s);
 	}
+}
+
+int proxywasm_attach(proxywasm *p, nasp_socket *s, ListenerDirection direction, buffer_t *upstream_buffer, buffer_t *downstream_buffer)
+{
+	wasm_vm_result res = proxywasm_create_context(p, upstream_buffer, downstream_buffer);
+	if (res.err)
+	{
+		pr_err("nasp: proxywasm_attach failed to create context: %s", res.err);
+		return -1;
+	}
+
+	s->pc = proxywasm_get_context(p);
+	s->p = p;
+	s->direction = direction;
+	set_property_v(s->pc, "listener_direction", (char *)&s->direction, sizeof(s->direction));
+
+	proxywasm_set_context(p, s->pc);
+
+	res = proxy_on_new_connection(p);
+	if (res.err)
+	{
+		pr_err("nasp: proxywasm_attach failed to create connection: %s", res.err);
+		return -1;
+	}
+
+	return 0;
+}
+
+static nasp_socket *nasp_socket_accept(struct sock *sock)
+{
+	nasp_socket *s = kzalloc(sizeof(nasp_socket), GFP_KERNEL);
+	s->sc = kmalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
+	s->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
+	s->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
+	s->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
+	s->chain = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
+	s->trust_anchors = kzalloc(sizeof(br_x509_trust_anchor), GFP_KERNEL);
+	s->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
+	s->read_buffer = buffer_new(16 * 1024);
+	s->write_buffer = buffer_new(16 * 1024);
+
+	s->sock = sock;
+
+	proxywasm *p = this_cpu_proxywasm();
+
+	if (p)
+	{
+		proxywasm_lock(p, NULL);
+		int err = proxywasm_attach(p, s, ListenerDirectionInbound, s->write_buffer, s->read_buffer);
+		proxywasm_unlock(p);
+
+		if (err != 0)
+		{
+			nasp_socket_free(s);
+			return NULL;
+		}
+	}
+
+	return s;
+}
+
+static nasp_socket *nasp_socket_connect(struct sock *sock)
+{
+	nasp_socket *s = kzalloc(sizeof(nasp_socket), GFP_KERNEL);
+	s->cc = kmalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
+	s->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
+	s->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
+	s->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
+	s->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
+	s->read_buffer = buffer_new(16 * 1024);
+	s->write_buffer = buffer_new(16 * 1024);
+
+	s->sock = sock;
+
+	proxywasm *p = this_cpu_proxywasm();
+
+	if (p)
+	{
+		proxywasm_lock(p, NULL);
+		int err = proxywasm_attach(p, s, ListenerDirectionOutbound, s->read_buffer, s->write_buffer);
+		proxywasm_unlock(p);
+
+		if (err != 0)
+		{
+			nasp_socket_free(s);
+			return NULL;
+		}
+	}
+
+	return s;
 }
 
 void dump_array(unsigned char array[], size_t len)
@@ -577,40 +478,46 @@ void dump_msghdr(struct msghdr *msg)
 	printk(KERN_INFO "iovoffset = %zd\n", msg->msg_iter.iov_offset);
 }
 
-static int configure_ktls_sock(nasp_socket *c);
+static int configure_ktls_sock(nasp_socket *s);
 
-static int ensure_tls_handshake(nasp_socket *c)
+static bool nasp_socket_proxywasm_enabled(nasp_socket *s)
+{
+	return s->pc != NULL;
+}
+
+static int ensure_tls_handshake(nasp_socket *s)
 {
 	int ret = 0;
-	char *protocol = READ_ONCE(c->protocol);
+	char *protocol = READ_ONCE(s->protocol);
 
 	if (protocol == NULL)
 	{
-		ret = br_sslio_flush(&c->ioc);
+		ret = br_sslio_flush(&s->ioc);
 		if (ret == 0)
 		{
-			printk("nasp: %s %s TLS handshake done, sk: %p", current->comm, get_direction(c), c->sock);
+			printk("nasp: %s %s TLS handshake done, sk: %p", current->comm, get_direction(s), s->sock);
 		}
 		else
 		{
-			const br_ssl_engine_context *ec = get_ssl_engine_context(c);
+			const br_ssl_engine_context *ec = get_ssl_engine_context(s);
 			pr_err("nasp: %s TLS handshake error %d", current->comm, br_ssl_engine_last_error(ec));
 			return ret;
 		}
 
-		protocol = br_ssl_engine_get_selected_protocol(&c->sc->eng);
+		protocol = br_ssl_engine_get_selected_protocol(&s->sc->eng);
 
 		if (protocol)
 		{
 			printk("nasp: %s protocol name: %s", current->comm, protocol);
-			set_property_v(c->pc, "upstream.negotiated_protocol", protocol, strlen(protocol));
+			if (nasp_socket_proxywasm_enabled(s))
+				set_property_v(s->pc, "upstream.negotiated_protocol", protocol, strlen(protocol));
 		}
 		else
 			protocol = "no-mtls";
 
-		WRITE_ONCE(c->protocol, protocol);
+		WRITE_ONCE(s->protocol, protocol);
 
-		ret = configure_ktls_sock(c);
+		ret = configure_ktls_sock(s);
 		if (ret != 0)
 		{
 			pr_err("naspp socket %s configure_ktls_sock failed %d", current->comm, ret);
@@ -619,6 +526,32 @@ static int ensure_tls_handshake(nasp_socket *c)
 	}
 
 	return ret;
+}
+
+// returns continue (0), pause (1) or error (-1)
+static int nasp_socket_proxywasm_on_data(nasp_socket *s, int data_size, bool end_of_stream, bool send)
+{
+	int action = Pause;
+	proxywasm_lock(s->p, s->pc);
+	wasm_vm_result result = (send ? s->direction == ListenerDirectionOutbound : s->direction != ListenerDirectionOutbound)
+								? proxy_on_downstream_data(s->p, data_size, end_of_stream)
+								: proxy_on_upstream_data(s->p, data_size, end_of_stream);
+	proxywasm_unlock(s->p);
+
+	if (result.err)
+	{
+		pr_err("nasp: proxy_on_upstream/downstream_data returned an error: %s", result.err);
+		action = -1;
+		goto bail;
+	}
+
+	if (result.data->i32 == Continue || end_of_stream)
+	{
+		action = Continue;
+	}
+
+bail:
+	return action;
 }
 
 int nasp_recvmsg(struct sock *sock,
@@ -632,9 +565,9 @@ int nasp_recvmsg(struct sock *sock,
 {
 	int ret, len;
 
-	nasp_socket *c = sock->sk_user_data;
+	nasp_socket *s = sock->sk_user_data;
 
-	ret = ensure_tls_handshake(c);
+	ret = ensure_tls_handshake(s);
 	if (ret != 0)
 	{
 		goto bail;
@@ -648,14 +581,14 @@ int nasp_recvmsg(struct sock *sock,
 	}
 
 	bool end_of_stream = false;
-	bool done = false;
+	int action = Pause;
 
-	while (!done)
+	while (action != Continue)
 	{
-		ret = nasp_socket_read(c, get_read_buffer_for_read(c, len), len);
+		ret = nasp_socket_read(s, get_read_buffer_for_read(s, len), len);
 		if (ret < 0)
 		{
-			pr_err("nasp: recvmsg %s nasp_socket_read error %d", get_direction(c), ret);
+			pr_err("nasp: recvmsg %s nasp_socket_read error %d", get_direction(s), ret);
 			goto bail;
 		}
 		else if (ret == 0)
@@ -663,44 +596,32 @@ int nasp_recvmsg(struct sock *sock,
 			end_of_stream = true;
 		}
 
-		set_read_buffer_size(c, get_read_buffer_size(c) + ret);
+		set_read_buffer_size(s, get_read_buffer_size(s) + ret);
 
-		proxywasm_lock(c->p, c->pc);
-		wasm_vm_result result;
-		switch (c->direction)
+		if (nasp_socket_proxywasm_enabled(s))
 		{
-		case ListenerDirectionOutbound:
-			result = proxy_on_upstream_data(c->p, ret, end_of_stream);
-			break;
-		case ListenerDirectionInbound:
-		case ListenerDirectionUnspecified:
-			result = proxy_on_downstream_data(c->p, ret, end_of_stream);
-			break;
+			action = nasp_socket_proxywasm_on_data(s, ret, end_of_stream, false);
+			if (action < 0)
+			{
+				ret = -1;
+				goto bail;
+			}
 		}
-		proxywasm_unlock(c->p);
-
-		if (result.err)
+		else
 		{
-			pr_err("nasp: recvmsg proxy_on_upstream/downstream_data returned an error: %s", result.err);
-			ret = -1;
-			goto bail;
-		}
-
-		if (result.data->i32 == Continue || end_of_stream)
-		{
-			done = true;
+			action = Continue;
 		}
 	}
 
-	int read_buffer_size = get_read_buffer_size(c);
+	int read_buffer_size = get_read_buffer_size(s);
 
-	len = copy_to_iter(get_read_buffer(c), read_buffer_size, &msg->msg_iter);
+	len = copy_to_iter(get_read_buffer(s), read_buffer_size, &msg->msg_iter);
 	if (len < read_buffer_size)
 	{
 		pr_warn("nasp: recvmsg copy_to_iter copied less than requested");
 	}
 
-	set_read_buffer_size(c, read_buffer_size - len);
+	set_read_buffer_size(s, read_buffer_size - len);
 
 	ret = len;
 
@@ -712,51 +633,40 @@ int nasp_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 {
 	int ret, len;
 
-	nasp_socket *c = sock->sk_user_data;
+	nasp_socket *s = sock->sk_user_data;
 
-	ret = ensure_tls_handshake(c);
+	ret = ensure_tls_handshake(s);
 	if (ret != 0)
 	{
 		goto bail;
 	}
 
-	len = copy_from_iter(get_write_buffer_for_write(c, size), size, &msg->msg_iter);
+	len = copy_from_iter(get_write_buffer_for_write(s, size), size, &msg->msg_iter);
 
-	set_write_buffer_size(c, get_write_buffer_size(c) + len);
+	set_write_buffer_size(s, get_write_buffer_size(s) + len);
 
-	proxywasm_lock(c->p, c->pc);
-	wasm_vm_result result;
-	switch (c->direction)
+	if (nasp_socket_proxywasm_enabled(s))
 	{
-	case ListenerDirectionOutbound:
-		result = proxy_on_downstream_data(c->p, len, false);
-		break;
-	default:
-		result = proxy_on_upstream_data(c->p, len, false);
-		break;
-	}
-	proxywasm_unlock(c->p);
+		ret = nasp_socket_proxywasm_on_data(s, len, false, true);
+		if (ret < 0)
+		{
+			goto bail;
+		}
 
-	if (result.err)
-	{
-		pr_err("nasp: sendmsg proxy_on_upstream/downstream_data returned an error: %s", result.err);
-		ret = -1;
-		goto bail;
+		if (ret == Pause)
+		{
+			ret = len;
+			goto bail;
+		}
 	}
 
-	if (result.data->i32 == Pause)
-	{
-		ret = len;
-		goto bail;
-	}
-
-	ret = nasp_socket_write(c, get_write_buffer(c), get_write_buffer_size(c));
+	ret = nasp_socket_write(s, get_write_buffer(s), get_write_buffer_size(s));
 	if (ret < 0)
 	{
 		goto bail;
 	}
 
-	set_write_buffer_size(c, 0);
+	set_write_buffer_size(s, get_write_buffer_size(s) - ret);
 
 	ret = size;
 
@@ -766,11 +676,11 @@ bail:
 
 void nasp_close(struct sock *sk, long timeout)
 {
-	nasp_socket *c = READ_ONCE(sk->sk_user_data);
-	if (c)
+	nasp_socket *s = READ_ONCE(sk->sk_user_data);
+	if (s)
 	{
 		printk("nasp: close %s running for sk %p ", current->comm, sk);
-		nasp_socket_free(c);
+		nasp_socket_free(s);
 		WRITE_ONCE(sk->sk_user_data, NULL);
 	}
 	tcp_close(sk, timeout);
@@ -812,11 +722,11 @@ void ensure_nasp_ktls_prot(struct sock *sock, struct proto *nasp_ktls_prot)
 	}
 }
 
-static int configure_ktls_sock(nasp_socket *c)
+static int configure_ktls_sock(nasp_socket *s)
 {
 	int ret;
 
-	br_ssl_engine_context *eng = get_ssl_engine_context(c);
+	br_ssl_engine_context *eng = get_ssl_engine_context(s);
 	br_ssl_session_parameters *params = &eng->session;
 
 	if (params->cipher_suite != BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256)
@@ -844,14 +754,14 @@ static int configure_ktls_sock(nasp_socket *c)
 	memcpy(crypto_info_rx.rec_seq, &eng->in.chapol.seq, TLS_CIPHER_CHACHA20_POLY1305_REC_SEQ_SIZE);
 	// memcpy(crypto_info.salt, eng->out.chapol.salt, TLS_CIPHER_CHACHA20_POLY1305_SALT_SIZE);
 
-	ret = c->sock->sk_prot->setsockopt(c->sock, SOL_TCP, TCP_ULP, KERNEL_SOCKPTR("tls"), sizeof("tls"));
+	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TCP, TCP_ULP, KERNEL_SOCKPTR("tls"), sizeof("tls"));
 	if (ret != 0)
 	{
 		pr_err("nasp: %s setsockopt TCP_ULP ret: %d", current->comm, ret);
 		return ret;
 	}
 
-	ret = c->sock->sk_prot->setsockopt(c->sock, SOL_TLS, TLS_TX, KERNEL_SOCKPTR(&crypto_info_tx), sizeof(crypto_info_tx));
+	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TLS, TLS_TX, KERNEL_SOCKPTR(&crypto_info_tx), sizeof(crypto_info_tx));
 	if (ret != 0)
 	{
 		pr_err("nasp: %s setsockopt TLS_TX ret: %d", current->comm, ret);
@@ -866,7 +776,7 @@ static int configure_ktls_sock(nasp_socket *c)
 	// 	return ret;
 	// }
 
-	ret = c->sock->sk_prot->setsockopt(c->sock, SOL_TLS, TLS_RX, KERNEL_SOCKPTR(&crypto_info_rx), sizeof(crypto_info_rx));
+	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TLS, TLS_RX, KERNEL_SOCKPTR(&crypto_info_rx), sizeof(crypto_info_rx));
 	if (ret != 0)
 	{
 		pr_err("nasp: %s setsockopt TLS_RX ret: %d", current->comm, ret);
@@ -876,11 +786,11 @@ static int configure_ktls_sock(nasp_socket *c)
 	// We have to save the proto here because the setsockopt calls override the TCP protocol.
 	// later those methods set by ktls has to be used to read and write data, but first we
 	// need to put back our read and write methods.
-	c->ktls_recvmsg = c->sock->sk_prot->recvmsg;
-	c->ktls_sendmsg = c->sock->sk_prot->sendmsg;
+	s->ktls_recvmsg = s->sock->sk_prot->recvmsg;
+	s->ktls_sendmsg = s->sock->sk_prot->sendmsg;
 
 	struct proto *ktls_prot;
-	if (c->sock->sk_family == AF_INET)
+	if (s->sock->sk_family == AF_INET)
 	{
 		ktls_prot = &nasp_ktls_prot;
 	}
@@ -889,9 +799,9 @@ static int configure_ktls_sock(nasp_socket *c)
 		ktls_prot = &nasp_v6_ktls_prot;
 	}
 
-	ensure_nasp_ktls_prot(c->sock, ktls_prot);
+	ensure_nasp_ktls_prot(s->sock, ktls_prot);
 
-	WRITE_ONCE(c->sock->sk_prot, ktls_prot);
+	WRITE_ONCE(s->sock->sk_prot, ktls_prot);
 
 	return 0;
 }
@@ -940,23 +850,15 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		u16 client_port = (u16)(client->sk_portpair);
 		printk("nasp_accept: uid: %d app: %s on ports: %d <- %d", current_uid().val, current->comm, port, client_port);
 
-		proxywasm *p = this_cpu_proxywasm();
-		proxywasm_lock(p, NULL);
-
-		nasp_socket *sc = nasp_socket_accept(p, client);
-
-		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
-		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
-
-		wasm_vm_result res = proxy_on_new_connection(p);
-		if (res.err)
+		nasp_socket *sc = nasp_socket_accept(client);
+		if (!sc)
 		{
-			pr_err("nasp: nasp_socket_accept failed to create context: %s", res.err);
-			proxywasm_unlock(p);
+			pr_err("nasp: nasp_socket_accept failed to create nasp_socket"); // TODO we need to close the socket after any error
 			return NULL;
 		}
 
-		proxywasm_unlock(p);
+		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
+		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
 
 		// Sample how to send a command to the userspace agents
 		command_answer *answer = send_accept_command(port);
@@ -1169,23 +1071,15 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	{
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
-		proxywasm *p = this_cpu_proxywasm();
-		proxywasm_lock(p, NULL);
-
-		nasp_socket *sc = nasp_socket_connect(p, sk);
-
-		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
-		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
-
-		wasm_vm_result res = proxy_on_new_connection(p);
-		if (res.err)
+		nasp_socket *sc = nasp_socket_connect(sk);
+		if (!sc)
 		{
-			pr_err("nasp: nasp_socket_connect failed to create context: %s", res.err);
-			proxywasm_unlock(p);
+			pr_err("nasp: nasp_socket_connect failed to create nasp_socket"); // TODO we need to close the socket after any error
 			return -1;
 		}
 
-		proxywasm_unlock(p);
+		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
+		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
 
 		command_answer *answer = send_connect_command(port);
 
