@@ -8,10 +8,10 @@
  * modified, or distributed except according to those terms.
  */
 
-#ifndef _WASM_H
-#define _WASM_H
+#ifndef _SOCKET_H
+#define _SOCKET_H
 
-int wasm_socket_init(void);
-void wasm_socket_exit(void);
+int socket_init(void);
+void socket_exit(void);
 
 #endif

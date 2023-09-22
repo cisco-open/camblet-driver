@@ -14,7 +14,7 @@
 #include <linux/device.h>
 #include <linux/fs.h>
 
-#include "runtime.h"
+#include "wasm.h"
 
 static int device_open(struct inode *, struct file *);
 static int device_release(struct inode *, struct file *);

@@ -11,10 +11,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-      name: Checkout wasm-kernel-module
+      name: Checkout nasp-kernel-module
       with:
         submodules: recursive
-        path: wasm-kernel-module
+        path: nasp-kernel-module
 
     # - name: Setup upterm session
     #   uses: lhotari/action-upterm@v1
@@ -23,46 +23,45 @@ jobs:
     #     limit-access-to-actor: true
 
     - name: Install/setup prerequisites
-      working-directory: wasm-kernel-module
+      working-directory: nasp-kernel-module
       run: make setup-vm
 
     - name: Build the kernel module
-      working-directory: wasm-kernel-module
+      working-directory: nasp-kernel-module
       run: make -j$(nproc)
 
-    # Proxywasm module loading freezes the kernel on the GitHub Actions VM
     - name: Run the kernel module
-      working-directory: wasm-kernel-module 
+      working-directory: nasp-kernel-module 
       run: |
         make insmod
         sudo dmesg -T
 
     - uses: actions/checkout@v3
-      name: Checkout wasm-kernel-module-cli
+      name: Checkout nasp
       with:
         submodules: recursive
-        repository: cisco-open/wasm-kernel-module-cli
-        path: wasm-kernel-module-cli
+        repository: cisco-open/nasp
+        path: nasp
 
     - name: Build CLI
-      working-directory: wasm-kernel-module-cli
+      working-directory: nasp
       run: make build-cli
 
     - name: Build OPA policy module
-      working-directory: wasm-kernel-module-cli
+      working-directory: nasp
       run: make build-opa-policy-wasm
 
     - name: Run OPA policy module
-      working-directory: wasm-kernel-module-cli
+      working-directory: nasp
       run: |
         make load-opa-policy-wasm
         sudo dmesg -T
 
     - name: Run proxy-wasm smoke test
-      working-directory: wasm-kernel-module
+      working-directory: nasp-kernel-module
       timeout-minutes: 1
       run: |
-        sudo ../wasm-kernel-module-cli/w3k server &
+        sudo ../nasp/w3k server &
         go run test/file-server.go &
         docker run -d --rm -p 8080:80 nginx
         sleep 2
@@ -89,20 +88,20 @@ jobs:
         sudo pkill -9 w3k
 
     - name: Cleanup module
-      working-directory: wasm-kernel-module
+      working-directory: nasp-kernel-module
       run: make rmmod
 
     - name: Test DKMS
-      working-directory: wasm-kernel-module
+      working-directory: nasp-kernel-module
       run: |
-        sudo cp -r . /usr/src/wasm-0.1.0/
-        sudo dkms add -m wasm -v 0.1.0
-        if sudo dkms build -m wasm -v 0.1.0; then
+        sudo cp -r . /usr/src/nasp-0.1.0/
+        sudo dkms add -m nasp -v 0.1.0
+        if sudo dkms build -m nasp -v 0.1.0; then
           echo "DKMS build succeeded"
         else
           echo "DKMS build failed"
-          cat /var/lib/dkms/wasm/0.1.0/build/make.log
+          cat /var/lib/dkms/nasp/0.1.0/build/make.log
           exit 1
         fi
-        sudo dkms install -m wasm -v 0.1.0
+        sudo dkms install -m nasp -v 0.1.0
         sudo dmesg -T

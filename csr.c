@@ -85,7 +85,7 @@ static i32 alloc_and_copy_parameter(char *str, i32 str_length, csr_module *csr)
     i32 addr;
     if (malloc_result.err)
     {
-        pr_err("wasm: malloc_result error: %s", malloc_result.err);
+        pr_err("nasp: malloc_result error: %s", malloc_result.err);
         addr = -1;
         goto bail;
     }
@@ -105,7 +105,7 @@ wasm_vm_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff
     field##_ptr = alloc_and_copy_parameter(parameters->field, field##_len, csr);  \
     if (field##_ptr == -1)                                                        \
     {                                                                             \
-        result.err = "wasm: error during allocating ptr with length for " #field; \
+        result.err = "nasp: error during allocating ptr with length for " #field; \
         goto bail;                                                                \
     }
 
@@ -124,10 +124,10 @@ wasm_vm_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff
                                  ip_ptr, ip_len);
     if (result.err != NULL)
     {
-        pr_err("wasm: calling csr_gen errored %s\n", result.err);
+        pr_err("nasp: calling csr_gen errored %s\n", result.err);
         goto bail;
     }
-    printk("wasm: result of calling csr_gen %d\n", result.data->i64);
+    printk("nasp: result of calling csr_gen %lldd\n", result.data->i64);
 bail:
     i32 pointers[] = {subject_ptr, dns_ptr, uri_ptr, email_ptr, ip_ptr};
 

@@ -12,7 +12,7 @@
 #include <linux/netfilter_ipv4.h>
 
 #include "netfilter.h"
-#include "runtime.h"
+#include "wasm.h"
 
 #define DNS_MODULE "dns"
 
@@ -151,7 +151,7 @@ static int init_network(struct net *net)
 {
     int ret = 0;
 
-    printk("wasm: init_network: %u\n", net->ns.inum);
+    printk("nasp: init_network: %u\n", net->ns.inum);
 
     // register hook for outgoing traffic
     nfho_out.hook = hook_func_out;
@@ -169,14 +169,14 @@ static int init_network(struct net *net)
 
     ret += nf_register_net_hook(net, &nfho_in);
 
-    printk("wasm: init_network: %u returned: %d\n", net->ns.inum, ret);
+    printk("nasp: init_network: %u returned: %d\n", net->ns.inum, ret);
 
     return 0;
 }
 
 static void exit_network(struct net *net)
 {
-    printk("wasm: exit_network: %u\n", net->ns.inum);
+    printk("nasp: exit_network: %u\n", net->ns.inum);
     nf_unregister_net_hook(net, &nfho_in);
     nf_unregister_net_hook(net, &nfho_out);
 }
@@ -188,14 +188,14 @@ static struct pernet_operations net_operations = {
 
 int start_netfilter_submodule(void)
 {
-    printk("wasm: netfilter submodule init()");
+    printk("nasp: netfilter submodule init()");
 
     return register_pernet_device(&net_operations);
 }
 
 int stop_netfilter_submodule(void)
 {
-    printk("wasm: netfilter submodule exit()");
+    printk("nasp: netfilter submodule exit()");
 
     unregister_pernet_device(&net_operations);
 

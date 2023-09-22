@@ -8,7 +8,7 @@
  * modified, or distributed except according to those terms.
  */
 
-#include "runtime.h"
+#include "wasm.h"
 
 #define CSR_MODULE "csr"
 

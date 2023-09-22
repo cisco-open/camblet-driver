@@ -39,7 +39,7 @@ command_answer *send_command(char *name, char *data, task_context *context)
     DEFINE_WAIT(wait);
 
     // wait until the command is processed
-    printk("wasm: waiting for command [%s] to be processed", name);
+    printk("nasp: waiting for command [%s] to be processed", name);
 
     // wait for the command to be processed
     prepare_to_wait(&cmd->wait_queue, &wait, TASK_INTERRUPTIBLE);
@@ -51,7 +51,7 @@ command_answer *send_command(char *name, char *data, task_context *context)
 
     if (cmd->answer == NULL)
     {
-        printk(KERN_ERR "wasm: command [%s] answer timeout", name);
+        printk(KERN_ERR "nasp: command [%s] answer timeout", name);
 
         cmd->answer = kmalloc(sizeof(struct command_answer), GFP_KERNEL);
         cmd->answer->error = kmalloc(strlen("timeout") + 1, GFP_KERNEL);
