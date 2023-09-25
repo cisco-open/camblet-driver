@@ -16,11 +16,10 @@ jobs:
         submodules: recursive
         path: nasp-kernel-module
 
-    # - name: Setup upterm session
-    #   uses: lhotari/action-upterm@v1
-    #   with:
-    #     ## limits ssh access and adds the ssh public key for the user which triggered the workflow
-    #     limit-access-to-actor: true
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: '1.21'
 
     - name: Install/setup prerequisites
       working-directory: nasp-kernel-module
@@ -43,25 +42,21 @@ jobs:
         repository: cisco-open/nasp
         path: nasp
 
-    - name: Build CLI
+    - name: Build Nasp CLI
       working-directory: nasp
-      run: make build-cli
+      run: make build
 
-    - name: Build OPA policy module
-      working-directory: nasp
-      run: make build-opa-policy-wasm
-
-    - name: Run OPA policy module
-      working-directory: nasp
-      run: |
-        make load-opa-policy-wasm
-        sudo dmesg -T
+    # - name: Setup upterm session
+    #   uses: lhotari/action-upterm@v1
+    #   with:
+    #     ## limits ssh access and adds the ssh public key for the user which triggered the workflow
+    #     limit-access-to-actor: true
 
     - name: Run proxy-wasm smoke test
       working-directory: nasp-kernel-module
       timeout-minutes: 1
       run: |
-        sudo ../nasp/w3k server &
+        sudo ../nasp/build/nasp agent &
         go run test/file-server.go &
         docker run -d --rm -p 8080:80 nginx
         sleep 2
@@ -85,7 +80,7 @@ jobs:
         sudo dmesg -T | tail -100
 
         sudo kill -9 $(jobs -p)
-        sudo pkill -9 w3k
+        sudo pkill -9 nasp
 
     - name: Cleanup module
       working-directory: nasp-kernel-module
