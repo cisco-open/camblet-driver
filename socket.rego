@@ -13,7 +13,14 @@ INPUT := 0
 OUTPUT := 1
 
 allowed_ports := {8000, 8080, 5001}
-allowed_commands := {"curl", "python3", "file-server", "nginx", "iperf"}
+
+allowed_commands := {
+	"curl",
+	"python3",
+	"file-server",
+	"nginx",
+	"iperf",
+}
 
 allow = {
 	"mtls": true,
@@ -30,4 +37,21 @@ allow = {
 } {
 	input.port == 7000
 	input.command == "python3"
+}
+
+# Allow all traffic from the host curl to container nginx through docker-proxy.
+# From docker-proxy to nginx, we don't repackage the traffic again, mTLS is
+# flowing through the docker-proxy transparently.
+allow = {
+	"mtls": true,
+} {
+	input.port == 80
+	input.command == "nginx"
+}
+
+allow = {
+	"mtls": true,
+} {
+	input.port == 8080
+	input.command == "docker-proxy"
 }

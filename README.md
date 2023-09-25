@@ -134,10 +134,10 @@ Install the [CLI](https://github.com/cisco-open/nasp) for the kernel module:
 # You can build the module on your workstation
 git clone https://github.com/cisco-open/nasp.git
 cd nasp
-make build-cli
+make build
 
 # But you need to run it in the VM, where the device is exposed
-lima sudo ./w3k server
+lima sudo build/nasp agent 
 ```
 
 Then follow the instructions [here](https://github.com/cisco-open/nasp#cli).
