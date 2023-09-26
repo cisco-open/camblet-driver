@@ -69,10 +69,9 @@ jobs:
         diff opa.o opa_downloaded.o
 
         # Test bearssl with non-bearssl compatibility
-        # TODO somehow this test run locally but not on github
-        # python3 -m http.server 7000 &
-        # sleep 1
-        # curl -k -v -o /dev/null https://localhost:7000/opa.o
+        python3 -m http.server 7000 &
+        sleep 1
+        curl -k -v -o /dev/null https://localhost:7000/opa.o
 
         # Test sendfile with NGiNX
         curl -v http://localhost:8080
