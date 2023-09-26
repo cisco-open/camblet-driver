@@ -58,28 +58,6 @@ sudo apt update && sudo apt install make
 make setup-vm
 ```
 
-### Vagrant/Virtualbox
-
-If you happen to use Vagrant, there is a Vagrantfile prepared which uses VirtualBox.
-
-On macOS install Vagrant and VirtualBox with brew:
-
-```bash
-brew install vagrant virtualbox
-```
-
-Bring up the Vagrant machine, this installs the required dependencies automatically into it:
-
-```bash
-vagrant up
-```
-
-Connect to the Vagrant machine through SSH:
-
-```bash
-vagrant ssh
-```
-
 ### Coding
 
 We are using VSCode for development and the project ships with a `c_cpp_properties.json` file which contains the required include paths for the kernel headers. The file is ARM specific from include path point-of-view so if you happen to run on x86_64 please replace the paths accordingly (arm64 -> x86, aarch64 -> x86_64).
