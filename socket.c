@@ -844,7 +844,7 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	u16 port = (u16)(sk->sk_portpair >> 16);
 
-	opa_socket_context opa_socket = socket_eval(port, OUTPUT, current->comm, current_uid().val);
+	opa_socket_context opa_socket = socket_eval(port, INPUT, current->comm, current_uid().val);
 	if (client && opa_socket.allowed)
 	{
 		u16 client_port = (u16)(client->sk_portpair);

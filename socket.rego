@@ -41,17 +41,22 @@ allow = {
 
 # Allow all traffic from the host curl to container nginx through docker-proxy.
 # From docker-proxy to nginx, we don't repackage the traffic again, mTLS is
-# flowing through the docker-proxy transparently.
+# flowing through the docker-proxy transparently. The most importnatn thing is
+# that nginx thinks that it listens on port 80, and we have to write the rule for that.
 allow = {
 	"mtls": true,
+	"permissive": false,
 } {
-	input.port == 80
-	input.command == "nginx"
+	input.direction == OUTPUT
+	input.port == 8080
+	input.command == "curl"
 }
 
 allow = {
 	"mtls": true,
+	"permissive": false,
 } {
-	input.port == 8080
-	input.command == "docker-proxy"
+	input.direction == INPUT
+	input.port == 80
+	input.command == "nginx"
 }
