@@ -148,37 +148,6 @@ The kernel module can terminate TLS connections on certain ports, and forward th
 
 Between two applications - both of them intercepted by this module - the traffic is always encrypted by [kTLS](https://docs.kernel.org/networking/tls-offload.html). If one of them is not intercepted by the module but supports the ChaCha20-Poly1305 AEAD - kTLS is used. Otherwise the traffic is encrypted by BearSSL.
 
-### TLS Certificates for testing
-
-You will need `cfssl` for this (`brew install cfssl` on macOS):
-
-```bash
-# Create the CA certificate
-cfssl gencert -initca ca.json | cfssljson -bare ca
-
-# Create the client/server certificate
-cfssl gencert \
-  -ca=ca.pem \
-  -ca-key=ca-key.pem \
-  -config=server.json \
-  -profile=server \
-  server.json | cfssljson -bare server
-```
-
-
-Generate the static C resources of these certificates with BearSSL's `brssl` CLI and copy these into the given [certificate_rsa.h](certificate_rsa.h) header file:
-
-```bash
-# Trust anchor (CA)
-brssl ta ca.pem
-
-# Server certificate
-brssl chain server.pem
-
-# Server private key
-brssl skey -C server-key.pem
-```
-
 ### Test mTLS
 
 The kernel module offers TLS termination on certain ports selected by a rule-set:

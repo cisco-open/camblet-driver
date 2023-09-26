@@ -57,12 +57,9 @@ nasp-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  buffer.o \
 			  device_driver.o \
 			  main.o \
-			  netfilter.o \
-			  hashtable.o \
 			  csr.o \
 			  rsa_tools.o \
 			  wasm.o \
-			  worker_thread.o \
 			  opa.o \
 			  proxywasm.o \
 			  socket.o \
@@ -73,15 +70,15 @@ nasp-objs :=  third-party/wasm3/source/m3_api_libc.o \
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
 
-default: socket_wasm.h
+default: static/socket_wasm.h
 	cd third-party/BearSSL && $(MAKE) linux-km
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) modules
 
-socket_wasm.h: socket.rego
+static/socket_wasm.h: socket.rego
 	opa build -t wasm -e "socket/allow" socket.rego -o bundle.tar.gz
 	tar zxvf bundle.tar.gz /policy.wasm
 	mv policy.wasm socket.wasm
-	xxd -i socket.wasm socket_wasm.h
+	xxd -i socket.wasm static/socket_wasm.h
 
 opa-test:
 	opa test *.rego -v
@@ -120,7 +117,7 @@ _archlinux_deps:
 	sudo pacman -Syu linux-headers base-devel clang go dkms git strace bc iperf socat
 
 _install_opa:
-	sudo curl -L -o /usr/bin/opa https://openpolicyagent.org/downloads/v0.54.0/opa_linux_$(shell go version | cut -f2 -d'/')_static
+	sudo curl -L -o /usr/bin/opa https://openpolicyagent.org/downloads/v0.56.0/opa_linux_$(shell go version | cut -f2 -d'/')_static
 	sudo chmod +x /usr/bin/opa
 
 setup-vm: _debian_deps _install_opa

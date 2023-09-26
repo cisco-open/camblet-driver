@@ -11,9 +11,6 @@
 #include <linux/slab.h>
 
 #include "wasm.h"
-#include "worker_thread.h"
-#include "hashtable.h"
-
 #include "wasm3.h"
 #include "m3_env.h"
 #include "m3_api_libc.h"
@@ -347,88 +344,6 @@ wasm_vm_result wasm_vm_free(wasm_vm *vm, const char *module, i32 ptr, unsigned s
     return wasm_vm_call(vm, module, "free", ptr, size);
 }
 
-m3ApiRawFunction(m3_ext_table_add)
-{
-    m3ApiGetArg(i32,   key);
-
-    m3ApiGetArgMem(void*,    i_ptr);
-    m3ApiGetArg(wasm_size_t,  i_size);
-
-    m3ApiCheckMem(i_ptr, i_size);
-
-    add_to_module_hashtable(key, i_ptr, i_size);
-    m3ApiSuccess();
-}
-
-m3ApiRawFunction(m3_ext_table_del)
-{
-    m3ApiGetArg(i32, key);
-
-    delete_from_module_hashtable(key);
-    m3ApiSuccess();
-}
-
-m3ApiRawFunction(m3_ext_table_get)
-{
-    m3ApiMultiValueReturnType (i32, ptr);
-    m3ApiMultiValueReturnType (i32, len);
-    m3ApiGetArg     (i32,     key);
-
-    void* data_ptr = NULL;
-    i32 data_len = 0;
-
-    get_from_module_hashtable(_ctx->function->module->name, key, &data_ptr, &data_len, _mem);
-
-    if (!data_ptr)
-    {
-        m3ApiMultiValueReturn(len, 0);
-        m3ApiMultiValueReturn(ptr, 0);
-        m3ApiSuccess();
-    }
-
-    m3ApiMultiValueReturn(len, (i32)data_len);
-    m3ApiMultiValueReturn(ptr, (i32)data_ptr);
-    m3ApiSuccess();
-}
-
-m3ApiRawFunction(m3_ext_table_keys)
-{
-    m3ApiMultiValueReturnType (i32, ptr);
-    m3ApiMultiValueReturnType (i32, len);
-
-    void* data_ptr;
-    i32 data_len;
-
-    keys_from_module_hashtable(_ctx->function->module->name, &data_ptr, &data_len, _mem);
-
-    m3ApiMultiValueReturn(len, (i32)data_len);
-    m3ApiMultiValueReturn(ptr, (i32)data_ptr);
-    m3ApiSuccess();
-}
-
-m3ApiRawFunction(m3_ext_submit_metric)
-{
-    m3ApiReturnType (uint32_t);
-    
-    m3ApiGetArgMem  (void*,           i_ptr);
-    m3ApiGetArg     (wasm_size_t,     i_size);
-
-    m3ApiCheckMem(i_ptr, i_size);
-    
-    char *metric_line = (char *)kmalloc(i_size, GFP_ATOMIC);
-    if (!metric_line)
-    {
-        pr_err("nasp: cannot allocate memory for metric_line");
-        m3ApiReturn(-1);
-    }
-
-    memcpy(metric_line, i_ptr, i_size);
-
-    submit_metric(metric_line, i_size);
-
-    m3ApiReturn(i_size);
-}
-
 m3ApiRawFunction(m3_wasi_generic_environ_get)
 {
     m3ApiReturnType  (uint32_t)
@@ -467,22 +382,6 @@ M3Result SuppressLookupFailure(M3Result i_result)
         return i_result;
 }
 
-static M3Result m3_LinkRuntimeExtension(IM3Module module)
-{
-    M3Result result = m3Err_none;
-
-    const char *env = "env";
-
-    _(SuppressLookupFailure(m3_LinkRawFunction(module, env, "submit_metric", "i(*i)", &m3_ext_submit_metric)));
-    _(SuppressLookupFailure(m3_LinkRawFunction(module, env, "table_get", "ii(i)", &m3_ext_table_get)));
-    _(SuppressLookupFailure(m3_LinkRawFunction(module, env, "table_keys", "ii()", &m3_ext_table_keys)));
-    _(SuppressLookupFailure(m3_LinkRawFunction(module, env, "table_add", "(i*i)", &m3_ext_table_add)));
-    _(SuppressLookupFailure(m3_LinkRawFunction(module, env, "table_del", "(i)", &m3_ext_table_del)));
-
-_catch:
-    return result;
-}
-
 // Some Wasi mockings only for proxy-wasm
 static M3Result m3_LinkWASIMocks(IM3Module module)
 {
@@ -502,10 +401,6 @@ static M3Result m3_link_all(IM3Module module)
 {
     M3Result res = NULL;
     res = m3_LinkLibC(module);
-    if (res)
-        return res;
-
-    res = m3_LinkRuntimeExtension(module);
     if (res)
         return res;
 

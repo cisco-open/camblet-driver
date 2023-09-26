@@ -27,13 +27,7 @@
 #include "rsa_tools.h"
 #include "socket.h"
 
-#define RSA_OR_EC 0
-
-#if !RSA_OR_EC
-#include "certificate_rsa.h"
-#elif
-#include "certificate_ec.h"
-#endif
+#include "static/certificate_rsa.h"
 
 const char *ALPNs[] = {
 	"istio-peer-exchange",
