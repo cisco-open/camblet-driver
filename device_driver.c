@@ -93,7 +93,7 @@ void chardev_exit(void)
 /* Methods */
 
 /* Called when a process tries to open the device file, like
- * "sudo cat /dev/chardev"
+ * "sudo cat /dev/nasp"
  */
 static int device_open(struct inode *inode, struct file *file)
 {
@@ -101,6 +101,8 @@ static int device_open(struct inode *inode, struct file *file)
         return -EBUSY;
 
     try_module_get(THIS_MODULE);
+
+    printk("nasp: [%s] opened the communication device", current->comm);
 
     return SUCCESS;
 }
@@ -330,7 +332,7 @@ cleanup:
 /* Called when a process closes the device file. */
 static int device_release(struct inode *inode, struct file *file)
 {
-    printk(KERN_INFO "nasp: device has been released");
+    printk(KERN_INFO "nasp: [%s] closed the communcation device", current->comm);
 
     device_buffer_size = 0;
 
