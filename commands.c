@@ -122,7 +122,6 @@ csr_sign_answer *send_csrsign_command(unsigned char *csr)
         csr_sign_answer->trust_anchors_len = json_array_get_count(trust_anchors);
         csr_sign_answer->trust_anchors = kmalloc(csr_sign_answer->trust_anchors_len * sizeof *csr_sign_answer->trust_anchors, GFP_KERNEL);
 
-        size_t destlen;
         size_t srclen;
 
         size_t u;

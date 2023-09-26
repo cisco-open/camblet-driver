@@ -26,6 +26,7 @@
 #include "proxywasm.h"
 #include "rsa_tools.h"
 #include "socket.h"
+#include "tls.h"
 
 #include "static/certificate_rsa.h"
 
@@ -54,7 +55,8 @@ typedef struct
 
 	unsigned char iobuf[BR_SSL_BUFSIZE_BIDI];
 	br_sslio_context ioc;
-	br_x509_minimal_context xc;
+	br_x509_nasp_context xc;
+	br_x509_class validator;
 
 	br_rsa_private_key *rsa_priv;
 	br_rsa_public_key *rsa_pub;
@@ -311,6 +313,8 @@ static void nasp_socket_free(nasp_socket *s)
 			kfree(s->cc);
 		}
 
+		br_x509_nasp_free(&s->xc);
+
 		// if (c->rsa_priv != NULL)
 		// {
 		// 	kfree(c->rsa_priv->p);
@@ -424,12 +428,9 @@ static nasp_socket *nasp_socket_connect(struct sock *sock)
 void dump_array(unsigned char array[], size_t len)
 {
 	size_t u;
-
-	printk("");
-
 	for (u = 0; u < len; u++)
 	{
-		printk(KERN_CONT "%x, ", array[u]);
+		pr_cont("%x, ", array[u]);
 	}
 }
 
@@ -439,21 +440,21 @@ void dump_msghdr(struct msghdr *msg)
 	size_t len, nr_segs, iovlen;
 	int npages;
 
-	printk(KERN_INFO "msg_name = %p\n", msg->msg_name);
-	printk(KERN_INFO "msg_namelen = %u\n", msg->msg_namelen);
-	printk(KERN_INFO "msg_iter.type = %u\n", msg->msg_iter.iter_type);
-	printk(KERN_INFO "msg_iter.count = %zd\n", msg->msg_iter.count);
+	pr_info("msg_name = %p\n", msg->msg_name);
+	pr_info("msg_namelen = %u\n", msg->msg_namelen);
+	pr_info("msg_iter.type = %u\n", msg->msg_iter.iter_type);
+	pr_info("msg_iter.count = %zd\n", msg->msg_iter.count);
 
-	printk(KERN_INFO "iovoffset = %zd", msg->msg_iter.iov_offset);
+	pr_info("iovoffset = %zd", msg->msg_iter.iov_offset);
 	msg->msg_iter.iov_offset = 0;
 	// iov_iter_zero(2, &msg->msg_iter);
-	printk(KERN_INFO "iovoffset = %zd", msg->msg_iter.iov_offset);
+	pr_info("iovoffset = %zd", msg->msg_iter.iov_offset);
 
 	nr_segs = iov_iter_single_seg_count(&msg->msg_iter);
-	printk(KERN_INFO "iovsegcount = %zd", nr_segs);
+	pr_info("iovsegcount = %zd", nr_segs);
 
 	npages = iov_iter_npages(&msg->msg_iter, 16384);
-	printk(KERN_INFO "npages = %d", npages);
+	pr_info("npages = %d", npages);
 
 	struct iovec *iov;
 
@@ -464,12 +465,12 @@ void dump_msghdr(struct msghdr *msg)
 #endif
 
 	iovlen = iov_length(iov, npages);
-	printk(KERN_INFO "iovlen = %zd", iovlen);
+	pr_info("iovlen = %zd", iovlen);
 
 	len = copy_from_iter(data, iovlen - msg->msg_iter.count, &msg->msg_iter);
-	printk(KERN_INFO "copylen = %zd\n", len);
-	printk(KERN_INFO "msg = [%.*s]\n", len, data);
-	printk(KERN_INFO "iovoffset = %zd\n", msg->msg_iter.iov_offset);
+	pr_info("copylen = %zd\n", len);
+	pr_info("msg = [%.*s]\n", (int)len, data);
+	pr_info("iovoffset = %zd\n", msg->msg_iter.iov_offset);
 }
 
 static int configure_ktls_sock(nasp_socket *s);
@@ -991,16 +992,16 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		{
 			if (sc->chain_len > 0)
 			{
-				br_x509_minimal_init_full(&sc->xc, sc->trust_anchors, sc->trust_anchors_len);
+				br_x509_minimal_init_full(&sc->xc.ctx, sc->trust_anchors, sc->trust_anchors_len);
 				br_ssl_server_set_trust_anchor_names_alt(sc->sc, sc->trust_anchors, sc->trust_anchors_len);
 			}
 			else
 			{
-				br_x509_minimal_init_full(&sc->xc, TAs, TAs_NUM);
+				br_x509_minimal_init_full(&sc->xc.ctx, TAs, TAs_NUM);
 				br_ssl_server_set_trust_anchor_names_alt(sc->sc, TAs, TAs_NUM);
 			}
 
-			br_ssl_engine_set_x509(&sc->sc->eng, &sc->xc.vtable);
+			br_x509_nasp_init(&sc->xc, &sc->sc->eng);
 			br_ssl_engine_set_default_rsavrfy(&sc->sc->eng);
 		}
 #elif
@@ -1200,16 +1201,14 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		if (sc->chain_len > 0)
 		{
 			pr_info("nasp: connect use cert from agent");
-			br_ssl_client_init_full(sc->cc, &sc->xc, sc->trust_anchors, sc->trust_anchors_len);
+			br_ssl_client_init_full(sc->cc, &sc->xc.ctx, sc->trust_anchors, sc->trust_anchors_len);
 		}
 		else
 		{
-			br_ssl_client_init_full(sc->cc, &sc->xc, TAs, TAs_NUM);
+			br_ssl_client_init_full(sc->cc, &sc->xc.ctx, TAs, TAs_NUM);
 		}
 
-		// br_ssl_client_init_full(sc->cc, &sc->xc, TAs, TAs_NUM);
-		// br_x509_minimal_init_full(sc->xc, TAs, TAs_NUM);
-		// br_ssl_engine_set_x509(&sc->cc->eng, &sc->xc->vtable);
+		br_x509_nasp_init(&sc->xc, &sc->cc->eng);
 
 		// mTLS enablement
 		if (opa_socket.mtls)

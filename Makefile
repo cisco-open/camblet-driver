@@ -64,6 +64,7 @@ nasp-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  proxywasm.o \
 			  socket.o \
 			  task_context.o \
+			  tls.o \
 			  commands.o \
 			  string.o
 
