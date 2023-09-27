@@ -8,8 +8,8 @@
  * modified, or distributed except according to those terms.
  */
 
-#ifndef BUFFER_H
-#define BUFFER_H
+#ifndef buffer_h
+#define buffer_h
 
 typedef struct buffer_t {
   char *data;

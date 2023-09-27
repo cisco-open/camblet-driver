@@ -8,8 +8,8 @@
  * modified, or distributed except according to those terms.
  */
 
-#ifndef PROXYWASM_H
-#define PROXYWASM_H
+#ifndef proxywasm_h
+#define proxywasm_h
 
 #include "buffer.h"
 #include "wasm.h"

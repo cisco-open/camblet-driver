@@ -8,7 +8,12 @@
  * modified, or distributed except according to those terms.
  */
 
+#ifndef string_h
+#define string_h
+
 #include <linux/slab.h>
 
 char *strdup(const char *str);
 char *strndup(const char *str, size_t size);
+
+#endif

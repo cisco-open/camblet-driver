@@ -8,6 +8,9 @@
  * modified, or distributed except according to those terms.
  */
 
+#ifndef csr_h
+#define csr_h
+
 #include "wasm.h"
 
 #define CSR_MODULE "csr"
@@ -34,3 +37,5 @@ wasm_vm_result csr_free(csr_module *csr, i32 ptr);
 wasm_vm_module *get_csr_module(csr_module *csr);
 void csr_lock(csr_module *csr);
 void csr_unlock(csr_module *csr);
+
+#endif
