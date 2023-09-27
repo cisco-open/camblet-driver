@@ -8,25 +8,17 @@
  * modified, or distributed except according to those terms.
  */
 
-#include <linux/mm.h>
-#include <linux/bpfptr.h>
-#include <linux/btf.h>
-#include <linux/btf_ids.h>
 #include <linux/module.h>
-#include <linux/init.h>
-#include <linux/version.h>
 
 #include "device_driver.h"
-#include "netfilter.h"
-#include "wasm.h"
-#include "worker_thread.h"
 #include "opa.h"
 #include "socket.h"
+#include "wasm.h"
 
-#include "filter_stats.h"
-#include "filter_tcp_metadata.h"
-#include "module_csr.h"
-#include "socket_wasm.h"
+#include "static/filter_stats.h"
+#include "static/filter_tcp_metadata.h"
+#include "static/module_csr.h"
+#include "static/socket_wasm.h"
 
 MODULE_AUTHOR("Cisco Systems");
 MODULE_LICENSE("Dual MIT/GPL");
@@ -36,36 +28,6 @@ MODULE_VERSION("0.1");
 static bool proxywasm_modules = false;
 module_param(proxywasm_modules, bool, 0644);
 MODULE_PARM_DESC(proxywasm_modules, "Enable/disable the proxywasm modules");
-
-int bpf_opa_eval(const char *input)
-{
-    int res = this_cpu_opa_eval(input);
-    printk("%s: bpf_opa_eval(input=%s) -> %d", THIS_MODULE->name, input, res);
-    return res;
-}
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
-
-#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0)
-BTF_SET8_START(opa_kfunc_ids)
-BTF_ID_FLAGS(func, bpf_opa_eval)
-BTF_SET8_END(opa_kfunc_ids)
-#else
-BTF_SET_START(opa_kfunc_ids)
-BTF_ID(func, bpf_opa_eval)
-BTF_SET_END(opa_kfunc_ids)
-#endif
-
-static const struct btf_kfunc_id_set bpf_opa_kfunc_set = {
-    .owner = THIS_MODULE,
-#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0)
-    .set = &opa_kfunc_ids,
-#else
-    .check_set = &opa_kfunc_ids,
-#endif
-};
-
-#endif
 
 static int __init nasp_init(void)
 {
@@ -80,8 +42,6 @@ static int __init nasp_init(void)
 
     int ret = 0;
 
-    // ret += start_netfilter_submodule();
-    // ret += worker_thread_init();
     ret += chardev_init();
     ret += socket_init();
 
@@ -116,12 +76,6 @@ static int __init nasp_init(void)
         return -1;
     }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
-    ret += register_btf_kfunc_id_set(BPF_PROG_TYPE_XDP, &bpf_opa_kfunc_set);
-#else
-    pr_warn("%s: your kernel version (<5.18) doesn't support BTF kfuncs, can't register them", THIS_MODULE->name);
-#endif
-
     return ret;
 }
 
@@ -129,8 +83,6 @@ static void __exit nasp_exit(void)
 {
     socket_exit();
     chardev_exit();
-    // stop_netfilter_submodule();
-    // worker_thread_exit();
     wasm_vm_destroy_per_cpu();
 
     pr_info("%s: module unloaded from 0x%p", THIS_MODULE->name, nasp_exit);

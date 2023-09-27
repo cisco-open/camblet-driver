@@ -58,28 +58,6 @@ sudo apt update && sudo apt install make
 make setup-vm
 ```
 
-### Vagrant/Virtualbox
-
-If you happen to use Vagrant, there is a Vagrantfile prepared which uses VirtualBox.
-
-On macOS install Vagrant and VirtualBox with brew:
-
-```bash
-brew install vagrant virtualbox
-```
-
-Bring up the Vagrant machine, this installs the required dependencies automatically into it:
-
-```bash
-vagrant up
-```
-
-Connect to the Vagrant machine through SSH:
-
-```bash
-vagrant ssh
-```
-
 ### Coding
 
 We are using VSCode for development and the project ships with a `c_cpp_properties.json` file which contains the required include paths for the kernel headers. The file is ARM specific from include path point-of-view so if you happen to run on x86_64 please replace the paths accordingly (arm64 -> x86, aarch64 -> x86_64).
@@ -147,37 +125,6 @@ Then follow the instructions [here](https://github.com/cisco-open/nasp#cli).
 The kernel module can terminate TLS connections on certain ports, and forward the plaintext traffic to a user space application. This is useful for example if you want to run a proxy-wasm filter on a TCP connection.
 
 Between two applications - both of them intercepted by this module - the traffic is always encrypted by [kTLS](https://docs.kernel.org/networking/tls-offload.html). If one of them is not intercepted by the module but supports the ChaCha20-Poly1305 AEAD - kTLS is used. Otherwise the traffic is encrypted by BearSSL.
-
-### TLS Certificates for testing
-
-You will need `cfssl` for this (`brew install cfssl` on macOS):
-
-```bash
-# Create the CA certificate
-cfssl gencert -initca ca.json | cfssljson -bare ca
-
-# Create the client/server certificate
-cfssl gencert \
-  -ca=ca.pem \
-  -ca-key=ca-key.pem \
-  -config=server.json \
-  -profile=server \
-  server.json | cfssljson -bare server
-```
-
-
-Generate the static C resources of these certificates with BearSSL's `brssl` CLI and copy these into the given [certificate_rsa.h](certificate_rsa.h) header file:
-
-```bash
-# Trust anchor (CA)
-brssl ta ca.pem
-
-# Server certificate
-brssl chain server.pem
-
-# Server private key
-brssl skey -C server-key.pem
-```
 
 ### Test mTLS
 
