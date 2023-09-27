@@ -62,7 +62,7 @@ static int __init nasp_init(void)
         }
     }
 
-    result = load_module("csr_module", module_csr, size_module_csr, NULL);
+    result = load_module("csr_module", module_csr_wasm, module_csr_wasm_len, NULL);
     if (result.err)
     {
         FATAL("load_module -> csr_module: %s", result.err);

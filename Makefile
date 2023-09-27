@@ -70,7 +70,7 @@ nasp-objs :=  third-party/wasm3/source/m3_api_libc.o \
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
 
-default: static/socket_wasm.h
+default: static/socket_wasm.h static/module_csr.h
 	cd third-party/BearSSL && $(MAKE) linux-km
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) modules
 
@@ -79,6 +79,14 @@ static/socket_wasm.h: socket.rego
 	tar zxvf bundle.tar.gz /policy.wasm
 	mv policy.wasm socket.wasm
 	xxd -i socket.wasm static/socket_wasm.h
+
+CSR_MODULE_DIRS = $(shell find wasm-modules/csr-rust -type d)
+CSR_MODULE_FILES = $(shell find wasm-modules/csr-rust -type f -name '*')
+
+static/module_csr.h: wasm-modules/csr-rust $(CSR_MODULE_DIRS) $(CSR_MODULE_FILES)
+	cargo build --release --target=wasm32-unknown-unknown
+	cp target/wasm32-unknown-unknown/release/csr-rust.wasm module_csr.wasm
+	xxd -i module_csr.wasm static/module_csr.h
 
 opa-test:
 	opa test *.rego -v
