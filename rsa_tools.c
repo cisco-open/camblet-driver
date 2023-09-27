@@ -44,6 +44,18 @@ uint32_t generate_rsa_keys(br_rsa_private_key *rsa_priv, br_rsa_public_key *rsa_
     return rsa_keygen(&hmac_drbg_ctx.vtable, rsa_priv, raw_priv_key, rsa_pub, raw_pub_key, RSA_BIT_LENGHT, RSA_PUB_EXP);
 }
 
+void free_rsa_private_key(br_rsa_private_key *key)
+{
+    kfree(key->p);
+    kfree(key);
+}
+
+void free_rsa_public_key(br_rsa_public_key *key)
+{
+    kfree(key->n);
+    kfree(key);
+}
+
 // BearSSL RSA Keygen related functions
 // Encodes rsa private key to pkcs8 der format and returns it's lenght.
 // If the der parameter is set to NULL then it computes only the length

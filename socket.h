@@ -8,8 +8,8 @@
  * modified, or distributed except according to those terms.
  */
 
-#ifndef _SOCKET_H
-#define _SOCKET_H
+#ifndef socket_h
+#define socket_h
 
 int socket_init(void);
 void socket_exit(void);
