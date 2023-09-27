@@ -279,7 +279,7 @@ int parse_json_from_buffer(void)
 
             if (cmd == NULL)
             {
-                printk(KERN_ERR "nasp: command %d not found", command_id);
+                printk(KERN_ERR "nasp: command %s not found", command_id);
                 status = -1;
                 goto cleanup;
             }

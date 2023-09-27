@@ -28,8 +28,6 @@
 #include "socket.h"
 #include "tls.h"
 
-#include "static/certificate_rsa.h"
-
 const char *ALPNs[] = {
 	"istio-peer-exchange",
 	"istio",
@@ -293,6 +291,7 @@ static void nasp_socket_free(nasp_socket *s)
 		}
 
 		if (s->protocol && !s->ktls_sendmsg)
+		{
 			// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
 			if (!br_sslio_close(&s->ioc))
 			{
@@ -303,6 +302,7 @@ static void nasp_socket_free(nasp_socket *s)
 			{
 				printk("nasp: %s br_sslio SSL closed", current->comm);
 			}
+		}
 
 		if (s->direction == ListenerDirectionInbound)
 		{
@@ -823,8 +823,9 @@ int (*connect_v6)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 
 struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 {
-	struct sock *client;
+	struct sock *client = NULL;
 	struct proto *prot;
+	nasp_socket *sc = NULL;
 
 	if (sk->sk_family == AF_INET)
 	{
@@ -845,11 +846,11 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		u16 client_port = (u16)(client->sk_portpair);
 		printk("nasp_accept: uid: %d app: %s on ports: %d <- %d", current_uid().val, current->comm, port, client_port);
 
-		nasp_socket *sc = nasp_socket_accept(client);
+		sc = nasp_socket_accept(client);
 		if (!sc)
 		{
-			pr_err("nasp: nasp_socket_accept failed to create nasp_socket"); // TODO we need to close the socket after any error
-			return NULL;
+			pr_err("nasp: nasp_socket_accept failed to create nasp_socket");
+			goto error;
 		}
 
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
@@ -880,7 +881,7 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 				if (result == 0)
 				{
 					pr_err("nasp: accept error generating rsa keys");
-					return NULL;
+					goto error;
 				}
 			}
 
@@ -888,62 +889,63 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 			if (len <= 0)
 			{
 				pr_err("nasp: accept error during rsa private der key length calculation");
-				return NULL;
+				goto error;
 			}
 
-			// Allocate memory inside the wasm vm since this data must be available inside the module
+			unsigned char *csr_ptr;
+
 			csr_module *csr = this_cpu_csr();
-
 			csr_lock(csr);
-
-			wasm_vm_result malloc_result = csr_malloc(csr, len);
-			if (malloc_result.err)
 			{
-				pr_err("nasp: accept wasm_vm_csr_malloc error: %s", malloc_result.err);
-				csr_unlock(csr);
-				return NULL;
+				// Allocate memory inside the wasm vm since this data must be available inside the module
+				wasm_vm_result malloc_result = csr_malloc(csr, len);
+				if (malloc_result.err)
+				{
+					pr_err("nasp: accept wasm_vm_csr_malloc error: %s", malloc_result.err);
+					csr_unlock(csr);
+					goto error;
+				}
+
+				uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
+				i32 addr = malloc_result.data->i32;
+
+				unsigned char *der = mem + addr;
+
+				int error = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
+				if (error <= 0)
+				{
+					pr_err("nasp: accept error during rsa private key der encoding");
+					csr_unlock(csr);
+					goto error;
+				}
+
+				sc->parameters->subject = "CN=banzai.cloud";
+				sc->parameters->dns = "banzaicloud.com";
+				sc->parameters->uri = "banzaicloud";
+				sc->parameters->email = "bmolnar@cisco.com";
+				sc->parameters->ip = "127.0.0.1";
+
+				wasm_vm_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
+				if (generated_csr.err)
+				{
+					pr_err("nasp: accept wasm_vm_csr_gen error: %s", generated_csr.err);
+					csr_unlock(csr);
+					goto error;
+				}
+
+				wasm_vm_result free_result = csr_free(csr, addr);
+				if (free_result.err)
+				{
+					pr_err("nasp: accept wasm_vm_csr_free error: %s", free_result.err);
+					csr_unlock(csr);
+					goto error;
+				}
+
+				i64 csr_from_module = generated_csr.data->i64;
+
+				i32 csr_len = (i32)(csr_from_module);
+				csr_ptr = (i32)(csr_from_module >> 32) + mem;
 			}
-
-			uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
-			i32 addr = malloc_result.data->i32;
-
-			unsigned char *der = mem + addr;
-
-			int error = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
-			if (error <= 0)
-			{
-				pr_err("nasp: accept error during rsa private key der encoding");
-				csr_unlock(csr);
-				return NULL;
-			}
-
-			sc->parameters->subject = "CN=banzai.cloud";
-			sc->parameters->dns = "banzaicloud.com";
-			sc->parameters->uri = "banzaicloud";
-			sc->parameters->email = "bmolnar@cisco.com";
-			sc->parameters->ip = "127.0.0.1";
-
-			wasm_vm_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
-			if (generated_csr.err)
-			{
-				pr_err("nasp: accept wasm_vm_csr_gen error: %s", generated_csr.err);
-				csr_unlock(csr);
-				return NULL;
-			}
-
-			wasm_vm_result free_result = csr_free(csr, addr);
-			if (free_result.err)
-			{
-				pr_err("nasp: accept wasm_vm_csr_free error: %s", free_result.err);
-				csr_unlock(csr);
-				return NULL;
-			}
-
-			i64 csr_from_module = generated_csr.data->i64;
-
-			i32 csr_len = (i32)(csr_from_module);
-			unsigned char *csr_ptr = (i32)(csr_from_module >> 32) + mem;
-
 			csr_unlock(csr);
 
 			csr_sign_answer *csr_sign_answer;
@@ -952,6 +954,8 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 			{
 				pr_err("nasp: accept csr sign answer error: %s", csr_sign_answer->error);
 				kfree(csr_sign_answer->error);
+				kfree(csr_sign_answer);
+				goto error;
 			}
 			else
 			{
@@ -976,37 +980,18 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		 *   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
 		 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
 		 */
-#if !RSA_OR_EC
-		if (sc->chain_len > 0)
-		{
-			pr_info("nasp: accept use cert from agent");
-			br_ssl_server_init_full_rsa(sc->sc, sc->chain, sc->chain_len, sc->rsa_priv);
-		}
-		else
-		{
-			br_ssl_server_init_full_rsa(sc->sc, CHAIN, CHAIN_LEN, &RSA);
-		}
+		pr_info("nasp: accept use cert from agent");
+		br_ssl_server_init_full_rsa(sc->sc, sc->chain, sc->chain_len, sc->rsa_priv);
 
 		// mTLS enablement
 		if (opa_socket.mtls)
 		{
-			if (sc->chain_len > 0)
-			{
-				br_x509_minimal_init_full(&sc->xc.ctx, sc->trust_anchors, sc->trust_anchors_len);
-				br_ssl_server_set_trust_anchor_names_alt(sc->sc, sc->trust_anchors, sc->trust_anchors_len);
-			}
-			else
-			{
-				br_x509_minimal_init_full(&sc->xc.ctx, TAs, TAs_NUM);
-				br_ssl_server_set_trust_anchor_names_alt(sc->sc, TAs, TAs_NUM);
-			}
+			br_x509_minimal_init_full(&sc->xc.ctx, sc->trust_anchors, sc->trust_anchors_len);
+			br_ssl_server_set_trust_anchor_names_alt(sc->sc, sc->trust_anchors, sc->trust_anchors_len);
 
 			br_x509_nasp_init(&sc->xc, &sc->sc->eng);
 			br_ssl_engine_set_default_rsavrfy(&sc->sc->eng);
 		}
-#elif
-		br_ssl_server_init_full_ec(sc->sc, CHAIN, CHAIN_LEN, BR_KEYTYPE_EC, &EC);
-#endif
 
 		/*
 		 * Set the I/O buffer to the provided array. We
@@ -1038,6 +1023,15 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 	}
 
 	return client;
+
+error:
+	nasp_socket_free(sc);
+	if (client)
+		client->sk_prot->close(client, 0);
+
+	pr_err("nasp: [%s] accept error, socket closed", current->comm);
+
+	return NULL;
 }
 
 int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
@@ -1045,32 +1039,34 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
 	u16 port = ntohs(usin->sin_port);
 
-	int ret;
+	int err;
 	struct proto *prot;
+
+	nasp_socket *sc = NULL;
 
 	if (sk->sk_family == AF_INET)
 	{
-		ret = connect(sk, uaddr, addr_len);
+		err = connect(sk, uaddr, addr_len);
 		prot = &nasp_prot;
 	}
 	else
 	{
-		ret = connect_v6(sk, uaddr, addr_len);
+		err = connect_v6(sk, uaddr, addr_len);
 		prot = &nasp_v6_prot;
 	}
 
 	printk("nasp: nasp_connect uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
 
 	opa_socket_context opa_socket = socket_eval(port, OUTPUT, current->comm, current_uid().val);
-	if (ret == 0 && opa_socket.allowed)
+	if (err == 0 && opa_socket.allowed)
 	{
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
 		nasp_socket *sc = nasp_socket_connect(sk);
 		if (!sc)
 		{
-			pr_err("nasp: nasp_socket_connect failed to create nasp_socket"); // TODO we need to close the socket after any error
-			return -1;
+			pr_err("nasp: nasp_socket_connect failed to create nasp_socket");
+			goto error;
 		}
 
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
@@ -1100,7 +1096,7 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 				if (result == 0)
 				{
 					pr_err("nasp: connect error generating rsa keys");
-					return -1;
+					goto error;
 				}
 			}
 
@@ -1108,62 +1104,63 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			if (len <= 0)
 			{
 				pr_err("nasp: connect error during rsa private der key length calculation");
-				return -1;
+				goto error;
 			}
 
-			// Allocate memory inside the wasm vm since this data must be available inside the module
+			unsigned char *csr_ptr;
+
 			csr_module *csr = this_cpu_csr();
-
 			csr_lock(csr);
-
-			wasm_vm_result malloc_result = csr_malloc(csr, len);
-			if (malloc_result.err)
 			{
-				pr_err("nasp: connect wasm_vm_csr_malloc error: %s", malloc_result.err);
-				csr_unlock(csr);
-				return -1;
+				// Allocate memory inside the wasm vm since this data must be available inside the module
+				wasm_vm_result malloc_result = csr_malloc(csr, len);
+				if (malloc_result.err)
+				{
+					pr_err("nasp: connect wasm_vm_csr_malloc error: %s", malloc_result.err);
+					csr_unlock(csr);
+					goto error;
+				}
+
+				uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
+				i32 addr = malloc_result.data->i32;
+
+				unsigned char *der = mem + addr;
+
+				int err = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
+				if (err <= 0)
+				{
+					pr_err("nasp: connect error during rsa private key der encoding");
+					csr_unlock(csr);
+					goto error;
+				}
+
+				sc->parameters->subject = "CN=banzai.cloud";
+				sc->parameters->dns = "banzaicloud.com";
+				sc->parameters->uri = "banzaicloud";
+				sc->parameters->email = "bmolnar@cisco.com";
+				sc->parameters->ip = "127.0.0.1";
+
+				wasm_vm_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
+				if (generated_csr.err)
+				{
+					pr_err("nasp: connect wasm_vm_csr_gen error: %s", generated_csr.err);
+					csr_unlock(csr);
+					goto error;
+				}
+
+				wasm_vm_result free_result = csr_free(csr, addr);
+				if (free_result.err)
+				{
+					pr_err("nasp: connect wasm_vm_csr_free error: %s", free_result.err);
+					csr_unlock(csr);
+					goto error;
+				}
+
+				i64 csr_from_module = generated_csr.data->i64;
+
+				i32 csr_len = (i32)(csr_from_module);
+				csr_ptr = (i32)(csr_from_module >> 32) + mem;
 			}
-
-			uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
-			i32 addr = malloc_result.data->i32;
-
-			unsigned char *der = mem + addr;
-
-			int error = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
-			if (error <= 0)
-			{
-				pr_err("nasp: connect error during rsa private key der encoding");
-				csr_unlock(csr);
-				return -1;
-			}
-
-			sc->parameters->subject = "CN=banzai.cloud";
-			sc->parameters->dns = "banzaicloud.com";
-			sc->parameters->uri = "banzaicloud";
-			sc->parameters->email = "bmolnar@cisco.com";
-			sc->parameters->ip = "127.0.0.1";
-
-			wasm_vm_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
-			if (generated_csr.err)
-			{
-				pr_err("nasp: connect wasm_vm_csr_gen error: %s", generated_csr.err);
-				csr_unlock(csr);
-				return -1;
-			}
-
-			wasm_vm_result free_result = csr_free(csr, addr);
-			if (free_result.err)
-			{
-				pr_err("nasp: connect wasm_vm_csr_free error: %s", free_result.err);
-				csr_unlock(csr);
-				return -1;
-			}
-
-			i64 csr_from_module = generated_csr.data->i64;
-
-			i32 csr_len = (i32)(csr_from_module);
-			unsigned char *csr_ptr = (i32)(csr_from_module >> 32) + mem;
-
 			csr_unlock(csr);
 
 			csr_sign_answer *csr_sign_answer;
@@ -1172,6 +1169,8 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			{
 				pr_err("nasp: connect csr sign answer error: %s", csr_sign_answer->error);
 				kfree(csr_sign_answer->error);
+				kfree(csr_sign_answer);
+				goto error;
 			}
 			else
 			{
@@ -1197,30 +1196,15 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		 *   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
 		 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
 		 */
-
-		if (sc->chain_len > 0)
-		{
-			pr_info("nasp: connect use cert from agent");
-			br_ssl_client_init_full(sc->cc, &sc->xc.ctx, sc->trust_anchors, sc->trust_anchors_len);
-		}
-		else
-		{
-			br_ssl_client_init_full(sc->cc, &sc->xc.ctx, TAs, TAs_NUM);
-		}
+		pr_info("nasp: connect use cert from agent");
+		br_ssl_client_init_full(sc->cc, &sc->xc.ctx, sc->trust_anchors, sc->trust_anchors_len);
 
 		br_x509_nasp_init(&sc->xc, &sc->cc->eng);
 
 		// mTLS enablement
 		if (opa_socket.mtls)
 		{
-			if (sc->chain_len > 0)
-			{
-				br_ssl_client_set_single_rsa(sc->cc, sc->chain, sc->chain_len, sc->rsa_priv, br_rsa_pkcs1_sign_get_default());
-			}
-			else
-			{
-				br_ssl_client_set_single_rsa(sc->cc, CHAIN, CHAIN_LEN, &RSA, br_rsa_pkcs1_sign_get_default());
-			}
+			br_ssl_client_set_single_rsa(sc->cc, sc->chain, sc->chain_len, sc->rsa_priv, br_rsa_pkcs1_sign_get_default());
 		}
 
 		/*
@@ -1256,7 +1240,18 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		sk->sk_prot = prot;
 	}
 
-	return ret;
+	return err;
+
+error:
+	nasp_socket_free(sc);
+
+	release_sock(sk);
+	sk->sk_prot->close(sk, 0);
+	lock_sock(sk);
+
+	pr_err("nasp: [%s] connect error, socket closed", current->comm);
+
+	return -1;
 }
 
 int socket_init(void)
