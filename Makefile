@@ -76,7 +76,7 @@ default: static/socket_wasm.h static/module_csr.h
 
 static/socket_wasm.h: socket.rego
 	opa build -t wasm -e "socket/allow" socket.rego -o bundle.tar.gz
-	tar zxvf bundle.tar.gz /policy.wasm
+	tar zxf bundle.tar.gz /policy.wasm
 	mv policy.wasm socket.wasm
 	xxd -i socket.wasm static/socket_wasm.h
 
@@ -128,7 +128,12 @@ _install_opa:
 	sudo curl -L -o /usr/bin/opa https://openpolicyagent.org/downloads/v0.56.0/opa_linux_$(shell go version | cut -f2 -d'/')_static
 	sudo chmod +x /usr/bin/opa
 
-setup-vm: _debian_deps _install_opa
+_install_wasm_target:
+	sudo snap install rustup --classic
+	rustup default stable
+	rustup target add wasm32-unknown-unknown
+
+setup-vm: _debian_deps _install_opa _install_wasm_target
 	sudo cp /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
 
 setup-archlinux-vm: _archlinux_deps _install_opa
