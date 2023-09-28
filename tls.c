@@ -94,14 +94,14 @@ void br_x509_nasp_init(br_x509_nasp_context *ctx, br_ssl_engine_context *eng)
     br_name_element *name_elts = kmalloc(sizeof(br_name_element) * 3, GFP_KERNEL);
 
     char const *oids[] = {OID_rfc822Name, OID_dNSName, OID_uniformResourceIdentifier};
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < sizeof(oids) / sizeof(oids[0]); i++)
     {
         name_elts[i].oid = oids[i];
         name_elts[i].buf = kmalloc(sizeof(char) * 256, GFP_KERNEL);
         name_elts[i].len = 256;
     }
 
-    br_x509_minimal_set_name_elements(&ctx->ctx, name_elts, 3);
+    br_x509_minimal_set_name_elements(&ctx->ctx, name_elts, sizeof(oids) / sizeof(oids[0]));
 
     br_ssl_engine_set_x509(eng, &ctx->vtable);
 }
