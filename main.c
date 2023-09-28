@@ -17,7 +17,7 @@
 
 #include "static/filter_stats.h"
 #include "static/filter_tcp_metadata.h"
-#include "static/module_csr.h"
+#include "static/csr_wasm.h"
 #include "static/socket_wasm.h"
 
 MODULE_AUTHOR("Cisco Systems");
@@ -62,7 +62,7 @@ static int __init nasp_init(void)
         }
     }
 
-    result = load_module("csr_module", module_csr_wasm, module_csr_wasm_len, NULL);
+    result = load_module("csr_module", csr_wasm, csr_wasm_len, NULL);
     if (result.err)
     {
         FATAL("load_module -> csr_module: %s", result.err);
