@@ -356,9 +356,22 @@ static int write_command_to_buffer(char *buffer, size_t buffer_size, struct comm
         JSON_Object *context_object = json_value_get_object(context_value);
         json_object_set_number(context_object, "uid", cmd->context->uid.val);
         json_object_set_number(context_object, "gid", cmd->context->gid.val);
+        json_object_set_number(context_object, "pid", cmd->context->pid);
         json_object_set_string(context_object, "command_path", cmd->context->command_path);
         json_object_set_string(context_object, "command_name", cmd->context->command_name);
-        json_object_set_value(root_object, "context", context_value);
+
+        JSON_Value *namespace_ids_value = json_value_init_object();
+        JSON_Object *namespace_ids_object = json_value_get_object(namespace_ids_value);
+        json_object_set_number(namespace_ids_object, "uts", cmd->context->namespace_ids.uts);
+        json_object_set_number(namespace_ids_object, "ipc", cmd->context->namespace_ids.ipc);
+        json_object_set_number(namespace_ids_object, "mnt", cmd->context->namespace_ids.mnt);
+        json_object_set_number(namespace_ids_object, "pid", cmd->context->namespace_ids.pid);
+        json_object_set_number(namespace_ids_object, "net", cmd->context->namespace_ids.net);
+        json_object_set_number(namespace_ids_object, "time", cmd->context->namespace_ids.time);
+        json_object_set_number(namespace_ids_object, "cgroup", cmd->context->namespace_ids.cgroup);
+
+        json_object_set_value(context_object, "namespace_ids", namespace_ids_value);
+        json_object_set_value(root_object, "task_context", context_value);
     }
 
     json_object_set_string(root_object, "id", uuid);

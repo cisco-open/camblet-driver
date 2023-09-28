@@ -18,6 +18,17 @@
 
 char *get_current_proc_path(char *buf, int buflen);
 
+struct namespace_ids
+{
+    unsigned int uts;
+    unsigned int ipc;
+    unsigned int mnt;
+    unsigned int pid;
+    unsigned int net;
+    unsigned int time;
+    unsigned int cgroup;
+};
+
 typedef struct task_context
 {
     char command_name[TASK_COMM_LEN];
@@ -25,6 +36,8 @@ typedef struct task_context
     char *command_path;
     kuid_t uid;
     kgid_t gid;
+    pid_t pid;
+    struct namespace_ids namespace_ids;
 } task_context;
 
 task_context *get_task_context(void);

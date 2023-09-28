@@ -14,6 +14,14 @@
 #include <linux/dcache.h>
 #include <linux/fs.h>
 #include <linux/slab.h>
+#include <linux/nsproxy.h>
+#include <linux/cgroup.h>
+#include <linux/ipc_namespace.h>
+#include <linux/pid_namespace.h>
+#include <linux/time_namespace.h>
+#include <linux/fs/mount.h>
+#include <net/net_namespace.h>
+#include <linux/utsname.h>
 
 #include "task_context.h"
 
@@ -25,17 +33,23 @@ task_context *get_task_context(void)
     context->command_path_buffer = kmalloc(COMMAND_PATH_BUFLEN, GFP_KERNEL);
     context->command_path = get_current_proc_path(context->command_path_buffer, COMMAND_PATH_BUFLEN);
     current_uid_gid(&context->uid, &context->gid);
+    context->pid = current->pid;
+
+    // namespace ids
+    context->namespace_ids.uts = current->nsproxy->uts_ns->ns.inum;
+    context->namespace_ids.ipc = current->nsproxy->ipc_ns->ns.inum;
+    context->namespace_ids.mnt = current->nsproxy->mnt_ns->ns.inum;
+    context->namespace_ids.pid = current->nsproxy->pid_ns_for_children->ns.inum;
+    context->namespace_ids.net = current->nsproxy->net_ns->ns.inum;
+    context->namespace_ids.time = current->nsproxy->time_ns->ns.inum;
+    context->namespace_ids.cgroup = current->nsproxy->cgroup_ns->ns.inum;
 
     return context;
 }
 
 void free_task_context(struct task_context *context)
 {
-    if (context->command_path_buffer)
-    {
-        kfree(context->command_path_buffer);
-    }
-
+    kfree(context->command_path_buffer);
     kfree(context);
 }
 
