@@ -70,15 +70,23 @@ nasp-objs :=  third-party/wasm3/source/m3_api_libc.o \
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
 
-default: static/socket_wasm.h
+default: static/socket_wasm.h static/module_csr.h
 	cd third-party/BearSSL && $(MAKE) linux-km
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) modules
 
 static/socket_wasm.h: socket.rego
 	opa build -t wasm -e "socket/allow" socket.rego -o bundle.tar.gz
-	tar zxvf bundle.tar.gz /policy.wasm
+	tar zxf bundle.tar.gz /policy.wasm
 	mv policy.wasm socket.wasm
 	xxd -i socket.wasm static/socket_wasm.h
+
+CSR_MODULE_DIRS = $(shell find wasm-modules/csr-rust -type d)
+CSR_MODULE_FILES = $(shell find wasm-modules/csr-rust -type f -name '*')
+
+static/module_csr.h: wasm-modules/csr-rust $(CSR_MODULE_DIRS) $(CSR_MODULE_FILES)
+	cargo build --release --target=wasm32-unknown-unknown
+	cp target/wasm32-unknown-unknown/release/csr-rust.wasm module_csr.wasm
+	xxd -i module_csr.wasm static/module_csr.h
 
 opa-test:
 	opa test *.rego -v
@@ -120,7 +128,15 @@ _install_opa:
 	sudo curl -L -o /usr/bin/opa https://openpolicyagent.org/downloads/v0.56.0/opa_linux_$(shell go version | cut -f2 -d'/')_static
 	sudo chmod +x /usr/bin/opa
 
-setup-vm: _debian_deps _install_opa
+_install_wasm_target:
+	sudo curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+	sudo ln -s $$HOME/.cargo/bin/* /usr/bin/
+	rustup default stable
+	rustup target add wasm32-unknown-unknown
+	sudo rustup default stable
+	sudo rustup target add wasm32-unknown-unknown
+
+setup-vm: _debian_deps _install_opa _install_wasm_target
 	sudo cp /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
 
 setup-archlinux-vm: _archlinux_deps _install_opa

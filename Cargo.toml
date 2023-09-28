@@ -1,0 +1,10 @@
+[workspace]
+
+members = [
+    "wasm-modules/csr-rust",
+]
+
+[profile.release]
+lto = 'thin'
+opt-level = "s"
+debug = false
