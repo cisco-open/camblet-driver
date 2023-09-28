@@ -71,9 +71,11 @@ nasp-objs :=  third-party/wasm3/source/m3_api_libc.o \
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
 
-default: static/socket_wasm.h static/module_csr.h
-	cd third-party/BearSSL && $(MAKE) linux-km
+default: static/socket_wasm.h static/module_csr.h bearssl
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) modules
+
+bearssl:
+	cd third-party/BearSSL && $(MAKE) linux-km
 
 static/socket_wasm.h: socket.rego
 	opa build -t wasm -e "socket/allow" socket.rego -o bundle.tar.gz

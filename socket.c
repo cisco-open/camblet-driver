@@ -91,7 +91,7 @@ typedef struct
 
 } nasp_socket;
 
-static int send_msg_ktls(nasp_socket *s, void *msg, size_t len)
+static int ktls_send_msg(nasp_socket *s, void *msg, size_t len)
 {
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = msg, .iov_len = len};
@@ -101,7 +101,7 @@ static int send_msg_ktls(nasp_socket *s, void *msg, size_t len)
 	return s->ktls_sendmsg(s->sock, &hdr, len);
 }
 
-static int recv_msg_ktls(nasp_socket *s, char *buf, size_t buf_len, size_t size)
+static int ktls_recv_msg(nasp_socket *s, void *buf, size_t buf_len, size_t size)
 {
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = buf, .iov_len = buf_len};
@@ -126,7 +126,7 @@ static int send_msg(struct sock *sock, void *msg, size_t len)
 	return tcp_sendmsg(sock, &hdr, len);
 }
 
-static int recv_msg(struct sock *sock, char *buf, size_t size)
+static int recv_msg(struct sock *sock, void *buf, size_t size)
 {
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = buf, .iov_len = size};
@@ -157,16 +157,6 @@ static int sock_write(void *ctx, const unsigned char *buf, size_t len)
 	return send_msg((struct sock *)ctx, buf, len);
 }
 
-static int ktls_sock_read(nasp_socket *s, unsigned char *buf, size_t buf_len, size_t len)
-{
-	return recv_msg_ktls(s, buf, buf_len, len);
-}
-
-static int ktls_sock_write(nasp_socket *s, const unsigned char *buf, size_t len)
-{
-	return send_msg_ktls(s, buf, len);
-}
-
 static char *get_direction(nasp_socket *s)
 {
 	if (s->direction == ListenerDirectionInbound)
@@ -190,7 +180,7 @@ static int nasp_socket_read(nasp_socket *s, void *dst, size_t len)
 {
 	if (s->ktls_recvmsg)
 	{
-		return ktls_sock_read(s, dst, get_read_buffer_capacity(s), len);
+		return ktls_recv_msg(s, dst, get_read_buffer_capacity(s), len);
 	}
 	else
 	{
@@ -211,7 +201,7 @@ static int nasp_socket_write(nasp_socket *s, void *src, size_t len)
 {
 	if (s->ktls_sendmsg)
 	{
-		return ktls_sock_write(s, src, len); // TODO not sure if this is a write all!
+		return ktls_send_msg(s, src, len); // TODO not sure if this is a write all!
 	}
 	else
 	{
