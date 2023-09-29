@@ -148,3 +148,7 @@ setup-dev-env:
 	test -d linux || git clone --depth=1 --branch v6.2 https://github.com/torvalds/linux.git
 	cd linux && lima make tinyconfig
 	cd linux && lima make -j
+
+# Usage: make debug LINE=get_command+0x88/0x130
+debug:
+	sudo addr2line -e nasp.ko $(LINE)

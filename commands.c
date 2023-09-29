@@ -15,13 +15,21 @@
 #include "base64.h"
 #include "string.h"
 
-// protect the command list with a mutex
+// commands that are waiting to be processed by the driver
+static LIST_HEAD(command_list);
+
+// lock for the above list to make it thread safe
 static DEFINE_SPINLOCK(command_list_lock);
 static unsigned long command_list_lock_flags;
-static LIST_HEAD(command_list);
+
+// wait queue for the driver to be woken up when a command is added to the list
+static DECLARE_WAIT_QUEUE_HEAD(command_wait_queue);
+
+// commands that are being processed by the driver
 static LIST_HEAD(in_flight_command_list);
 
-// create a function to add a command to the list (called from the VM), locked with a spinlock
+// add a command to the list (to be processed by the driver)
+// this is a blocking function, it will wait until the command is processed
 command_answer *send_command(char *name, char *data, task_context *context)
 {
     struct command *cmd = kmalloc(sizeof(struct command), GFP_KERNEL);
@@ -36,12 +44,14 @@ command_answer *send_command(char *name, char *data, task_context *context)
     list_add_tail(&cmd->list, &command_list);
     spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
 
-    DEFINE_WAIT(wait);
+    // we can now wake up the driver to send out a command for processing
+    wake_up_interruptible(&command_wait_queue);
 
     // wait until the command is processed
     printk("nasp: waiting for command [%s] to be processed", name);
 
     // wait for the command to be processed
+    DEFINE_WAIT(wait);
     prepare_to_wait(&cmd->wait_queue, &wait, TASK_INTERRUPTIBLE);
     // Sleep until the condition is true or the timeout expires
     unsigned long timeout = msecs_to_jiffies(COMMAND_TIMEOUT_SECONDS * 1000);
@@ -190,18 +200,29 @@ struct command *lookup_in_flight_command(char *id)
     return cmd;
 }
 
-// create a function to get a command from the list (called from the driver), locked with a mutex
+// get a command from the list (called from the driver),
+//  this is a blocking function, it will wait until a command is available
 struct command *get_command(void)
 {
-    struct command *cmd = NULL;
+    if (list_empty(&command_list))
+    {
+        DEFINE_WAIT(wait);
+        prepare_to_wait(&command_wait_queue, &wait, TASK_INTERRUPTIBLE);
+
+        schedule();
+        finish_wait(&command_wait_queue, &wait);
+    }
+
+    // if the list is still empty, return NULL (most probably a the process is being killed)
+    if (list_empty(&command_list))
+    {
+        return NULL;
+    }
 
     spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
-    if (!list_empty(&command_list))
-    {
-        cmd = list_first_entry(&command_list, struct command, list);
-        list_del(&cmd->list);
-        list_add_tail(&cmd->list, &in_flight_command_list);
-    }
+    struct command *cmd = list_first_entry(&command_list, struct command, list);
+    list_del(&cmd->list);
+    list_add_tail(&cmd->list, &in_flight_command_list);
     spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
 
     return cmd;

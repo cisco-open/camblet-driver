@@ -9,7 +9,6 @@
  */
 
 #include <linux/uaccess.h>
-#include <linux/delay.h>
 #include <linux/version.h>
 #include <linux/wait.h>
 
@@ -406,14 +405,9 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
     printk("nasp: device_read: length: %lu offset: %llu", length, *offset);
 
     struct command *c = get_command();
-    // wait until command is available
-    while (c == NULL)
+    if (c == NULL)
     {
-        if (msleep_interruptible(25) > 0)
-        {
-            return -EINTR;
-        }
-        c = get_command();
+        return -EFAULT;
     }
 
     int json_length = write_command_to_buffer(device_out_buffer, sizeof device_out_buffer, c);
