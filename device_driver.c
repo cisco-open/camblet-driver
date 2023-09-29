@@ -407,7 +407,7 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
     struct command *c = get_command();
     if (c == NULL)
     {
-        return -EFAULT;
+        return -EINTR;
     }
 
     int json_length = write_command_to_buffer(device_out_buffer, sizeof device_out_buffer, c);
