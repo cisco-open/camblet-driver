@@ -2,19 +2,20 @@
 
 [![Makefile CI](https://github.com/cisco-open/nasp-kernel-module/actions/workflows/build.yml/badge.svg)](https://github.com/cisco-open/nasp-kernel-module/actions/workflows/build.yml)
 
-This Linux Kernel module runs and exposes a [Wasm](https://webassembly.org) runtime as a proof of concept for checking:
-- Wasm is capable of running the kernel space
-- running code in kernel space in almost all languages compiled to Wasm
-- expose Wasm functionality written in Wasm to eBPF securely
-- run [proxy-wasm](https://github.com/proxy-wasm/spec) filters on TCP sockets
+## Introduction
 
-## Why doing this?
+The *nasp-kernel-module* is the supporting Linux kernel-module for the [Nasp](https://github.com/cisco-open/nasp) system. It is capable of enhancing plain old TCP sockets in a frictionless way, so that application developers can focus on their business logic instead of dealing with the complexity of TLS, mTLS, and other security-related concerns. It is doing this seamlessly, no code changes or re-compilations or re-deployments are required. The features are the following:
+- providing zero-trust identity for UNIX TCP sockets through mTLS
+- access control, authorization and authentication (through OPA)
+- providing frictionless TLS termination for those TCP sockets
+- run [proxy-wasm](https://github.com/proxy-wasm/spec) filters for every app
+- supporting every Linux based machine (bare-metal, vanilla VM, Kubernetes, etc... you name it)
 
-[eBPF](https://ebpf.io) is a fine piece of technology for doing low-level tracing, traffic shifting, authorization, and other cool things in the kernel space, and a user space counterpart of an eBPF program helps it to manage more complex logic. Wasm is a fine piece of technology to write more [complex business logic](https://www.secondstate.io/articles/ebpf-and-webassembly-whose-vm-reigns-supreme/) (it is Turing-complete). This project aims to create such a setup, where one can support an eBPF program next from Kernel space, with user space level logic, written in Wasm, exposed as a normal Kernel function, instead of communicating through eBPF maps to user space.
+The kernel module is capable of running proxy-wasm filters on your application data, this way it opens up a lot of oppurtunities to write custom logic for all (or a selected set of) your applications in your environment. This allows basically an infinite number of possibilites of monitoring and changing the way how applications talk to each other in your system.
 
 ### Presentations
 
-This project was presented on KubeCon 2023 Amsterdam, Wasm Day, you can find the recording [here](https://www.youtube.com/watch?v=JSKNch6piyY).
+The eaerly incarnation of this project was presented on KubeCon 2023 Amsterdam, Wasm Day, you can find the recording [here](https://www.youtube.com/watch?v=JSKNch6piyY). By that time the module was capable of running OPA -> Wasm compiled policies in the Kernel and those were exposed as an eBPF function from the kernel module.
 
 ## Which Wasm runtime?
 
@@ -35,7 +36,7 @@ cd nasp-kernel-module
 
 ### Lima
 
-Our primary development environment is [Lima](https://lima-vm.io) since it supports x86_64 and ARM as well. The module was tested on Ubuntu and Arch Linux and requires kernel version 5.19 and upwards.
+Our primary development environment is [Lima](https://lima-vm.io) since it supports x86_64 and ARM as well. The module was tested on Ubuntu and Arch Linux and requires kernel version 5.15 and upwards.
 
 Install Lima itself, for example on macOS using brew:
 ```bash
@@ -74,7 +75,7 @@ limactl start
 make setup-dev-env
 ```
 
-## Build and install
+## Build and run
 
 *This assumes that you have created a development environment according to the previous section.*
 
@@ -122,13 +123,13 @@ Then follow the instructions [here](https://github.com/cisco-open/nasp#cli).
 
 ## TLS Termination
 
-The kernel module can terminate TLS connections on certain ports, and forward the plaintext traffic to a user space application. This is useful for example if you want to run a proxy-wasm filter on a TCP connection.
+The kernel module can terminate TLS connections for ordinary TCP sockets (IPv4 or IPv6), and forward the plaintext traffic to a user space application. This is useful for example if you want to run a proxy-wasm filter on a TCP connection.
 
 Between two applications - both of them intercepted by this module - the traffic is always encrypted by [kTLS](https://docs.kernel.org/networking/tls-offload.html). If one of them is not intercepted by the module but supports the ChaCha20-Poly1305 AEAD - kTLS is used. Otherwise the traffic is encrypted by BearSSL.
 
 ### Test mTLS
 
-The kernel module offers TLS termination on certain ports selected by a rule-set:
+The kernel module offers TLS termination on certain ports selected by an [OPA](https://www.openpolicyagent.org) rule-set:
 
 ```bash
 # Edit the rule-set
@@ -146,11 +147,33 @@ lima python3 -m http.server --protocol HTTP/1.1
 lima curl -v http://localhost:8000
 ```
 
-## DKMS Support
+## Installation
+
+The kernel module is not yet packaged, but it is possible to install it with [DKMS](https://github.com/dell/dkms).
+
+### DKMS Support
 
 Linux kernel modules need to be built against a specified kernel version, this is when dynamic kernel module support, [DKMS](https://github.com/dell/dkms) comes in handy. The DKMS framework enables you to automatically re-build kernel modules into the current kernel tree as you upgrade your kernel.
 
-The NASP kernel module has support for DKMS, you can use it in the following way currently:
+#### Install DKMS
+
+Ensure that DKMS is installed on your system. You can typically install it using your distribution's package manager.
+
+For example, on Debian-based systems:
+
+```bash
+sudo apt install dkms
+```
+
+On Red Hat-based systems, CentOS 9 in this case:
+
+```bash
+sudo dnf install --enablerepo epel dkms kernel-devel
+```
+
+#### Prepare the NASP kernel module
+
+The NASP can be installed with DKMS in the following way currently:
 
 ```bash
 sudo git clone --recurse-submodule --branch dkms https://github.com/cisco-open/nasp-kernel-module.git /usr/src/nasp-0.1.0/

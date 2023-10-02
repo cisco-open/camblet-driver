@@ -9,7 +9,6 @@
  */
 
 #include <linux/uaccess.h>
-#include <linux/sched/mm.h>
 #include <linux/file.h>
 #include <linux/path.h>
 #include <linux/dcache.h>

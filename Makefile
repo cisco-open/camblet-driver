@@ -126,6 +126,9 @@ endif
 _archlinux_deps:
 	sudo pacman -Syu linux-headers base-devel go dkms git strace bc iperf socat
 
+_centos_deps:
+	sudo dnf install -y --enablerepo epel kernel-devel vim-common dkms
+
 _install_opa:
 	sudo curl -L -o /usr/bin/opa https://openpolicyagent.org/downloads/v0.56.0/opa_linux_$(shell go version | cut -f2 -d'/')_static
 	sudo chmod +x /usr/bin/opa

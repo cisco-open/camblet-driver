@@ -11,7 +11,7 @@
 #ifndef string_h
 #define string_h
 
-#include <linux/slab.h>
+#include <linux/types.h>
 
 char *strdup(const char *str);
 char *strndup(const char *str, size_t size);
