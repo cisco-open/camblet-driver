@@ -75,6 +75,32 @@ macro_rules! println {
     }};
 }
 
+fn process_ia5string<F>(
+    input: &[u8],
+    function: F,
+) -> Result<Vec<GeneralName>, String>
+where
+    F: Fn(Ia5String) -> GeneralName,
+{
+    let raw_input = match str::from_utf8(input) {
+        Ok(raw_input) => raw_input,
+        Err(err) => return Err(format!("Error parsing raw data to utf8 {}", err)),
+    };
+
+    let mut result = Vec::new();
+    for value in raw_input.split(',') {
+        let trimmed_value = value.trim();
+        if !trimmed_value.is_empty() {
+            let ia5_str = match Ia5String::new(trimmed_value) {
+                Ok(ia5_str) => ia5_str,
+                Err(err) => return Err(format!("Error parsing IA5String: {}", err)),
+            };
+            let general_name = function(ia5_str);
+            result.push(general_name);
+        }
+    }
+    Ok(result)
+}
 
 //Using single return value since the multi return value is still buggy. See https://github.com/rust-lang/rust/issues/73755
 #[no_mangle]
@@ -95,43 +121,46 @@ pub unsafe extern "C" fn csr_gen(priv_key: &[u8], subject: &[u8], dns: &[u8], ur
         Ok(name) => name,
         Err(err) => { println!("error processing subject: {}", err); return 0 },
     };
+    let mut subject_alt_names = Vec::new();
     use std::net::IpAddr;
 
     let raw_ip = match str::from_utf8(&ip) {
         Ok(ip) => ip,
         Err(err) => { println!("error parsing ip: {}", err); return 0},
     };
-    let parsed_ip: IpAddr = match raw_ip.trim_end_matches(char::from(0)).parse() {
-        Ok(pip) => pip,
-        Err(err) => { println!("error processing ip: {}", err); return 0},
-    };
+    for ip_str in raw_ip.split(',') {
+        let trimmed_ip_str = ip_str.trim().trim_end_matches(char::from(0));
 
-    let raw_dns = match Ia5String::new(&dns) {
-        Ok(dns) => dns,
-        Err(err) => { println!("error parsing dns name: {}", err); return 0},
-    };
+        match trimmed_ip_str.parse::<IpAddr>() {
+            Ok(pip) => subject_alt_names.push(GeneralName::from(pip)),
+            Err(err) => { println!("error processing ip: {}", err); return 0},
+        }
+    }
 
-    let raw_uri = match Ia5String::new(&uri) {
-        Ok(uri) => uri,
-        Err(err) => { println!("error parsing uri name: {}", err); return 0},
+    let dns_values = match process_ia5string(&dns, GeneralName::DnsName) {
+        Ok(dns_values) => dns_values,
+        Err(err) => {println!("error parsing dns values: {}", err); return 0},
     };
+    subject_alt_names.extend(dns_values);
 
-    let raw_email = match Ia5String::new(&email) {
-        Ok(email) => email,
-        Err(err) => {println!("error parsing email: {}", err); return 0},
+    let uri_values = match process_ia5string(&uri, GeneralName::UniformResourceIdentifier) {
+        Ok(uri_values) => uri_values,
+        Err(err) => {println!("error parsing uri values: {}", err); return 0},
     };
+    subject_alt_names.extend(uri_values);
+
+    let email_values = match process_ia5string(&email, GeneralName::Rfc822Name) {
+        Ok(email_values) => email_values,
+        Err(err) => {println!("error parsing email values: {}", err); return 0},
+    };
+    subject_alt_names.extend(email_values);
     
     let mut builder = match RequestBuilder::new(subject, &signing_key) {
         Ok(builder) => builder,
         Err(err) => { println!("error creating builder: {}", err); return 0 },
     };
 
-    let _ = match builder.add_extension(&SubjectAltName(vec![
-        DnsName(raw_dns), 
-        UniformResourceIdentifier(raw_uri),
-        GeneralName::from(parsed_ip),
-        Rfc822Name(raw_email),
-        ])) {
+    let _ = match builder.add_extension(&SubjectAltName(subject_alt_names)) {
             Ok(()) => (),
             Err(err) => { println!("error adding extension Subject Alt Name to cert req builder: {}", err); return 0},
     };

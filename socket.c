@@ -811,6 +811,108 @@ int (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 struct sock *(*accept_v6)(struct sock *sk, int flags, int *err, bool kern);
 int (*connect_v6)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 
+static int handle_cert_gen(nasp_socket *sc)
+{
+	// We should not only check for empty cert but we must check the certs validity
+	// TODO must set the certificate to avoid new cert generation every time
+	if (sc->chain_len == 0)
+	{
+		// generating certificate signing request
+		if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
+		{
+			u_int32_t result = generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
+			if (result == 0)
+			{
+				pr_err("nasp: generate_csr error generating rsa keys");
+				return -1;
+			}
+		}
+
+		int len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
+		if (len <= 0)
+		{
+			pr_err("nasp: generate_csr error during rsa private der key length calculation");
+			return -1;
+		}
+
+		unsigned char *csr_ptr;
+
+		csr_module *csr = this_cpu_csr();
+		csr_lock(csr);
+		{
+			// Allocate memory inside the wasm vm since this data must be available inside the module
+			wasm_vm_result malloc_result = csr_malloc(csr, len);
+			if (malloc_result.err)
+			{
+				pr_err("nasp: generate_csr wasm_vm_csr_malloc error: %s", malloc_result.err);
+				csr_unlock(csr);
+				return -1;
+			}
+
+			uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
+			i32 addr = malloc_result.data->i32;
+
+			unsigned char *der = mem + addr;
+
+			int error = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
+			if (error <= 0)
+			{
+				pr_err("nasp: generate_csr error during rsa private key der encoding");
+				csr_unlock(csr);
+				return -1;
+			}
+
+			sc->parameters->subject = "CN=banzai.cloud";
+			sc->parameters->dns = "banzaicloud.com";
+			sc->parameters->uri = "banzaicloud";
+			sc->parameters->email = "bmolnar@cisco.com";
+			sc->parameters->ip = "127.0.0.1";
+
+			wasm_vm_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
+			if (generated_csr.err)
+			{
+				pr_err("nasp: generate_csr wasm_vm_csr_gen error: %s", generated_csr.err);
+				csr_unlock(csr);
+				return error;
+			}
+
+			wasm_vm_result free_result = csr_free(csr, addr);
+			if (free_result.err)
+			{
+				pr_err("nasp: generate_csr wasm_vm_csr_free error: %s", free_result.err);
+				csr_unlock(csr);
+				return -1;
+			}
+
+			i64 csr_from_module = generated_csr.data->i64;
+
+			i32 csr_len = (i32)(csr_from_module);
+			csr_ptr = (i32)(csr_from_module >> 32) + mem;
+		}
+		csr_unlock(csr);
+
+		csr_sign_answer *csr_sign_answer;
+		csr_sign_answer = send_csrsign_command(csr_ptr);
+		if (csr_sign_answer->error)
+		{
+			pr_err("nasp: generate_csr csr sign answer error: %s", csr_sign_answer->error);
+			kfree(csr_sign_answer->error);
+			kfree(csr_sign_answer);
+			return -1;
+		}
+		else
+		{
+			sc->trust_anchors = csr_sign_answer->trust_anchors;
+			sc->trust_anchors_len = csr_sign_answer->trust_anchors_len;
+			sc->chain = csr_sign_answer->chain;
+			sc->chain_len = csr_sign_answer->chain_len;
+		}
+
+		kfree(csr_sign_answer);
+	}
+	return 0;
+}
+
 struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 {
 	struct sock *client = NULL;
@@ -860,102 +962,10 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		free_command_answer(answer);
 
-		// We should not only check for empty cert but we must check the certs validity
-		// TODO must set the certificate to avoid new cert generation every time
-		if (sc->chain_len == 0)
+		int result = handle_cert_gen(sc);
+		if (result == -1)
 		{
-			// generating certificate signing request
-			if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
-			{
-				u_int32_t result = generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
-				if (result == 0)
-				{
-					pr_err("nasp: accept error generating rsa keys");
-					goto error;
-				}
-			}
-
-			int len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
-			if (len <= 0)
-			{
-				pr_err("nasp: accept error during rsa private der key length calculation");
-				goto error;
-			}
-
-			unsigned char *csr_ptr;
-
-			csr_module *csr = this_cpu_csr();
-			csr_lock(csr);
-			{
-				// Allocate memory inside the wasm vm since this data must be available inside the module
-				wasm_vm_result malloc_result = csr_malloc(csr, len);
-				if (malloc_result.err)
-				{
-					pr_err("nasp: accept wasm_vm_csr_malloc error: %s", malloc_result.err);
-					csr_unlock(csr);
-					goto error;
-				}
-
-				uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
-				i32 addr = malloc_result.data->i32;
-
-				unsigned char *der = mem + addr;
-
-				int error = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
-				if (error <= 0)
-				{
-					pr_err("nasp: accept error during rsa private key der encoding");
-					csr_unlock(csr);
-					goto error;
-				}
-
-				sc->parameters->subject = "CN=banzai.cloud";
-				sc->parameters->dns = "banzaicloud.com";
-				sc->parameters->uri = "banzaicloud";
-				sc->parameters->email = "bmolnar@cisco.com";
-				sc->parameters->ip = "127.0.0.1";
-
-				wasm_vm_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
-				if (generated_csr.err)
-				{
-					pr_err("nasp: accept wasm_vm_csr_gen error: %s", generated_csr.err);
-					csr_unlock(csr);
-					goto error;
-				}
-
-				wasm_vm_result free_result = csr_free(csr, addr);
-				if (free_result.err)
-				{
-					pr_err("nasp: accept wasm_vm_csr_free error: %s", free_result.err);
-					csr_unlock(csr);
-					goto error;
-				}
-
-				i64 csr_from_module = generated_csr.data->i64;
-
-				i32 csr_len = (i32)(csr_from_module);
-				csr_ptr = (i32)(csr_from_module >> 32) + mem;
-			}
-			csr_unlock(csr);
-
-			csr_sign_answer *csr_sign_answer;
-			csr_sign_answer = send_csrsign_command(csr_ptr);
-			if (csr_sign_answer->error)
-			{
-				pr_err("nasp: accept csr sign answer error: %s", csr_sign_answer->error);
-				kfree(csr_sign_answer->error);
-				kfree(csr_sign_answer);
-				goto error;
-			}
-			else
-			{
-				sc->trust_anchors = csr_sign_answer->trust_anchors;
-				sc->trust_anchors_len = csr_sign_answer->trust_anchors_len;
-				sc->chain = csr_sign_answer->chain;
-				sc->chain_len = csr_sign_answer->chain_len;
-			}
-
-			kfree(csr_sign_answer);
+			goto error;
 		}
 		/*
 		 * Initialise the context with the cipher suites and
@@ -1075,102 +1085,10 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 		free_command_answer(answer);
 
-		// We should not only check for empty cert but we must check the certs validity
-		// TODO must set the certificate to avoid new cert generation every time
-		if (sc->chain_len == 0)
+		int result = handle_cert_gen(sc);
+		if (result == -1)
 		{
-			// generating certificate signing request
-			if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
-			{
-				u_int32_t result = generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
-				if (result == 0)
-				{
-					pr_err("nasp: connect error generating rsa keys");
-					goto error;
-				}
-			}
-
-			int len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
-			if (len <= 0)
-			{
-				pr_err("nasp: connect error during rsa private der key length calculation");
-				goto error;
-			}
-
-			unsigned char *csr_ptr;
-
-			csr_module *csr = this_cpu_csr();
-			csr_lock(csr);
-			{
-				// Allocate memory inside the wasm vm since this data must be available inside the module
-				wasm_vm_result malloc_result = csr_malloc(csr, len);
-				if (malloc_result.err)
-				{
-					pr_err("nasp: connect wasm_vm_csr_malloc error: %s", malloc_result.err);
-					csr_unlock(csr);
-					goto error;
-				}
-
-				uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
-				i32 addr = malloc_result.data->i32;
-
-				unsigned char *der = mem + addr;
-
-				int err = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
-				if (err <= 0)
-				{
-					pr_err("nasp: connect error during rsa private key der encoding");
-					csr_unlock(csr);
-					goto error;
-				}
-
-				sc->parameters->subject = "CN=banzai.cloud";
-				sc->parameters->dns = "banzaicloud.com";
-				sc->parameters->uri = "banzaicloud";
-				sc->parameters->email = "bmolnar@cisco.com";
-				sc->parameters->ip = "127.0.0.1";
-
-				wasm_vm_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
-				if (generated_csr.err)
-				{
-					pr_err("nasp: connect wasm_vm_csr_gen error: %s", generated_csr.err);
-					csr_unlock(csr);
-					goto error;
-				}
-
-				wasm_vm_result free_result = csr_free(csr, addr);
-				if (free_result.err)
-				{
-					pr_err("nasp: connect wasm_vm_csr_free error: %s", free_result.err);
-					csr_unlock(csr);
-					goto error;
-				}
-
-				i64 csr_from_module = generated_csr.data->i64;
-
-				i32 csr_len = (i32)(csr_from_module);
-				csr_ptr = (i32)(csr_from_module >> 32) + mem;
-			}
-			csr_unlock(csr);
-
-			csr_sign_answer *csr_sign_answer;
-			csr_sign_answer = send_csrsign_command(csr_ptr);
-			if (csr_sign_answer->error)
-			{
-				pr_err("nasp: connect csr sign answer error: %s", csr_sign_answer->error);
-				kfree(csr_sign_answer->error);
-				kfree(csr_sign_answer);
-				goto error;
-			}
-			else
-			{
-				sc->trust_anchors = csr_sign_answer->trust_anchors;
-				sc->trust_anchors_len = csr_sign_answer->trust_anchors_len;
-				sc->chain = csr_sign_answer->chain;
-				sc->chain_len = csr_sign_answer->chain_len;
-			}
-
-			kfree(csr_sign_answer);
+			goto error;
 		}
 
 		/*
