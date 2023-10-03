@@ -63,9 +63,8 @@ command_answer *send_command(char *name, char *data, task_context *context)
     {
         printk(KERN_ERR "nasp: command [%s] answer timeout", name);
 
-        cmd->answer = kmalloc(sizeof(struct command_answer), GFP_KERNEL);
-        cmd->answer->error = kmalloc(strlen("timeout") + 1, GFP_KERNEL);
-        strcpy(cmd->answer->error, "timeout");
+        cmd->answer = kzalloc(sizeof(struct command_answer), GFP_KERNEL);
+        cmd->answer->error = strdup("timeout");
     }
 
     spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
@@ -115,7 +114,7 @@ csr_sign_answer *send_csrsign_command(unsigned char *csr)
 
     command_answer *answer = send_command("csr_sign", json_serialize_to_string(root_value), get_task_context());
 
-    csr_sign_answer *csr_sign_answer = kmalloc(sizeof(struct csr_sign_answer), GFP_KERNEL);
+    csr_sign_answer *csr_sign_answer = kzalloc(sizeof(struct csr_sign_answer), GFP_KERNEL);
 
     if (answer->error)
     {

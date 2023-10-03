@@ -20,6 +20,7 @@
 #include "csr.h"
 #include "wasm.h"
 #include "commands.h"
+#include "string.h"
 
 /* Global variables are declared as static, so are global within the file. */
 
@@ -283,28 +284,18 @@ int parse_json_from_buffer(void)
                 goto cleanup;
             }
 
-            struct command_answer *cmd_answer = kmalloc(sizeof(struct command_answer), GFP_KERNEL);
+            struct command_answer *cmd_answer = kzalloc(sizeof(struct command_answer), GFP_KERNEL);
             char *answer = json_object_get_string(root, "answer");
             char *error = json_object_get_string(root, "error");
 
             if (error)
             {
-                cmd_answer->error = kmalloc(strlen(error) + 1, GFP_KERNEL);
-                strcpy(cmd_answer->error, error);
-            }
-            else
-            {
-                cmd_answer->error = NULL;
+                cmd_answer->error = strdup(error);
             }
 
             if (answer)
             {
-                cmd_answer->answer = kmalloc(strlen(answer) + 1, GFP_KERNEL);
-                strcpy(cmd_answer->answer, answer);
-            }
-            else
-            {
-                cmd_answer->answer = NULL;
+                cmd_answer->answer = strdup(answer);
             }
 
             cmd->answer = cmd_answer;

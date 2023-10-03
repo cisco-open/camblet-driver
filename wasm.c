@@ -14,6 +14,7 @@
 #include "wasm3.h"
 #include "m3_env.h"
 #include "m3_api_libc.h"
+#include "string.h"
 
 typedef uint32_t wasm_ptr_t;
 typedef uint32_t wasm_size_t;
@@ -191,8 +192,7 @@ wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char 
         goto on_error;
     }
 
-    char *module_name = kmalloc(strlen(name) + 1, GFP_ATOMIC);
-    strcpy(module_name, name);
+    char *module_name = strdup(name);
     m3_SetModuleName(module, module_name);
 
     result = m3_link_all(module);

@@ -354,7 +354,7 @@ int proxywasm_attach(proxywasm *p, nasp_socket *s, ListenerDirection direction, 
 static nasp_socket *nasp_socket_accept(struct sock *sock)
 {
 	nasp_socket *s = kzalloc(sizeof(nasp_socket), GFP_KERNEL);
-	s->sc = kmalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
+	s->sc = kzalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
 	s->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
 	s->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
 	s->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
@@ -387,7 +387,7 @@ static nasp_socket *nasp_socket_accept(struct sock *sock)
 static nasp_socket *nasp_socket_connect(struct sock *sock)
 {
 	nasp_socket *s = kzalloc(sizeof(nasp_socket), GFP_KERNEL);
-	s->cc = kmalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
+	s->cc = kzalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
 	s->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
 	s->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
 	s->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
