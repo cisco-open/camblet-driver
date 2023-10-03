@@ -40,7 +40,7 @@ static M3Result m3_link_all(IM3Module module);
 
 wasm_vm *wasm_vm_new(int cpu)
 {
-    wasm_vm *vm = kmalloc(sizeof(wasm_vm), GFP_KERNEL);
+    wasm_vm *vm = kzalloc(sizeof(wasm_vm), GFP_KERNEL);
 
     vm->cpu = cpu;
 
