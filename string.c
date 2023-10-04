@@ -11,15 +11,12 @@
 
 char *strndup(const char *str, size_t size)
 {
-    char *dst = kmalloc(size, GFP_KERNEL);
-    memcpy(dst, str, size);
-
-    return dst;
+    char *dst = kzalloc(size + 1, GFP_KERNEL);
+    return strncpy(dst, str, size);
 }
 
 char *strdup(const char *str)
 {
     int len = strlen(str);
-
     return strndup(str, len);
 }

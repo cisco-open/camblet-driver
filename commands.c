@@ -32,7 +32,7 @@ static LIST_HEAD(in_flight_command_list);
 // this is a blocking function, it will wait until the command is processed
 command_answer *send_command(char *name, char *data, task_context *context)
 {
-    struct command *cmd = kmalloc(sizeof(struct command), GFP_KERNEL);
+    struct command *cmd = kzalloc(sizeof(struct command), GFP_KERNEL);
 
     uuid_gen(&cmd->uuid);
     cmd->name = name;
@@ -63,9 +63,8 @@ command_answer *send_command(char *name, char *data, task_context *context)
     {
         printk(KERN_ERR "nasp: command [%s] answer timeout", name);
 
-        cmd->answer = kmalloc(sizeof(struct command_answer), GFP_KERNEL);
-        cmd->answer->error = kmalloc(strlen("timeout") + 1, GFP_KERNEL);
-        strcpy(cmd->answer->error, "timeout");
+        cmd->answer = kzalloc(sizeof(struct command_answer), GFP_KERNEL);
+        cmd->answer->error = strdup("timeout");
     }
 
     spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
@@ -115,7 +114,7 @@ csr_sign_answer *send_csrsign_command(unsigned char *csr)
 
     command_answer *answer = send_command("csr_sign", json_serialize_to_string(root_value), get_task_context());
 
-    csr_sign_answer *csr_sign_answer = kmalloc(sizeof(struct csr_sign_answer), GFP_KERNEL);
+    csr_sign_answer *csr_sign_answer = kzalloc(sizeof(struct csr_sign_answer), GFP_KERNEL);
 
     if (answer->error)
     {
@@ -161,7 +160,7 @@ csr_sign_answer *send_csrsign_command(unsigned char *csr)
             csr_sign_answer->trust_anchors[u].pkey.key.rsa.elen = base64_decode(csr_sign_answer->trust_anchors[u].pkey.key.rsa.e, srclen, rsa_e, srclen);
         }
 
-        csr_sign_answer->chain = kmalloc(1 * sizeof *csr_sign_answer->chain, GFP_KERNEL);
+        csr_sign_answer->chain = kzalloc(1 * sizeof *csr_sign_answer->chain, GFP_KERNEL);
         csr_sign_answer->chain_len = 1;
 
         char *raw = json_object_dotget_string(root, "certificate.raw");

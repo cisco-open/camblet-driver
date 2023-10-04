@@ -567,7 +567,7 @@ wasm_vm_result proxy_on_upstream_connection_close(proxywasm *p, PeerType peer_ty
 
 void set_property(proxywasm_context *p, const char *key, int key_len, const char *value, int value_len)
 {
-    struct property_h_node *cur, *node = kmalloc(sizeof(struct property_h_node), GFP_KERNEL);
+    struct property_h_node *cur, *node = kzalloc(sizeof(struct property_h_node), GFP_KERNEL);
     uint32_t key_i = xxh32(key, key_len, 0);
     print_property_key("set_property", key, key_len);
     printk("nasp: set_property key hash %u, key len: %d, value: '%.*s'", key_i, key_len, value_len, value);
@@ -575,7 +575,7 @@ void set_property(proxywasm_context *p, const char *key, int key_len, const char
     node->key_len = key_len;
     memcpy(node->key, key, key_len);
     node->value_len = value_len;
-    node->value = (char *)kmalloc(value_len, GFP_KERNEL);
+    node->value = (char *)kzalloc(value_len, GFP_KERNEL);
     memcpy(node->value, value, value_len);
 
     hash_add(p->properties, &node->node, key_i, HASHTABLE_BITS);
