@@ -139,7 +139,6 @@ _install_wasm_target:
 	sudo rustup target add wasm32-unknown-unknown
 
 setup-vm: _debian_deps _install_opa _install_wasm_target
-	sudo cp /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
 
 setup-archlinux-vm: _archlinux_deps _install_opa _install_wasm_target
 
