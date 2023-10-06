@@ -114,15 +114,17 @@ insmod-with-proxywasm: insmod-bearssl
 
 rmmod:
 	sudo rmmod nasp
-	sudo rm -f /run/nasp.socket
 	sudo rmmod bearssl
 
 _debian_deps:
 	sudo apt update
-	sudo apt install -y clang libbpf-dev dwarves build-essential linux-tools-generic golang dkms flex bison iperf socat
+	sudo apt install -y build-essential dkms dwarves
+ifndef GITHUB_ACTION
+	sudo apt install -y golang flex bison iperf socat
+endif
 
 _archlinux_deps:
-	sudo pacman -Syu linux-headers base-devel clang go dkms git strace bc iperf socat
+	sudo pacman -Syu linux-headers base-devel go dkms git strace bc iperf socat
 
 _install_opa:
 	sudo curl -L -o /usr/bin/opa https://openpolicyagent.org/downloads/v0.56.0/opa_linux_$(shell go version | cut -f2 -d'/')_static
@@ -137,9 +139,8 @@ _install_wasm_target:
 	sudo rustup target add wasm32-unknown-unknown
 
 setup-vm: _debian_deps _install_opa _install_wasm_target
-	sudo cp /sys/kernel/btf/vmlinux /usr/lib/modules/`uname -r`/build/
 
-setup-archlinux-vm: _archlinux_deps _install_opa
+setup-archlinux-vm: _archlinux_deps _install_opa _install_wasm_target
 
 setup-dev-env:
 	test -f .vscode/c_cpp_properties.json || cp .vscode/c_cpp_properties.json.orig .vscode/c_cpp_properties.json
