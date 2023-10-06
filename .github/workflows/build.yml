@@ -26,7 +26,6 @@ jobs:
     - name: Setup Golang with cache
       uses: magnetikonline/action-golang-cache@v4
       with:
-        go-version: '1.21'
         go-version-file: nasp/go.mod
 
     - name: Install/setup prerequisites
