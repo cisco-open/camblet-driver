@@ -25,7 +25,7 @@ jobs:
       working-directory: nasp-kernel-module
       run: make setup-vm
 
-    - name: Test build with DKMS
+    - name: Build with DKMS
       working-directory: nasp-kernel-module
       run: |
         sudo cp -r . /usr/src/nasp-0.1.0/
