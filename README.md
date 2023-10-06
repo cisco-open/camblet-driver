@@ -153,7 +153,7 @@ The kernel module is not yet packaged, but it is possible to install it with [DK
 
 ### DKMS Support
 
-Linux kernel modules need to be built against a specified kernel version, this is when dynamic kernel module support, [DKMS](https://github.com/dell/dkms) comes in handy. The DKMS framework enables you to automatically re-build kernel modules into the current kernel tree as you upgrade your kernel.
+Linux kernel modules need to be built against a specified kernel version, this is when dynamic kernel module support, [DKMS](https://github.com/dell/dkms) comes in handy. The DKMS framework enables you to automatically re-build kernel modules into the current kernel tree as you upgrade your kernel, so you don't need to re-build them manually every time.
 
 #### Install DKMS
 
@@ -168,7 +168,7 @@ sudo apt install dkms
 On Red Hat-based systems, CentOS 9 in this case:
 
 ```bash
-sudo dnf install --enablerepo epel dkms kernel-devel
+sudo dnf install --enablerepo epel dkms
 ```
 
 #### Prepare the NASP kernel module
@@ -184,6 +184,10 @@ sudo dkms add -m nasp -v 0.1.0
 # Build and install the kernel module against the current kernel version
 sudo dkms install -m nasp -v 0.1.0
 
+# Load the kernel module
+sudo modprobe tls # required for kTLS
+sudo modprobe nasp
+
 # Check the logs that the module got loaded
 sudo dmesg -T
 ```
@@ -191,6 +195,10 @@ sudo dmesg -T
 Un-installation is very simple as well:
 
 ```bash
+# Unload the kernel module
+sudo modprobe -r nasp
+
+# Remove the kernel module from DKMS source control
 sudo dkms uninstall -m nasp -v 0.1.0
 sudo dkms remove -m nasp -v 0.1.0
 ```
