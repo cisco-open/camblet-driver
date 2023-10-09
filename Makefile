@@ -118,16 +118,16 @@ rmmod:
 
 _debian_deps:
 	sudo apt update
-	sudo apt install -y build-essential dkms dwarves
+	sudo apt install -y dkms dwarves
 ifndef GITHUB_ACTION
 	sudo apt install -y golang flex bison iperf socat
 endif
 
 _archlinux_deps:
-	sudo pacman -Syu linux-headers base-devel go dkms git strace bc iperf socat
+	sudo pacman -Syu linux-headers dkms go strace bc iperf socat
 
 _centos_deps:
-	sudo dnf install -y --enablerepo epel kernel-devel vim-common dkms
+	sudo dnf install -y --enablerepo epel dkms vim-common
 
 _install_opa:
 	sudo curl -L -o /usr/bin/opa https://openpolicyagent.org/downloads/v0.56.0/opa_linux_$(shell go version | cut -f2 -d'/')_static
