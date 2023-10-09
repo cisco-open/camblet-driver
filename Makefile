@@ -134,12 +134,14 @@ _install_opa:
 	sudo chmod +x /usr/bin/opa
 
 _install_wasm_target:
+ifndef GITHUB_ACTION
 	sudo curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 	sudo ln -s $$HOME/.cargo/bin/* /usr/bin/
 	rustup default stable
 	rustup target add wasm32-unknown-unknown
 	sudo rustup default stable
 	sudo rustup target add wasm32-unknown-unknown
+endif
 
 setup-vm: _debian_deps _install_opa _install_wasm_target
 
