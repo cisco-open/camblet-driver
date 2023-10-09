@@ -15,4 +15,4 @@
 cli/cli
 target/
 linux/
-*_wasm.h
+socket_wasm.h
