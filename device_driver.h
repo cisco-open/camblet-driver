@@ -19,7 +19,7 @@
 wasm_vm_result load_module(char *name, char *code, unsigned length, char *entrypoint);
 
 #define SUCCESS 0
-#define DEVICE_NAME "wasm"                 /* Dev name as it appears in /dev/devices   */
+#define DEVICE_NAME "nasp"                 /* Dev name as it appears in /dev/devices   */
 #define DEVICE_BUFFER_SIZE 2 * 1024 * 1024 /* Max length of the message from the device */
 
 int chardev_init(void);
