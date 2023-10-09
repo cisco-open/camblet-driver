@@ -4,7 +4,8 @@
 
 ## Introduction
 
-The *nasp-kernel-module* is the supporting Linux kernel-module for the [Nasp](https://github.com/cisco-open/nasp) system. It is capable of enhancing plain old TCP sockets in a frictionless way, so that application developers can focus on their business logic instead of dealing with the complexity of TLS, mTLS, and other security-related concerns. It is doing this seamlessly, no code changes or re-compilations or re-deployments are required. The features are the following:
+The *nasp-kernel-module* is the supporting Linux kernel-module for the [Nasp](https://github.com/cisco-open/nasp) system. It is capable of enhancing plain old TCP sockets in a frictionless way, so that application developers can focus on their business logic instead of dealing with the complexity of TLS, mTLS, and other security-related concerns. It is doing this seamlessly, no code changes or re-compilations or re-deployments are required. 
+The features are the following:
 - providing zero-trust identity for UNIX TCP sockets through mTLS
 - access control, authorization and authentication (through OPA)
 - providing frictionless TLS termination for those TCP sockets
