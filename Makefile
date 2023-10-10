@@ -71,7 +71,7 @@ nasp-objs :=  third-party/wasm3/source/m3_api_libc.o \
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
 
-default: static/socket_wasm.h static/csr_wasm.h bearssl
+default: static/socket_wasm.h bearssl
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) modules
 
 bearssl:
@@ -118,28 +118,30 @@ rmmod:
 
 _debian_deps:
 	sudo apt update
-	sudo apt install -y build-essential dkms dwarves
+	sudo apt install -y dkms dwarves
 ifndef GITHUB_ACTION
 	sudo apt install -y golang flex bison iperf socat
 endif
 
 _archlinux_deps:
-	sudo pacman -Syu linux-headers base-devel go dkms git strace bc iperf socat
+	sudo pacman -Syu linux-headers dkms go strace bc iperf socat
 
 _centos_deps:
-	sudo dnf install -y --enablerepo epel kernel-devel vim-common dkms
+	sudo dnf install -y --enablerepo epel dkms vim-common
 
 _install_opa:
 	sudo curl -L -o /usr/bin/opa https://openpolicyagent.org/downloads/v0.56.0/opa_linux_$(shell go version | cut -f2 -d'/')_static
 	sudo chmod +x /usr/bin/opa
 
 _install_wasm_target:
+ifndef GITHUB_ACTION
 	sudo curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 	sudo ln -s $$HOME/.cargo/bin/* /usr/bin/
 	rustup default stable
 	rustup target add wasm32-unknown-unknown
 	sudo rustup default stable
 	sudo rustup target add wasm32-unknown-unknown
+endif
 
 setup-vm: _debian_deps _install_opa _install_wasm_target
 
