@@ -61,7 +61,8 @@ xwc_end_chain(const br_x509_class **ctx)
     if (err)
         return err;
 
-    for (int i = 0; i < mini_cc->num_name_elts; i++)
+    int i;
+    for (i = 0; i < mini_cc->num_name_elts; i++)
     {
         printk("nasp: peer certificate name_elts[%d]: status: %d, value: %s", i, mini_cc->name_elts[i].status, mini_cc->name_elts[i].buf);
     }
@@ -94,7 +95,9 @@ void br_x509_nasp_init(br_x509_nasp_context *ctx, br_ssl_engine_context *eng)
     br_name_element *name_elts = kmalloc(sizeof(br_name_element) * 3, GFP_KERNEL);
 
     char const *oids[] = {OID_rfc822Name, OID_dNSName, OID_uniformResourceIdentifier};
-    for (int i = 0; i < sizeof(oids) / sizeof(oids[0]); i++)
+
+    int i;
+    for (i = 0; i < sizeof(oids) / sizeof(oids[0]); i++)
     {
         name_elts[i].oid = oids[i];
         name_elts[i].buf = kmalloc(sizeof(char) * 256, GFP_KERNEL);
@@ -108,7 +111,8 @@ void br_x509_nasp_init(br_x509_nasp_context *ctx, br_ssl_engine_context *eng)
 
 void br_x509_nasp_free(br_x509_nasp_context *ctx)
 {
-    for (int i = 0; i < ctx->ctx.num_name_elts; i++)
+    int i;
+    for (i = 0; i < ctx->ctx.num_name_elts; i++)
     {
         kfree(ctx->ctx.name_elts[i].buf);
     }
