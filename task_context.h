@@ -12,6 +12,7 @@
 #define context_h
 
 #include <linux/uaccess.h>
+#include <linux/sched/mm.h>
 
 #define COMMAND_PATH_BUFLEN 256
 
