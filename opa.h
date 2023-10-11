@@ -21,6 +21,7 @@ typedef struct
 {
     bool allowed;
     bool mtls;
+    bool passthrough;
 
     char *id;
     char *dns;

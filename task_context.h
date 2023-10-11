@@ -32,7 +32,7 @@ struct namespace_ids
 typedef struct task_context
 {
     char command_name[TASK_COMM_LEN];
-    char *command_path_buffer;
+    char command_path_buffer[COMMAND_PATH_BUFLEN];
     char *command_path;
     kuid_t uid;
     kgid_t gid;

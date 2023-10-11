@@ -44,7 +44,13 @@ static struct proto nasp_v6_ktls_prot;
 static br_rsa_private_key *rsa_priv;
 static br_rsa_public_key *rsa_pub;
 
-typedef struct
+struct nasp_socket;
+typedef struct nasp_socket nasp_socket;
+
+typedef int(nasp_send_msg)(nasp_socket *s, void *msg, size_t len);
+typedef int(nasp_recv_msg)(nasp_socket *s, void *buf, size_t len);
+
+struct nasp_socket
 {
 	union
 	{
@@ -92,7 +98,18 @@ typedef struct
 						struct msghdr *msg,
 						size_t size);
 
-} nasp_socket;
+	nasp_send_msg *send_msg;
+	nasp_send_msg *recv_msg;
+
+	bool passthrough;
+};
+
+static int get_read_buffer_capacity(nasp_socket *s);
+
+static br_ssl_engine_context *get_ssl_engine_context(nasp_socket *s)
+{
+	return s->direction == ListenerDirectionInbound ? &s->sc->eng : &s->cc->eng;
+}
 
 static int ktls_send_msg(nasp_socket *s, void *msg, size_t len)
 {
@@ -104,8 +121,9 @@ static int ktls_send_msg(nasp_socket *s, void *msg, size_t len)
 	return s->ktls_sendmsg(s->sock, &hdr, len);
 }
 
-static int ktls_recv_msg(nasp_socket *s, void *buf, size_t buf_len, size_t size)
+static int ktls_recv_msg(nasp_socket *s, void *buf, size_t size)
 {
+	int buf_len = get_read_buffer_capacity(s);
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = buf, .iov_len = buf_len};
 	int addr_len = 0;
@@ -119,17 +137,49 @@ static int ktls_recv_msg(nasp_socket *s, void *buf, size_t buf_len, size_t size)
 						   0, &addr_len);
 }
 
-static int send_msg(struct sock *sock, void *msg, size_t len)
+static int bearssl_send_msg(nasp_socket *s, void *src, size_t len)
+{
+	int ret = br_sslio_write_all(&s->ioc, src, len);
+	if (ret < 0)
+	{
+		const br_ssl_engine_context *ec = get_ssl_engine_context(s);
+		pr_err("nasp: socket_write: %s br_sslio_write_all error %d", current->comm, br_ssl_engine_last_error(ec));
+		return ret;
+	}
+
+	ret = br_sslio_flush(&s->ioc);
+	if (ret < 0)
+	{
+		pr_err("nasp: socket_write: %s br_sslio_flush returned an error %d", current->comm, ret);
+	}
+	return ret;
+}
+
+static int bearssl_recv_msg(nasp_socket *s, void *dst, size_t len)
+{
+	int ret = br_sslio_read(&s->ioc, dst, len);
+	if (ret < 0)
+	{
+		const br_ssl_engine_context *ec = get_ssl_engine_context(s);
+		int last_error = br_ssl_engine_last_error(ec);
+		if (last_error == 0)
+			return 0;
+		pr_err("nasp: %s br_sslio_read error %d", current->comm, last_error);
+	}
+	return ret;
+}
+
+static int plain_send_msg(nasp_socket *s, void *msg, size_t len)
 {
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = msg, .iov_len = len};
 
 	iov_iter_kvec(&hdr.msg_iter, WRITE, &iov, 1, len);
 
-	return tcp_sendmsg(sock, &hdr, len);
+	return tcp_sendmsg(s->sock, &hdr, len);
 }
 
-static int recv_msg(struct sock *sock, void *buf, size_t size)
+static int plain_recv_msg(nasp_socket *s, void *buf, size_t size)
 {
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = buf, .iov_len = size};
@@ -137,92 +187,20 @@ static int recv_msg(struct sock *sock, void *buf, size_t size)
 
 	iov_iter_kvec(&hdr.msg_iter, READ, &iov, 1, size);
 
-	return tcp_recvmsg(sock, &hdr, size,
+	return tcp_recvmsg(s->sock, &hdr, size,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
 					   0,
 #endif
 					   0, &addr_len);
 }
 
-/*
- * Low-level data read callback for the simplified SSL I/O API.
- */
-static int sock_read(void *ctx, unsigned char *buf, size_t len)
-{
-	return recv_msg((struct sock *)ctx, buf, len);
-}
-
-/*
- * Low-level data write callback for the simplified SSL I/O API.
- */
-static int sock_write(void *ctx, const unsigned char *buf, size_t len)
-{
-	return send_msg((struct sock *)ctx, buf, len);
-}
-
-static char *get_direction(nasp_socket *s)
-{
-	if (s->direction == ListenerDirectionInbound)
-	{
-		return "server";
-	}
-	else
-	{
-		return "client";
-	}
-}
-
-static br_ssl_engine_context *get_ssl_engine_context(nasp_socket *s)
-{
-	return s->direction == ListenerDirectionInbound ? &s->sc->eng : &s->cc->eng;
-}
-
-static int get_read_buffer_capacity(nasp_socket *s);
-
 static int nasp_socket_read(nasp_socket *s, void *dst, size_t len)
 {
-	if (s->ktls_recvmsg)
-	{
-		return ktls_recv_msg(s, dst, get_read_buffer_capacity(s), len);
-	}
-	else
-	{
-		int ret = br_sslio_read(&s->ioc, dst, len);
-		if (ret < 0)
-		{
-			const br_ssl_engine_context *ec = get_ssl_engine_context(s);
-			int last_error = br_ssl_engine_last_error(ec);
-			if (last_error == 0)
-				return 0;
-			pr_err("nasp_socket_read: %s br_sslio_read error %d", get_direction(s), last_error);
-		}
-		return ret;
-	}
+	return s->recv_msg(s, dst, len);
 }
-
 static int nasp_socket_write(nasp_socket *s, void *src, size_t len)
 {
-	if (s->ktls_sendmsg)
-	{
-		return ktls_send_msg(s, src, len); // TODO not sure if this is a write all!
-	}
-	else
-	{
-		int ret = br_sslio_write_all(&s->ioc, src, len);
-		if (ret < 0)
-		{
-			const br_ssl_engine_context *ec = get_ssl_engine_context(s);
-			pr_err("nasp: socket_write: %s br_sslio_write_all error %d", get_direction(s), br_ssl_engine_last_error(ec));
-			return ret;
-		}
-
-		ret = br_sslio_flush(&s->ioc);
-		if (ret != 0)
-		{
-			pr_err("nasp: socket_write: br_sslio_flush returned an error %d", ret);
-		}
-		return ret;
-	}
+	return s->send_msg(s, src, len);
 }
 
 static char *get_read_buffer(nasp_socket *s)
@@ -446,7 +424,7 @@ static int ensure_tls_handshake(nasp_socket *s)
 		ret = br_sslio_flush(&s->ioc);
 		if (ret == 0)
 		{
-			pr_info("nasp: %s %s TLS handshake done, sk: %p", current->comm, get_direction(s), s->sock);
+			printk("nasp: %s TLS handshake done, sk: %p", current->comm, s->sock);
 		}
 		else
 		{
@@ -468,11 +446,20 @@ static int ensure_tls_handshake(nasp_socket *s)
 
 		WRITE_ONCE(s->protocol, protocol);
 
-		ret = configure_ktls_sock(s);
-		if (ret != 0)
+		if (s->passthrough)
 		{
-			pr_err("naspp socket %s configure_ktls_sock failed %d", current->comm, ret);
-			return ret;
+			printk("nasp: socket %s passthrough", current->comm);
+			s->send_msg = plain_send_msg;
+			s->recv_msg = plain_recv_msg;
+		}
+		else
+		{
+			ret = configure_ktls_sock(s);
+			if (ret != 0)
+			{
+				pr_err("nasp: socket %s configure_ktls_sock failed %d", current->comm, ret);
+				return ret;
+			}
 		}
 	}
 
@@ -539,7 +526,7 @@ int nasp_recvmsg(struct sock *sock,
 		ret = nasp_socket_read(s, get_read_buffer_for_read(s, len), len);
 		if (ret < 0)
 		{
-			pr_err("nasp: recvmsg %s nasp_socket_read error %d", get_direction(s), ret);
+			pr_err("nasp: %s recvmsg nasp_socket_read error %d", current->comm, ret);
 			goto bail;
 		}
 		else if (ret == 0)
@@ -683,6 +670,8 @@ static int configure_ktls_sock(nasp_socket *s)
 	if (params->cipher_suite != BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256)
 	{
 		pr_warn("nasp: configure_ktls: only ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 cipher suite is supported, got %x", params->cipher_suite);
+		s->send_msg = bearssl_send_msg;
+		s->recv_msg = bearssl_recv_msg;
 		return 0;
 	}
 
@@ -753,6 +742,9 @@ static int configure_ktls_sock(nasp_socket *s)
 	ensure_nasp_ktls_prot(s->sock, ktls_prot);
 
 	WRITE_ONCE(s->sock->sk_prot, ktls_prot);
+
+	s->send_msg = ktls_send_msg;
+	s->recv_msg = ktls_recv_msg;
 
 	return 0;
 }
@@ -880,6 +872,22 @@ static int handle_cert_gen(nasp_socket *sc)
 	return 0;
 }
 
+/*
+ * Low-level data read callback for the simplified SSL I/O API.
+ */
+static int br_low_read(void *ctx, unsigned char *buf, size_t len)
+{
+	return plain_recv_msg((nasp_socket *)ctx, buf, len);
+}
+
+/*
+ * Low-level data write callback for the simplified SSL I/O API.
+ */
+static int br_low_write(void *ctx, const unsigned char *buf, size_t len)
+{
+	return plain_send_msg((nasp_socket *)ctx, buf, len);
+}
+
 struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 {
 	struct sock *client = NULL;
@@ -985,7 +993,7 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		/*
 		 * Initialise the simplified I/O wrapper context.
 		 */
-		br_sslio_init(&sc->ioc, &sc->sc->eng, sock_read, client, sock_write, client);
+		br_sslio_init(&sc->ioc, &sc->sc->eng, br_low_read, sc, br_low_write, sc);
 
 		// // We should save the ssl context here to the socket
 		client->sk_user_data = sc;
@@ -1119,7 +1127,7 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		 * Initialise the simplified I/O wrapper context, to use our
 		 * SSL client context, and the two callbacks for socket I/O.
 		 */
-		br_sslio_init(&sc->ioc, &sc->cc->eng, sock_read, sk, sock_write, sk);
+		br_sslio_init(&sc->ioc, &sc->cc->eng, br_low_read, sc, br_low_write, sc);
 
 		// We should save the ssl context here to the socket
 		sk->sk_user_data = sc;
