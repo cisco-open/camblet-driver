@@ -12,10 +12,10 @@
 # the repo. Unless a later match takes precedence,
 # the following users/teams will be requested for
 # review when someone opens a pull request.
-* @cisco-open/wasm-kernel-module-maintainers
+* @cisco-open/nasp-maintainers
 
 # TODO: assign code owners per subsystem
 
 # Enforces admin protections for repo configuration via probot settings app.
 # ref: https://github.com/probot/settings#security-implications
-.github/settings.yml @cisco-open/wasm-kernel-module-admins
+.github/settings.yml @cisco-open/nasp-admins
