@@ -28,6 +28,7 @@
 #include "socket.h"
 #include "tls.h"
 #include "string.h"
+#include "cert_tools.h"
 
 const char *ALPNs[] = {
 	"istio-peer-exchange",
@@ -65,7 +66,6 @@ struct nasp_socket
 
 	br_rsa_private_key *rsa_priv;
 	br_rsa_public_key *rsa_pub;
-	br_x509_certificate *cert;
 	csr_parameters *parameters;
 
 	br_x509_certificate *chain;
@@ -295,22 +295,11 @@ static void nasp_socket_free(nasp_socket *s)
 		br_x509_nasp_free(&s->xc);
 
 		opa_socket_context_free(s->opa_socket_ctx);
-
-		// if (c->rsa_priv != NULL)
-		// {
-		// 	kfree(c->rsa_priv->p);
-		// }
-		// if (c->rsa_pub != NULL)
-		// {
-		// 	kfree(c->rsa_pub->n);
-		// }
-
 		buffer_free(s->read_buffer);
 		buffer_free(s->write_buffer);
 
 		kfree(s->rsa_priv);
 		kfree(s->rsa_pub);
-		kfree(s->cert);
 		kfree(s->parameters);
 		kfree(s);
 	}
@@ -348,7 +337,6 @@ static nasp_socket *nasp_socket_accept(struct sock *sock)
 	s->sc = kzalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
 	s->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
 	s->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
-	s->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
 	s->chain = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
 	s->trust_anchors = kzalloc(sizeof(br_x509_trust_anchor), GFP_KERNEL);
 	s->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
@@ -383,7 +371,8 @@ static nasp_socket *nasp_socket_connect(struct sock *sock)
 	s->cc = kzalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
 	s->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
 	s->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
-	s->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
+	s->chain = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
+	s->trust_anchors = kzalloc(sizeof(br_x509_trust_anchor), GFP_KERNEL);
 	s->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
 	s->read_buffer = buffer_new(16 * 1024);
 	s->write_buffer = buffer_new(16 * 1024);
@@ -790,7 +779,6 @@ int (*connect_v6)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 static int handle_cert_gen(nasp_socket *sc)
 {
 	// We should not only check for empty cert but we must check the certs validity
-	// TODO must set the certificate to avoid new cert generation every time
 	if (sc->chain_len == 0)
 	{
 		// generating certificate signing request
@@ -978,10 +966,23 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
 
-		int result = handle_cert_gen(sc);
-		if (result == -1)
+		//Check if cert gen is required or we already have a cached certificate for this socket.
+		cert_with_key *cached_cert_bundle = find_cert_from_cache(sc->opa_socket_ctx.keyid);
+		if (!cached_cert_bundle)
 		{
-			goto error;
+			int result = handle_cert_gen(sc);
+			if (result == -1)
+			{
+				goto error;
+			}
+			add_cert_to_cache(sc->opa_socket_ctx.keyid, sc->chain, sc->chain_len, sc->trust_anchors, sc->trust_anchors_len);
+		} 
+		else
+		{
+			sc->chain = cached_cert_bundle->chain;
+			sc->chain_len = cached_cert_bundle->chain_len;
+			sc->trust_anchors = cached_cert_bundle->trust_anchors;
+			sc->trust_anchors_len = cached_cert_bundle->trust_anchors_len;
 		}
 		/*
 		 * Initialise the context with the cipher suites and
@@ -1107,10 +1108,23 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
 
-		int result = handle_cert_gen(sc);
-		if (result == -1)
+		//Check if cert gen is required or we already have a cached certificate for this socket.
+		cert_with_key *cached_cert_bundle = find_cert_from_cache(sc->opa_socket_ctx.keyid);
+		if (!cached_cert_bundle)
 		{
-			goto error;
+			int result = handle_cert_gen(sc);
+			if (result == -1)
+			{
+				goto error;
+			}
+			add_cert_to_cache(sc->opa_socket_ctx.keyid, sc->chain, sc->chain_len, sc->trust_anchors, sc->trust_anchors_len);
+		} 
+		else
+		{
+			sc->chain = cached_cert_bundle->chain;
+			sc->chain_len = cached_cert_bundle->chain_len;
+			sc->trust_anchors = cached_cert_bundle->trust_anchors;
+			sc->trust_anchors_len = cached_cert_bundle->trust_anchors_len;
 		}
 
 		/*
