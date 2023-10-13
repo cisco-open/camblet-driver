@@ -776,112 +776,146 @@ int (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 struct sock *(*accept_v6)(struct sock *sk, int flags, int *err, bool kern);
 int (*connect_v6)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 
-static int handle_cert_gen(nasp_socket *sc)
+static int handle_cert_gen(nasp_socket *sc, u32 key)
 {
-	// We should not only check for empty cert but we must check the certs validity
-	if (sc->chain_len == 0)
+	// Generating certificate signing request
+	if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
 	{
-		// generating certificate signing request
-		if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
+		u_int32_t result = generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
+		if (result == 0)
 		{
-			u_int32_t result = generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
-			if (result == 0)
-			{
-				pr_err("nasp: generate_csr error generating rsa keys");
-				return -1;
-			}
-		}
-
-		int len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
-		if (len <= 0)
-		{
-			pr_err("nasp: generate_csr error during rsa private der key length calculation");
+			pr_err("nasp: generate_csr error generating rsa keys");
 			return -1;
 		}
+	}
 
-		unsigned char *csr_ptr;
+	int len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
+	if (len <= 0)
+	{
+		pr_err("nasp: generate_csr error during rsa private der key length calculation");
+		return -1;
+	}
 
-		csr_module *csr = this_cpu_csr();
-		csr_lock(csr);
-		{
-			// Allocate memory inside the wasm vm since this data must be available inside the module
-			wasm_vm_result malloc_result = csr_malloc(csr, len);
-			if (malloc_result.err)
-			{
-				pr_err("nasp: generate_csr wasm_vm_csr_malloc error: %s", malloc_result.err);
-				csr_unlock(csr);
-				return -1;
-			}
+	unsigned char *csr_ptr;
 
-			uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
-			i32 addr = malloc_result.data->i32;
-
-			unsigned char *der = mem + addr;
-
-			int error = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
-			if (error <= 0)
-			{
-				pr_err("nasp: generate_csr error during rsa private key der encoding");
-				csr_unlock(csr);
-				return -1;
-			}
-
-			sc->parameters->subject = "CN=nasp-protected-workload";
-
-			if (sc->opa_socket_ctx.dns)
-			{
-				sc->parameters->dns = sc->opa_socket_ctx.dns;
-			}
-			if (sc->opa_socket_ctx.uri)
-			{
-				sc->parameters->uri = sc->opa_socket_ctx.uri;
-			}
-
-			csr_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
-			if (generated_csr.err)
-			{
-				pr_err("nasp: generate_csr wasm_vm_csr_gen error: %s", generated_csr.err);
-				csr_unlock(csr);
-				return -1;
-			}
-
-			wasm_vm_result free_result = csr_free(csr, addr);
-			if (free_result.err)
-			{
-				pr_err("nasp: generate_csr wasm_vm_csr_free error: %s", free_result.err);
-				csr_unlock(csr);
-				return -1;
-			}
-
-			csr_ptr = strndup(generated_csr.csr_ptr + mem, generated_csr.csr_len);
-			free_result = csr_free(csr, generated_csr.csr_ptr);
-			if (free_result.err)
-			{
-				pr_err("nasp: generate_csr wasm_vm_csr_free error: %s", free_result.err);
-				csr_unlock(csr);
-				return -1;
-			}
-		}
+	csr_module *csr = this_cpu_csr();
+	csr_lock(csr);
+	// Allocate memory inside the wasm vm since this data must be available inside the module
+	wasm_vm_result malloc_result = csr_malloc(csr, len);
+	if (malloc_result.err)
+	{
+		pr_err("nasp: generate_csr wasm_vm_csr_malloc error: %s", malloc_result.err);
 		csr_unlock(csr);
+		return -1;
+	}
 
-		csr_sign_answer *csr_sign_answer;
-		csr_sign_answer = send_csrsign_command(csr_ptr);
-		if (csr_sign_answer->error)
+	uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
+	i32 addr = malloc_result.data->i32;
+
+	unsigned char *der = mem + addr;
+
+	int error = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
+	if (error <= 0)
+	{
+		pr_err("nasp: generate_csr error during rsa private key der encoding");
+		csr_unlock(csr);
+		return -1;
+	}
+
+	sc->parameters->subject = "CN=nasp-protected-workload";
+
+	if (sc->opa_socket_ctx.dns)
+	{
+		sc->parameters->dns = sc->opa_socket_ctx.dns;
+	}
+	if (sc->opa_socket_ctx.uri)
+	{
+		sc->parameters->uri = sc->opa_socket_ctx.uri;
+	}
+
+	csr_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
+	if (generated_csr.err)
+	{
+		pr_err("nasp: generate_csr wasm_vm_csr_gen error: %s", generated_csr.err);
+		csr_unlock(csr);
+		return -1;
+	}
+
+	wasm_vm_result free_result = csr_free(csr, addr);
+	if (free_result.err)
+	{
+		pr_err("nasp: generate_csr wasm_vm_csr_free error: %s", free_result.err);
+		csr_unlock(csr);
+		return -1;
+	}
+
+	csr_ptr = strndup(generated_csr.csr_ptr + mem, generated_csr.csr_len);
+	free_result = csr_free(csr, generated_csr.csr_ptr);
+	if (free_result.err)
+	{
+		pr_err("nasp: generate_csr wasm_vm_csr_free error: %s", free_result.err);
+		csr_unlock(csr);
+		return -1;
+	}
+	csr_unlock(csr);
+
+	csr_sign_answer *csr_sign_answer;
+	csr_sign_answer = send_csrsign_command(csr_ptr);
+	if (csr_sign_answer->error)
+	{
+		pr_err("nasp: generate_csr csr sign answer error: %s", csr_sign_answer->error);
+		kfree(csr_sign_answer->error);
+		kfree(csr_sign_answer);
+		return -1;
+	} 
+	else 
+	{
+		sc->trust_anchors = csr_sign_answer->trust_anchors;
+		sc->trust_anchors_len = csr_sign_answer->trust_anchors_len;
+		sc->chain = csr_sign_answer->chain;
+		sc->chain_len = csr_sign_answer->chain_len;
+	}
+	kfree(csr_sign_answer);
+	return 0;
+}
+
+static int cache_and_validate_cert(nasp_socket *sc, u32 key)
+{
+	// Check if cert gen is required or we already have a cached certificate for this socket.
+	u16 cert_validation_err_no = 0;
+	cert_with_key *cached_cert_bundle = find_cert_from_cache(key);
+	if (!cached_cert_bundle)
+	{
+	regen_cert:
+		int err = handle_cert_gen(sc, key);
+		if (err == -1)
 		{
-			pr_err("nasp: generate_csr csr sign answer error: %s", csr_sign_answer->error);
-			kfree(csr_sign_answer->error);
-			kfree(csr_sign_answer);
 			return -1;
 		}
-		else
+		add_cert_to_cache(key, sc->chain, sc->chain_len, sc->trust_anchors, sc->trust_anchors_len);
+	}
+	// Cert found in the cache use that
+	else
+	{
+		sc->chain = cached_cert_bundle->chain;
+		sc->chain_len = cached_cert_bundle->chain_len;
+		sc->trust_anchors = cached_cert_bundle->trust_anchors;
+		sc->trust_anchors_len = cached_cert_bundle->trust_anchors_len;
+	}
+	// Validate the cached or the generated cert
+	if (!validate_cert(sc->chain))
+	{
+		pr_warn("nasp: provided certificate is invalid");
+		remove_cert_from_cache(cached_cert_bundle);
+		cert_validation_err_no++;
+		if (cert_validation_err_no == 1)
 		{
-			sc->trust_anchors = csr_sign_answer->trust_anchors;
-			sc->trust_anchors_len = csr_sign_answer->trust_anchors_len;
-			sc->chain = csr_sign_answer->chain;
-			sc->chain_len = csr_sign_answer->chain_len;
+			goto regen_cert;
 		}
-
-		kfree(csr_sign_answer);
+		else if (cert_validation_err_no == 2)
+		{
+			return -1;
+		}
 	}
 	return 0;
 }
@@ -966,40 +1000,10 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
 
-		//Check if cert gen is required or we already have a cached certificate for this socket.
-		u16 cert_validation_err_no = 0;
-		handle_cert:
-		cert_with_key *cached_cert_bundle = find_cert_from_cache(sc->opa_socket_ctx.keyid);
-		if (!cached_cert_bundle)
+		int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.keyid);
+		if (result == -1)
 		{
-			int result = handle_cert_gen(sc);
-			if (result == -1)
-			{
-				goto error;
-			}
-			add_cert_to_cache(sc->opa_socket_ctx.keyid, sc->chain, sc->chain_len, sc->trust_anchors, sc->trust_anchors_len);
-		} 
-		else
-		{
-			sc->chain = cached_cert_bundle->chain;
-			sc->chain_len = cached_cert_bundle->chain_len;
-			sc->trust_anchors = cached_cert_bundle->trust_anchors;
-			sc->trust_anchors_len = cached_cert_bundle->trust_anchors_len;
-		}
-		// Validate the cached or the generated cert
-		if (!validate_cert(sc->chain))
-		{
-			pr_warn("nasp: provided certificate is invalid");
-			remove_cert_from_cache(cached_cert_bundle);
-			cert_validation_err_no++;
-			if (cert_validation_err_no == 1)
-			{
-				goto handle_cert;
-			}
-			else if (cert_validation_err_no == 2)
-			{
-				goto error;
-			}
+			goto error;
 		}
 
 		/*
@@ -1126,43 +1130,11 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
 
-		//Check if cert gen is required or we already have a cached certificate for this socket.
-		u16 cert_validation_err_no = 0;
-		handle_cert:
-		cert_with_key *cached_cert_bundle = find_cert_from_cache(sc->opa_socket_ctx.keyid);
-		if (!cached_cert_bundle)
+		int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.keyid);
+		if (result == -1)
 		{
-			int result = handle_cert_gen(sc);
-			if (result == -1)
-			{
-				goto error;
-			}
-			add_cert_to_cache(sc->opa_socket_ctx.keyid, sc->chain, sc->chain_len, sc->trust_anchors, sc->trust_anchors_len);
-		} 
-		else
-		{
-			sc->chain = cached_cert_bundle->chain;
-			sc->chain_len = cached_cert_bundle->chain_len;
-			sc->trust_anchors = cached_cert_bundle->trust_anchors;
-			sc->trust_anchors_len = cached_cert_bundle->trust_anchors_len;
+			goto error;
 		}
-
-		// Validate the cached or the generated cert
-		if (!validate_cert(sc->chain))
-		{
-			pr_warn("nasp: provided certificate is invalid");
-			remove_cert_from_cache(cached_cert_bundle);
-			cert_validation_err_no++;
-			if (cert_validation_err_no == 1)
-			{
-				goto handle_cert;
-			}
-			else if(cert_validation_err_no == 2)
-			{
-				goto error;
-			}
-		}
-
 		/*
 		 * Initialise the context with the cipher suites and
 		 * algorithms. This depends on the server key type

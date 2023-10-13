@@ -11,19 +11,19 @@
 #include "cert_tools.h"
 
 #include "linux/list.h"
-
+#include "linux/slab.h"
 
 // certs that are in use or used once by a workload
-static LIST_HEAD(cert_list);
+static LIST_HEAD(cert_cache);
 
-//lock for the above list to make it thread safe
-static DEFINE_SPINLOCK(cert_list_lock);
-static unsigned long cert_list_lock_flags;
+// lock for the above list to make it thread safe
+static DEFINE_SPINLOCK(cert_cache_lock);
+static unsigned long cert_cache_lock_flags;
 
-//add_cert_to_cache adds a certificate chain with a given trust anchor to a linked list. The key will identify this entry.
-//the function is thread safe. 
-void add_cert_to_cache(u16 key, br_x509_certificate *chain, size_t chain_len, 
-    br_x509_trust_anchor *trust_anchors, size_t trust_anchors_len)
+// add_cert_to_cache adds a certificate chain with a given trust anchor to a linked list. The key will identify this entry.
+// the function is thread safe.
+void add_cert_to_cache(u16 key, br_x509_certificate *chain, size_t chain_len,
+                       br_x509_trust_anchor *trust_anchors, size_t trust_anchors_len)
 {
     cert_with_key *new_entry = kzalloc(sizeof(cert_with_key), GFP_KERNEL);
     if (!new_entry)
@@ -35,49 +35,48 @@ void add_cert_to_cache(u16 key, br_x509_certificate *chain, size_t chain_len,
     new_entry->chain = chain;
     new_entry->chain_len = chain_len;
     new_entry->trust_anchors = trust_anchors;
-    new_entry->trust_anchors_len  = trust_anchors_len;
+    new_entry->trust_anchors_len = trust_anchors_len;
 
-
-    spin_lock_irqsave(&cert_list_lock, cert_list_lock_flags);
+    spin_lock_irqsave(&cert_cache_lock, cert_cache_lock_flags);
     INIT_LIST_HEAD(&new_entry->list);
-    list_add(&new_entry->list, &cert_list);
-    spin_unlock_irqrestore(&cert_list_lock, cert_list_lock_flags);
+    list_add(&new_entry->list, &cert_cache);
+    spin_unlock_irqrestore(&cert_cache_lock, cert_cache_lock_flags);
 }
 
-//find_cert_from_cache tries to find a certificate bundle for the given key. In case of failure it returns a NULL.
-//the function is thread safe
-cert_with_key *find_cert_from_cache(u32 key) 
+// find_cert_from_cache tries to find a certificate bundle for the given key. In case of failure it returns a NULL.
+// the function is thread safe
+cert_with_key *find_cert_from_cache(u32 key)
 {
     cert_with_key *cert_bundle;
-    spin_lock_irqsave(&cert_list_lock, cert_list_lock_flags);
-    list_for_each_entry(cert_bundle, &cert_list, list)
+    spin_lock_irqsave(&cert_cache_lock, cert_cache_lock_flags);
+    list_for_each_entry(cert_bundle, &cert_cache, list)
     {
         if (cert_bundle->key == key)
-        {   
-            spin_unlock_irqrestore(&cert_list_lock, cert_list_lock_flags);
+        {
+            spin_unlock_irqrestore(&cert_cache_lock, cert_cache_lock_flags);
             return cert_bundle;
         }
     }
-    spin_unlock_irqrestore(&cert_list_lock, cert_list_lock_flags);
+    spin_unlock_irqrestore(&cert_cache_lock, cert_cache_lock_flags);
     return 0;
 }
 
-//remove_cert_from_cache removes a given certificate bundle from the cache
-//the function is thread safe
+// remove_cert_from_cache removes a given certificate bundle from the cache
+// the function is thread safe
 void remove_cert_from_cache(cert_with_key *cert_bundle)
 {
     if (cert_bundle)
     {
-        spin_lock_irqsave(&cert_list_lock, cert_list_lock_flags);
+        spin_lock_irqsave(&cert_cache_lock, cert_cache_lock_flags);
         list_del(&cert_bundle->list);
         kfree(cert_bundle->chain);
         kfree(cert_bundle->trust_anchors);
         kfree(cert_bundle);
-        spin_unlock_irqrestore(&cert_list_lock, cert_list_lock_flags);
+        spin_unlock_irqrestore(&cert_cache_lock, cert_cache_lock_flags);
     }
 }
 
-//validate_cert validates the given certificate if it has expired or not.
+// validate_cert validates the given certificate if it has expired or not.
 bool validate_cert(br_x509_certificate *cert)
 {
     bool result = false;
@@ -113,7 +112,7 @@ bool validate_cert(br_x509_certificate *cert)
     }
     else
     {
-       result = true;
+        result = true;
     }
 
     return result;
