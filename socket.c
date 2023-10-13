@@ -967,6 +967,8 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
 
 		//Check if cert gen is required or we already have a cached certificate for this socket.
+		u16 cert_validation_err_no = 0;
+		handle_cert:
 		cert_with_key *cached_cert_bundle = find_cert_from_cache(sc->opa_socket_ctx.keyid);
 		if (!cached_cert_bundle)
 		{
@@ -984,6 +986,22 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 			sc->trust_anchors = cached_cert_bundle->trust_anchors;
 			sc->trust_anchors_len = cached_cert_bundle->trust_anchors_len;
 		}
+		// Validate the cached or the generated cert
+		if (!validate_cert(sc->chain))
+		{
+			pr_warn("nasp: provided certificate is invalid");
+			remove_cert_from_cache(cached_cert_bundle);
+			cert_validation_err_no++;
+			if (cert_validation_err_no == 1)
+			{
+				goto handle_cert;
+			}
+			else if (cert_validation_err_no == 2)
+			{
+				goto error;
+			}
+		}
+
 		/*
 		 * Initialise the context with the cipher suites and
 		 * algorithms. This depends on the server key type
@@ -1109,6 +1127,8 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
 
 		//Check if cert gen is required or we already have a cached certificate for this socket.
+		u16 cert_validation_err_no = 0;
+		handle_cert:
 		cert_with_key *cached_cert_bundle = find_cert_from_cache(sc->opa_socket_ctx.keyid);
 		if (!cached_cert_bundle)
 		{
@@ -1125,6 +1145,22 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			sc->chain_len = cached_cert_bundle->chain_len;
 			sc->trust_anchors = cached_cert_bundle->trust_anchors;
 			sc->trust_anchors_len = cached_cert_bundle->trust_anchors_len;
+		}
+
+		// Validate the cached or the generated cert
+		if (!validate_cert(sc->chain))
+		{
+			pr_warn("nasp: provided certificate is invalid");
+			remove_cert_from_cache(cached_cert_bundle);
+			cert_validation_err_no++;
+			if (cert_validation_err_no == 1)
+			{
+				goto handle_cert;
+			}
+			else if(cert_validation_err_no == 2)
+			{
+				goto error;
+			}
 		}
 
 		/*

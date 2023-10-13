@@ -28,5 +28,6 @@ void add_cert_to_cache(u16 key, br_x509_certificate *chain, size_t chain_len,
     br_x509_trust_anchor *trust_anchors, size_t trust_anchors_len);
 cert_with_key *find_cert_from_cache(u32 key);
 void remove_cert_from_cache(cert_with_key *cert);
+bool validate_cert(br_x509_certificate *cert);
 
 #endif
