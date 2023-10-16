@@ -864,12 +864,12 @@ static int handle_cert_gen(nasp_socket *sc)
 			sc->parameters->email = "nasp@outshift.cisco.com";
 			sc->parameters->ip = "127.0.0.1";
 
-			wasm_vm_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
-			if (generated_csr.data->i64 == 0)
+			csr_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
+			if (generated_csr.err)
 			{
-				pr_err("nasp: generate_csr wasm_vm_csr_gen error");
+				pr_err("nasp: generate_csr wasm_vm_csr_gen error: %s", generated_csr.err);
 				csr_unlock(csr);
-				return error;
+				return -1;
 			}
 
 			wasm_vm_result free_result = csr_free(csr, addr);
@@ -880,10 +880,7 @@ static int handle_cert_gen(nasp_socket *sc)
 				return -1;
 			}
 
-			i64 csr_from_module = generated_csr.data->i64;
-
-			i32 csr_len = (i32)(csr_from_module);
-			csr_ptr = (i32)(csr_from_module >> 32) + mem;
+			csr_ptr = generated_csr.csr_ptr + mem;
 		}
 		csr_unlock(csr);
 
