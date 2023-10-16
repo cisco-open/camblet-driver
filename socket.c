@@ -261,7 +261,7 @@ static void nasp_socket_free(nasp_socket *s)
 			proxywasm_unlock(s->p);
 		}
 
-		if (s->protocol && !s->ktls_sendmsg)
+		if (s->protocol && !s->ktls_sendmsg && !s->passthrough)
 		{
 			// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
 			if (!br_sslio_close(&s->ioc))
