@@ -334,7 +334,7 @@ int proxywasm_attach(proxywasm *p, nasp_socket *s, ListenerDirection direction, 
 	return 0;
 }
 
-static nasp_socket *nasp_socket_accept(struct sock *sock)
+static nasp_socket *nasp_socket_accept(struct sock *sock, opa_socket_context opa_ctx)
 {
 	nasp_socket *s = kzalloc(sizeof(nasp_socket), GFP_KERNEL);
 	s->sc = kzalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
@@ -348,6 +348,7 @@ static nasp_socket *nasp_socket_accept(struct sock *sock)
 	s->write_buffer = buffer_new(16 * 1024);
 
 	s->sock = sock;
+	s->passthrough = opa_ctx.passthrough;
 
 	proxywasm *p = this_cpu_proxywasm();
 
@@ -367,7 +368,7 @@ static nasp_socket *nasp_socket_accept(struct sock *sock)
 	return s;
 }
 
-static nasp_socket *nasp_socket_connect(struct sock *sock)
+static nasp_socket *nasp_socket_connect(struct sock *sock, opa_socket_context opa_ctx)
 {
 	nasp_socket *s = kzalloc(sizeof(nasp_socket), GFP_KERNEL);
 	s->cc = kzalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
@@ -379,6 +380,7 @@ static nasp_socket *nasp_socket_connect(struct sock *sock)
 	s->write_buffer = buffer_new(16 * 1024);
 
 	s->sock = sock;
+	s->passthrough = opa_ctx.passthrough;
 
 	proxywasm *p = this_cpu_proxywasm();
 
@@ -448,7 +450,7 @@ static int ensure_tls_handshake(nasp_socket *s)
 
 		if (s->passthrough)
 		{
-			printk("nasp: socket %s passthrough", current->comm);
+			printk("nasp: socket %s enabling TLS passthrough", current->comm);
 			s->send_msg = plain_send_msg;
 			s->recv_msg = plain_recv_msg;
 		}
