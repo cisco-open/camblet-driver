@@ -27,6 +27,7 @@
 #include "rsa_tools.h"
 #include "socket.h"
 #include "tls.h"
+#include "string.h"
 
 const char *ALPNs[] = {
 	"istio-peer-exchange",
@@ -880,7 +881,14 @@ static int handle_cert_gen(nasp_socket *sc)
 				return -1;
 			}
 
-			csr_ptr = generated_csr.csr_ptr + mem;
+			csr_ptr = strndup(generated_csr.csr_ptr + mem, generated_csr.csr_len);
+			free_result = csr_free(csr, generated_csr.csr_ptr);
+			if (free_result.err)
+			{
+				pr_err("nasp: generate_csr wasm_vm_csr_free error: %s", free_result.err);
+				csr_unlock(csr);
+				return -1;
+			}
 		}
 		csr_unlock(csr);
 
