@@ -260,6 +260,21 @@ int parse_json_from_buffer(void)
                 goto cleanup;
             }
         }
+        else if (strcmp("load_rules", command) == 0)
+        {
+            char *code = json_object_get_string(root, "code");
+            int length = base64_decode(device_buffer, DEVICE_BUFFER_SIZE, code, strlen(code));
+            if (length < 0)
+            {
+                FATAL("base64_decode failed");
+                status = -1;
+                goto cleanup;
+            }
+
+            printk("nasp: loading rules");
+
+            load_opa_data(device_buffer);
+        }
         else if (strcmp("answer", command) == 0)
         {
             char *base64_id = json_object_get_string(root, "id");

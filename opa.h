@@ -2,9 +2,9 @@
  * Copyright (c) 2023 Cisco and/or its affiliates. All rights reserved.
  *
  * SPDX-License-Identifier: MIT OR GPL-2.0-only
- * 
+ *
  * Licensed under the MIT license <LICENSE.MIT or https://opensource.org/licenses/MIT> or the GPLv2 license
- * <LICENSE.GPL or https://opensource.org/license/gpl-2-0>, at your option. This file may not be copied, 
+ * <LICENSE.GPL or https://opensource.org/license/gpl-2-0>, at your option. This file may not be copied,
  * modified, or distributed except according to those terms.
  */
 
@@ -15,15 +15,24 @@
 
 #define OPA_MODULE "opa"
 
-typedef struct {
+#define MAX_ALLOWED_SPIFFE_ID 16
+
+typedef struct
+{
     bool allowed;
     bool mtls;
-    bool permissive;
+
+    char *id;
+    char *dns;
+    char *uri;
+    char *allowed_spiffe_ids[MAX_ALLOWED_SPIFFE_ID];
+    int allowed_spiffe_ids_length;
 } opa_socket_context;
 
+void opa_socket_context_free(opa_socket_context ctx);
 wasm_vm_result init_opa_for(wasm_vm *vm, wasm_vm_module *module);
-
 int this_cpu_opa_eval(const char *input);
 opa_socket_context this_cpu_opa_socket_eval(const char *input);
+void load_opa_data(unsigned char *data);
 
 #endif

@@ -12,6 +12,7 @@
 #define tls_h
 
 #include "bearssl.h"
+#include "opa.h"
 
 /*
  * This is a wrapper around the BearSSL X.509 validation engine. It
@@ -24,9 +25,10 @@ typedef struct br_x509_nasp_context
 {
     const br_x509_class *vtable;
     br_x509_minimal_context ctx;
+    opa_socket_context *socket_context;
 } br_x509_nasp_context;
 
-void br_x509_nasp_init(br_x509_nasp_context *ctx, br_ssl_engine_context *eng);
+void br_x509_nasp_init(br_x509_nasp_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context);
 void br_x509_nasp_free(br_x509_nasp_context *ctx);
 
 #endif

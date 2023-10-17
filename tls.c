@@ -61,10 +61,38 @@ xwc_end_chain(const br_x509_class **ctx)
     if (err)
         return err;
 
-    int i;
+    int i, k;
+    bool allowed = true;
+
+    if (nasp_cc->socket_context->allowed_spiffe_ids_length > 0)
+    {
+        allowed = false;
+    }
+
+    pr_info("nasp: allowed spiffe id len[%d]", nasp_cc->socket_context->allowed_spiffe_ids_length);
+
     for (i = 0; i < mini_cc->num_name_elts; i++)
     {
-        printk("nasp: peer certificate name_elts[%d]: status: %d, value: %s", i, mini_cc->name_elts[i].status, mini_cc->name_elts[i].buf);
+        printk("nasp: peer certificate name_elts[%d]: status: %d, value: %s (len: %d)", i, mini_cc->name_elts[i].status, mini_cc->name_elts[i].buf, mini_cc->name_elts[i].len);
+        if (mini_cc->name_elts[i].oid == OID_uniformResourceIdentifier)
+        {
+            for (k = 0; k < nasp_cc->socket_context->allowed_spiffe_ids_length; k++)
+            {
+                if (strncmp(nasp_cc->socket_context->allowed_spiffe_ids[k], mini_cc->name_elts[i].buf, strlen(nasp_cc->socket_context->allowed_spiffe_ids[k])) == 0)
+                {
+                    pr_info("nasp: %s == ^%s", mini_cc->name_elts[i].buf, nasp_cc->socket_context->allowed_spiffe_ids[k]);
+                    allowed = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!allowed)
+    {
+        pr_info("nasp: peer certificate is not allowed!");
+
+        return 62;
     }
 
     return 0;
@@ -88,9 +116,10 @@ static const br_x509_class x509_nasp_vtable = {
     xwc_get_pkey,
 };
 
-void br_x509_nasp_init(br_x509_nasp_context *ctx, br_ssl_engine_context *eng)
+void br_x509_nasp_init(br_x509_nasp_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context)
 {
     ctx->vtable = &x509_nasp_vtable;
+    ctx->socket_context = socket_context;
 
     br_name_element *name_elts = kmalloc(sizeof(br_name_element) * 3, GFP_KERNEL);
 

@@ -14,6 +14,7 @@
 #include "json.h"
 #include "base64.h"
 #include "string.h"
+#include "socket.h"
 
 // commands that are waiting to be processed by the driver
 static LIST_HEAD(command_list);
@@ -81,6 +82,56 @@ command_answer *send_command(char *name, char *data, task_context *context)
     return cmd_answer;
 }
 
+command_answer *send_attest_command(direction direction, struct sock *s, u16 port)
+{
+    int iplen = 16;
+    char ipformat[] = "%pI4";
+
+    if (s->sk_family == AF_INET6)
+    {
+        iplen = 46;
+        strcpy(ipformat, "%pI6");
+    }
+
+    unsigned char source_ip[iplen];
+    u16 source_port;
+    unsigned char destination_ip[iplen];
+    u16 destination_port;
+
+    if (direction == INPUT)
+    {
+        snprintf(source_ip, sizeof(source_ip), ipformat, &s->sk_daddr);
+        snprintf(destination_ip, sizeof(destination_ip), ipformat, &s->sk_rcv_saddr);
+        source_port = s->sk_dport;
+        destination_port = s->sk_num;
+    }
+    else
+    {
+        snprintf(source_ip, sizeof(source_ip), ipformat, &s->sk_rcv_saddr);
+        snprintf(destination_ip, sizeof(destination_ip), ipformat, &s->sk_daddr);
+        source_port = s->sk_num;
+        destination_port = port;
+    }
+
+    JSON_Value *root_value = json_value_init_object();
+    JSON_Object *root_object = json_value_get_object(root_value);
+
+    json_object_set_number(root_object, "direction", direction);
+    json_object_set_string(root_object, "source_ip", source_ip);
+    json_object_set_number(root_object, "source_port", source_port);
+    json_object_set_string(root_object, "destination_ip", destination_ip);
+    json_object_set_number(root_object, "destination_port", destination_port);
+
+    char *serialized_string = json_serialize_to_string(root_value);
+
+    command_answer *answer = send_command("attest", serialized_string, get_task_context());
+
+    json_free_serialized_string(serialized_string);
+    json_value_free(root_value);
+
+    return answer;
+}
+
 command_answer *send_accept_command(u16 port)
 {
     JSON_Value *root_value = json_value_init_object();
@@ -88,7 +139,12 @@ command_answer *send_accept_command(u16 port)
 
     json_object_set_number(root_object, "port", port);
 
-    command_answer *answer = send_command("accept", json_serialize_to_string(root_value), get_task_context());
+    char *serialized_string = json_serialize_to_string(root_value);
+
+    command_answer *answer = send_command("accept", serialized_string, get_task_context());
+
+    json_free_serialized_string(serialized_string);
+    json_value_free(root_value);
 
     return answer;
 }
@@ -100,7 +156,12 @@ command_answer *send_connect_command(u16 port)
 
     json_object_set_number(root_object, "port", port);
 
-    command_answer *answer = send_command("connect", json_serialize_to_string(root_value), get_task_context());
+    char *serialized_string = json_serialize_to_string(root_value);
+
+    command_answer *answer = send_command("connect", serialized_string, get_task_context());
+
+    json_free_serialized_string(serialized_string);
+    json_value_free(root_value);
 
     return answer;
 }
@@ -112,7 +173,12 @@ csr_sign_answer *send_csrsign_command(unsigned char *csr)
 
     json_object_set_string(root_object, "csr", csr);
 
-    command_answer *answer = send_command("csr_sign", json_serialize_to_string(root_value), get_task_context());
+    char *serialized_string = json_serialize_to_string(root_value);
+
+    command_answer *answer = send_command("csr_sign", serialized_string, get_task_context());
+
+    json_free_serialized_string(serialized_string);
+    json_value_free(root_value);
 
     csr_sign_answer *csr_sign_answer = kzalloc(sizeof(struct csr_sign_answer), GFP_KERNEL);
 

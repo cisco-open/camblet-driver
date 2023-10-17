@@ -76,6 +76,8 @@ typedef struct
 
 	struct sock *sock;
 
+	opa_socket_context opa_socket_ctx;
+
 	int (*ktls_recvmsg)(struct sock *sock,
 						struct msghdr *msg,
 						size_t size,
@@ -304,6 +306,8 @@ static void nasp_socket_free(nasp_socket *s)
 		}
 
 		br_x509_nasp_free(&s->xc);
+
+		opa_socket_context_free(s->opa_socket_ctx);
 
 		// if (c->rsa_priv != NULL)
 		// {
@@ -791,17 +795,9 @@ static int configure_ktls_sock(nasp_socket *s)
 	return 0;
 }
 
-typedef enum
-{
-	INPUT,
-	OUTPUT
-} direction;
-
 // a function to evaluate the connection if it should be intercepted, now with opa
-static opa_socket_context socket_eval(u16 port, direction direction, const char *command, u32 uid)
+static opa_socket_context socket_eval(const char *input)
 {
-	char input[256];
-	sprintf(input, "{\"port\": %d, \"direction\": %d, \"command\": \"%s\", \"uid\": %d}", port, direction, command, uid);
 	return this_cpu_opa_socket_eval(input);
 }
 
@@ -862,16 +858,16 @@ static int handle_cert_gen(nasp_socket *sc)
 				return -1;
 			}
 
-			sc->parameters->subject = "CN=banzai.cloud";
-			sc->parameters->dns = "banzaicloud.com";
-			sc->parameters->uri = "banzaicloud";
-			sc->parameters->email = "bmolnar@cisco.com";
+			sc->parameters->subject = "CN=nasp-protected-workload";
+			sc->parameters->dns = sc->opa_socket_ctx.dns;
+			sc->parameters->uri = sc->opa_socket_ctx.uri;
+			sc->parameters->email = "nasp@outshift.cisco.com";
 			sc->parameters->ip = "127.0.0.1";
 
 			wasm_vm_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
-			if (generated_csr.err)
+			if (generated_csr.data->i64 == 0)
 			{
-				pr_err("nasp: generate_csr wasm_vm_csr_gen error: %s", generated_csr.err);
+				pr_err("nasp: generate_csr wasm_vm_csr_gen error");
 				csr_unlock(csr);
 				return error;
 			}
@@ -932,35 +928,36 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	u16 port = (u16)(sk->sk_portpair >> 16);
 
-	opa_socket_context opa_socket = socket_eval(port, INPUT, current->comm, current_uid().val);
-	if (client && opa_socket.allowed)
+	sc = nasp_socket_accept(client);
+	if (!sc)
+	{
+		pr_err("nasp: nasp_socket_accept failed to create nasp_socket");
+		goto error;
+	}
+
+	// send attest command
+	command_answer *answer = send_attest_command(INPUT, client, port);
+
+	if (answer->error)
+	{
+		pr_err("nasp: accept failed to send attest command: %s", answer->error);
+		goto error;
+	}
+	else
+	{
+		pr_info("nasp: accept attest command answer: %s", answer->answer);
+	}
+
+	sc->opa_socket_ctx = socket_eval(answer->answer);
+	free_command_answer(answer);
+
+	if (client && sc->opa_socket_ctx.allowed)
 	{
 		u16 client_port = (u16)(client->sk_portpair);
 		printk("nasp_accept: uid: %d app: %s on ports: %d <- %d", current_uid().val, current->comm, port, client_port);
 
-		sc = nasp_socket_accept(client);
-		if (!sc)
-		{
-			pr_err("nasp: nasp_socket_accept failed to create nasp_socket");
-			goto error;
-		}
-
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
-
-		// Sample how to send a command to the userspace agents
-		command_answer *answer = send_accept_command(port);
-
-		if (answer->error)
-		{
-			pr_err("nasp: accept failed to send command: %s", answer->error);
-		}
-		else
-		{
-			pr_info("nasp: accept command answer: %s", answer->answer);
-		}
-
-		free_command_answer(answer);
 
 		int result = handle_cert_gen(sc);
 		if (result == -1)
@@ -984,12 +981,12 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		br_ssl_server_init_full_rsa(sc->sc, sc->chain, sc->chain_len, sc->rsa_priv);
 
 		// mTLS enablement
-		if (opa_socket.mtls)
+		if (sc->opa_socket_ctx.mtls)
 		{
 			br_x509_minimal_init_full(&sc->xc.ctx, sc->trust_anchors, sc->trust_anchors_len);
 			br_ssl_server_set_trust_anchor_names_alt(sc->sc, sc->trust_anchors, sc->trust_anchors_len);
 
-			br_x509_nasp_init(&sc->xc, &sc->sc->eng);
+			br_x509_nasp_init(&sc->xc, &sc->sc->eng, &sc->opa_socket_ctx);
 			br_ssl_engine_set_default_rsavrfy(&sc->sc->eng);
 		}
 
@@ -1042,8 +1039,6 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	int err;
 	struct proto *prot;
 
-	nasp_socket *sc = NULL;
-
 	if (sk->sk_family == AF_INET)
 	{
 		err = connect(sk, uaddr, addr_len);
@@ -1057,33 +1052,35 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	printk("nasp: nasp_connect uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
 
-	opa_socket_context opa_socket = socket_eval(port, OUTPUT, current->comm, current_uid().val);
-	if (err == 0 && opa_socket.allowed)
+	nasp_socket *sc = nasp_socket_connect(sk);
+	if (!sc)
+	{
+		pr_err("nasp: nasp_socket_connect failed to create nasp_socket");
+		goto error;
+	}
+
+	// send attest command
+	command_answer *answer = send_attest_command(OUTPUT, sk, port);
+
+	if (answer->error)
+	{
+		pr_err("nasp: connect failed to send attest command: %s", answer->error);
+		goto error;
+	}
+	else
+	{
+		pr_info("nasp: connect attest command answer: %s", answer->answer);
+	}
+
+	sc->opa_socket_ctx = socket_eval(answer->answer);
+	free_command_answer(answer);
+
+	if (err == 0 && sc->opa_socket_ctx.allowed)
 	{
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
-		nasp_socket *sc = nasp_socket_connect(sk);
-		if (!sc)
-		{
-			pr_err("nasp: nasp_socket_connect failed to create nasp_socket");
-			goto error;
-		}
-
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
-
-		command_answer *answer = send_connect_command(port);
-
-		if (answer->error)
-		{
-			pr_err("nasp: failed to send command: %s", answer->error);
-		}
-		else
-		{
-			pr_info("nasp: command answer: %s", answer->answer);
-		}
-
-		free_command_answer(answer);
 
 		int result = handle_cert_gen(sc);
 		if (result == -1)
@@ -1107,10 +1104,10 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		pr_info("nasp: connect use cert from agent");
 		br_ssl_client_init_full(sc->cc, &sc->xc.ctx, sc->trust_anchors, sc->trust_anchors_len);
 
-		br_x509_nasp_init(&sc->xc, &sc->cc->eng);
+		br_x509_nasp_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx);
 
 		// mTLS enablement
-		if (opa_socket.mtls)
+		if (sc->opa_socket_ctx.mtls)
 		{
 			br_ssl_client_set_single_rsa(sc->cc, sc->chain, sc->chain_len, sc->rsa_priv, br_rsa_pkcs1_sign_get_default());
 		}
