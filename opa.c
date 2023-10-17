@@ -591,7 +591,7 @@ void load_opa_data(unsigned char *data)
     unsigned cpu;
     for_each_possible_cpu(cpu)
     {
-        pr_info("nasp: load opa data cpu[%d]", cpu);
+        pr_info("nasp: load_opa_data cpu[%d]", cpu);
         opa_wrapper *opa = opas[cpu];
 
         wasm_vm_lock(opa->vm);
@@ -602,7 +602,7 @@ void load_opa_data(unsigned char *data)
         {
             result = opa_value_free(opa, opa->dataValueAddr);
             if (result.err)
-                FATAL("wasm_vm_opa_eval error: %s", result.err);
+                FATAL("load_opa_data opa_value_free error: %s", result.err);
             opa->dataValueAddr = 0;
             printk("free nasp data");
         }
@@ -610,7 +610,7 @@ void load_opa_data(unsigned char *data)
         result = opa_malloc(opa, dataLen);
         if (result.err)
         {
-            FATAL("opa data load error: %s", result.err);
+            FATAL("load_opa_data opa_malloc error: %s", result.err);
             wasm_vm_unlock(opa->vm);
 
             continue;
@@ -624,7 +624,7 @@ void load_opa_data(unsigned char *data)
         result = opa_value_parse(opa, dataAddr, dataLen);
         if (result.err)
         {
-            FATAL("wasm_vm_opa_eval error: %s", result.err);
+            FATAL("load_opa_data opa_value_parse error: %s", result.err);
             wasm_vm_unlock(opa->vm);
 
             continue;
@@ -634,7 +634,7 @@ void load_opa_data(unsigned char *data)
 
         result = opa_free(opa, dataAddr);
         if (result.err)
-            FATAL("opa wasm_vm_opa_free error: %s", result.err);
+            FATAL("load_opa_data opa_free error: %s", result.err);
 
         wasm_vm_unlock(opa->vm);
     }
