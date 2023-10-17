@@ -638,4 +638,6 @@ void load_opa_data(unsigned char *data)
 
         wasm_vm_unlock(opa->vm);
     }
+
+    kfree(data);
 }

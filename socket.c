@@ -946,15 +946,17 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 	if (answer->error)
 	{
 		pr_err("nasp: accept failed to send attest command: %s", answer->error);
-		goto error;
 	}
 	else
 	{
 		pr_info("nasp: accept attest command answer: %s", answer->answer);
-	}
 
-	sc->opa_socket_ctx = socket_eval(answer->answer);
-	free_command_answer(answer);
+		char *input = strdup(answer->answer);
+		free_command_answer(answer);
+
+		sc->opa_socket_ctx = socket_eval(input);
+		kfree(input);
+	}
 
 	if (client && sc->opa_socket_ctx.allowed)
 	{
@@ -1070,15 +1072,17 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if (answer->error)
 	{
 		pr_err("nasp: connect failed to send attest command: %s", answer->error);
-		goto error;
 	}
 	else
 	{
 		pr_info("nasp: connect attest command answer: %s", answer->answer);
-	}
 
-	sc->opa_socket_ctx = socket_eval(answer->answer);
-	free_command_answer(answer);
+		char *input = strdup(answer->answer);
+		free_command_answer(answer);
+
+		sc->opa_socket_ctx = socket_eval(input);
+		kfree(input);
+	}
 
 	if (err == 0 && sc->opa_socket_ctx.allowed)
 	{

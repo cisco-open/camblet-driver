@@ -30,6 +30,7 @@ ifeq ($(ARCH), aarch64)
 endif
 
 KBUILD_EXTRA_SYMBOLS = $(PWD)/third-party/BearSSL/Module.symvers
+EXTRA_CFLAGS = -Wall -g
 
 ccflags-remove-y += -Wdeclaration-after-statement
 

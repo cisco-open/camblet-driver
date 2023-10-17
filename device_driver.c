@@ -206,14 +206,14 @@ wasm_vm_result load_module(char *name, char *code, unsigned length, char *entryp
     return result;
 }
 
-int parse_json_from_buffer(void)
+int parse_json_from_buffer(const char *data)
 {
     int status = SUCCESS;
     JSON_Value *json = NULL;
 
-    if (device_buffer_size)
+    if (data)
     {
-        json = json_parse_string(device_buffer);
+        json = json_parse_string(data);
         JSON_Object *root = json_value_get_object(json);
         char *command = json_object_get_string(root, "command");
 
@@ -225,11 +225,13 @@ int parse_json_from_buffer(void)
             printk("nasp: loading module: %s", name);
 
             char *code = json_object_get_string(root, "code");
-            int length = base64_decode(device_buffer, DEVICE_BUFFER_SIZE, code, strlen(code));
+            char *decoded = kzalloc(strlen(code) * 2, GFP_KERNEL);
+            int length = base64_decode(decoded, strlen(code) * 2, code, strlen(code));
             if (length < 0)
             {
                 FATAL("base64_decode failed");
                 status = -1;
+                kfree(decoded);
                 goto cleanup;
             }
 
@@ -240,15 +242,16 @@ int parse_json_from_buffer(void)
                 entrypoint = DEFAULT_MODULE_ENTRYPOINT;
             }
 
-            wasm_vm_result result = load_module(name, device_buffer, length, entrypoint);
+            wasm_vm_result result = load_module(name, decoded, length, entrypoint);
             if (result.err)
             {
                 FATAL("load_module: %s", result.err);
                 status = -1;
+                kfree(decoded);
                 goto cleanup;
             }
         }
-        else if (strcmp("reset", command) == 0)
+        if (strcmp("reset", command) == 0)
         {
             printk("nasp: reseting vm");
 
@@ -263,7 +266,8 @@ int parse_json_from_buffer(void)
         else if (strcmp("load_rules", command) == 0)
         {
             char *code = json_object_get_string(root, "code");
-            int length = base64_decode(device_buffer, DEVICE_BUFFER_SIZE, code, strlen(code));
+            char *decoded = kzalloc(strlen(code) * 2, GFP_KERNEL);
+            int length = base64_decode(decoded, strlen(code) * 2, code, strlen(code));
             if (length < 0)
             {
                 FATAL("base64_decode failed");
@@ -273,24 +277,18 @@ int parse_json_from_buffer(void)
 
             printk("nasp: loading rules");
 
-            load_opa_data(device_buffer);
+            load_opa_data(strdup(decoded));
+            kfree(decoded);
         }
         else if (strcmp("answer", command) == 0)
         {
-            char *base64_id = json_object_get_string(root, "id");
+            char *command_id = json_object_get_string(root, "id");
 
-            printk("nasp: command answer parsing, id: %s", base64_id);
+            printk("nasp: command answer parsing, id: %s", command_id);
 
-            char command_id[UUID_SIZE * 2];
-            int length = base64_decode(command_id, UUID_SIZE * 2, base64_id, strlen(base64_id));
-            if (length < 0)
-            {
-                FATAL("base64_decode of id failed");
-                status = -1;
-                goto cleanup;
-            }
-
-            struct command *cmd = lookup_in_flight_command(command_id);
+            uuid_t uuid;
+            uuid_parse(command_id, &uuid);
+            struct command *cmd = lookup_in_flight_command(uuid.b);
 
             if (cmd == NULL)
             {
@@ -331,6 +329,8 @@ cleanup:
         json_value_free(json);
     }
 
+    kfree(data);
+
     return status;
 }
 
@@ -354,8 +354,8 @@ static int device_release(struct inode *inode, struct file *file)
 
 static int write_command_to_buffer(char *buffer, size_t buffer_size, struct command *cmd)
 {
-    char uuid[UUID_SIZE * 2];
-    int length = base64_encode(uuid, UUID_SIZE * 2, cmd->uuid.b, UUID_SIZE);
+    char uuid[UUID_SIZE + 21];
+    int length = snprintf(uuid, UUID_SIZE + 21, "%pUB", cmd->uuid.b);
     if (length < 0)
     {
         FATAL("base64_encode of id failed");
@@ -492,11 +492,10 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
         }
 
         // parse the json
-        int status = parse_json_from_buffer();
+        int status = parse_json_from_buffer(strdup(device_buffer));
         if (status != 0)
         {
             printk(KERN_ERR "nasp: parse_json_from_buffer failed: %d", status);
-            return -1;
         }
 
         memmove(device_buffer, device_buffer + i, device_buffer_size - i);
