@@ -950,12 +950,10 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 	else
 	{
 		pr_info("nasp: accept attest command answer: %s", answer->answer);
-
-		char *input = answer->answer;
-
-		sc->opa_socket_ctx = socket_eval(input);
-		free_command_answer(answer);
+		sc->opa_socket_ctx = socket_eval(answer->answer);
 	}
+
+	free_command_answer(answer);
 
 	if (client && sc->opa_socket_ctx.allowed)
 	{
@@ -1076,11 +1074,10 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	{
 		pr_info("nasp: connect attest command answer: %s", answer->answer);
 
-		char *input = answer->answer;
-
-		sc->opa_socket_ctx = socket_eval(input);
-		free_command_answer(answer);
+		sc->opa_socket_ctx = socket_eval(answer->answer);
 	}
+
+	free_command_answer(answer);
 
 	if (err == 0 && sc->opa_socket_ctx.allowed)
 	{
