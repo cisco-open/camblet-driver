@@ -11,6 +11,7 @@
 #include <linux/uaccess.h>
 #include <linux/version.h>
 #include <linux/wait.h>
+#include <linux/uuid.h>
 
 #include "base64.h"
 #include "device_driver.h"
@@ -127,7 +128,7 @@ static wasm_vm_result reset_vms(void)
     return result;
 }
 
-wasm_vm_result load_module(char *name, char *code, unsigned length, char *entrypoint)
+wasm_vm_result load_module(const char *name, const char *code, unsigned length, const char *entrypoint)
 {
     wasm_vm_result result;
     unsigned cpu;
@@ -215,16 +216,16 @@ int parse_json_from_buffer(const char *data)
     {
         json = json_parse_string(data);
         JSON_Object *root = json_value_get_object(json);
-        char *command = json_object_get_string(root, "command");
+        const char *command = json_object_get_string(root, "command");
 
         printk("nasp: command %s", command);
 
         if (strcmp("load", command) == 0)
         {
-            char *name = json_object_get_string(root, "name");
+            const char *name = json_object_get_string(root, "name");
             printk("nasp: loading module: %s", name);
 
-            char *code = json_object_get_string(root, "code");
+            const char *code = json_object_get_string(root, "code");
             char *decoded = kzalloc(strlen(code) * 2, GFP_KERNEL);
             int length = base64_decode(decoded, strlen(code) * 2, code, strlen(code));
             if (length < 0)
@@ -235,7 +236,7 @@ int parse_json_from_buffer(const char *data)
                 goto cleanup;
             }
 
-            char *entrypoint = json_object_get_string(root, "entrypoint");
+            const char *entrypoint = json_object_get_string(root, "entrypoint");
             if (entrypoint == NULL)
             {
                 printk("nasp: setting default module entrypoint \"%s\"", DEFAULT_MODULE_ENTRYPOINT);
@@ -250,6 +251,8 @@ int parse_json_from_buffer(const char *data)
                 kfree(decoded);
                 goto cleanup;
             }
+
+            kfree(decoded);
         }
         if (strcmp("reset", command) == 0)
         {
@@ -265,24 +268,25 @@ int parse_json_from_buffer(const char *data)
         }
         else if (strcmp("load_rules", command) == 0)
         {
-            char *code = json_object_get_string(root, "code");
+            const char *code = json_object_get_string(root, "code");
             char *decoded = kzalloc(strlen(code) * 2, GFP_KERNEL);
             int length = base64_decode(decoded, strlen(code) * 2, code, strlen(code));
             if (length < 0)
             {
                 FATAL("base64_decode failed");
                 status = -1;
+                kfree(decoded);
                 goto cleanup;
             }
 
             printk("nasp: loading rules");
 
-            load_opa_data(strdup(decoded));
+            load_opa_data(decoded);
             kfree(decoded);
         }
         else if (strcmp("answer", command) == 0)
         {
-            char *command_id = json_object_get_string(root, "id");
+            const char *command_id = json_object_get_string(root, "id");
 
             printk("nasp: command answer parsing, id: %s", command_id);
 
@@ -298,8 +302,8 @@ int parse_json_from_buffer(const char *data)
             }
 
             struct command_answer *cmd_answer = kzalloc(sizeof(struct command_answer), GFP_KERNEL);
-            char *answer = json_object_get_string(root, "answer");
-            char *error = json_object_get_string(root, "error");
+            const char *answer = json_object_get_string(root, "answer");
+            const char *error = json_object_get_string(root, "error");
 
             if (error)
             {
@@ -329,8 +333,6 @@ cleanup:
         json_value_free(json);
     }
 
-    kfree(data);
-
     return status;
 }
 
@@ -354,11 +356,11 @@ static int device_release(struct inode *inode, struct file *file)
 
 static int write_command_to_buffer(char *buffer, size_t buffer_size, struct command *cmd)
 {
-    char uuid[UUID_SIZE + 21];
-    int length = snprintf(uuid, UUID_SIZE + 21, "%pUB", cmd->uuid.b);
+    char *uuid = kmalloc(UUID_STRING_LEN + 1, GFP_KERNEL);
+    int length = snprintf(uuid, UUID_STRING_LEN + 1, "%pUB", cmd->uuid.b);
     if (length < 0)
     {
-        FATAL("base64_encode of id failed");
+        FATAL("uuid stringify failed");
         goto cleanup;
     }
 
@@ -492,7 +494,7 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
         }
 
         // parse the json
-        int status = parse_json_from_buffer(strdup(device_buffer));
+        int status = parse_json_from_buffer(device_buffer);
         if (status != 0)
         {
             printk(KERN_ERR "nasp: parse_json_from_buffer failed: %d", status);

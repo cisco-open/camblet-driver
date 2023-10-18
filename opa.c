@@ -142,11 +142,6 @@ void opa_socket_context_free(opa_socket_context ctx)
     kfree(ctx.dns);
     kfree(ctx.uri);
 
-    if (ctx.allowed_spiffe_ids_length == 0)
-    {
-        return;
-    }
-
     int i;
     for (i = 0; i < ctx.allowed_spiffe_ids_length; i++)
     {
@@ -265,7 +260,6 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             allowed_spiffe_ids = json_object_dotget_array(matched_policy, "policy.spiffeID");
         if (allowed_spiffe_ids != NULL)
         {
-            char *allowed_spiffe_id;
             ret.allowed_spiffe_ids_length = json_array_get_count(allowed_spiffe_ids);
             for (i = 0; i < ret.allowed_spiffe_ids_length; i++)
             {
@@ -281,7 +275,7 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
         else if (mtls == 1)
             ret.mtls = true;
 
-        char *workload_id = json_object_dotget_string(matched_policy, "egress.properties.workloadID");
+        const char *workload_id = json_object_dotget_string(matched_policy, "egress.properties.workloadID");
         if (workload_id == NULL)
             workload_id = json_object_dotget_string(matched_policy, "properties.workloadID");
         if (workload_id != NULL)
@@ -317,15 +311,15 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             }
         }
 
-        if (!ret.uri)
-        {
-            ret.uri = strndup("spiffe://unspecified", 20);
-        }
+        // if (!ret.uri)
+        // {
+        //     ret.uri = strdup("spiffe://unspecified");
+        // }
 
-        if (!ret.dns)
-        {
-            ret.dns = strndup("example.org", 11);
-        }
+        // if (!ret.dns)
+        // {
+        //     ret.dns = strdup("example.org");
+        // }
 
     free:
         json_value_free(root_value);
@@ -583,7 +577,7 @@ cleanup:
     return ret;
 }
 
-void load_opa_data(unsigned char *data)
+void load_opa_data(const char *data)
 {
     i32 dataAddr = 0;
     i32 dataLen = strlen(data) + 1;
@@ -638,6 +632,4 @@ void load_opa_data(unsigned char *data)
 
         wasm_vm_unlock(opa->vm);
     }
-
-    kfree(data);
 }

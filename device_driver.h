@@ -16,7 +16,7 @@
 
 #include "wasm.h"
 
-wasm_vm_result load_module(char *name, char *code, unsigned length, char *entrypoint);
+wasm_vm_result load_module(const char *name, const char *code, unsigned length, const char *entrypoint);
 
 #define SUCCESS 0
 #define DEVICE_NAME "nasp"                 /* Dev name as it appears in /dev/devices   */

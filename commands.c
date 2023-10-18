@@ -9,6 +9,7 @@
  */
 #include <linux/slab.h>
 #include <linux/uuid.h>
+#include <linux/inet.h>
 
 #include "commands.h"
 #include "json.h"
@@ -84,37 +85,40 @@ command_answer *send_command(char *name, char *data, task_context *context)
 
 command_answer *send_attest_command(direction direction, struct sock *s, u16 port)
 {
-    int iplen = 16;
-    char ipformat[] = "%pI4";
+    const char *ipformat = "%pI4";
 
     if (s->sk_family == AF_INET6)
     {
-        iplen = 46;
-        strcpy(ipformat, "%pI6");
+        ipformat = "%pI6";
     }
 
-    unsigned char source_ip[iplen];
+    char source_ip[INET6_ADDRSTRLEN];
     u16 source_port;
-    unsigned char destination_ip[iplen];
+    char destination_ip[INET6_ADDRSTRLEN];
     u16 destination_port;
 
     if (direction == INPUT)
     {
-        snprintf(source_ip, sizeof(source_ip), ipformat, &s->sk_daddr);
-        snprintf(destination_ip, sizeof(destination_ip), ipformat, &s->sk_rcv_saddr);
+        snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
+        snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
         source_port = s->sk_dport;
         destination_port = s->sk_num;
     }
     else
     {
-        snprintf(source_ip, sizeof(source_ip), ipformat, &s->sk_rcv_saddr);
-        snprintf(destination_ip, sizeof(destination_ip), ipformat, &s->sk_daddr);
+        snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
+        snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
         source_port = s->sk_num;
         destination_port = port;
     }
 
     JSON_Value *root_value = json_value_init_object();
     JSON_Object *root_object = json_value_get_object(root_value);
+
+    if (!root_object)
+    {
+        return answer_with_error("could not get root object");
+    }
 
     json_object_set_number(root_object, "direction", direction);
     json_object_set_string(root_object, "source_ip", source_ip);
@@ -137,6 +141,11 @@ command_answer *send_accept_command(u16 port)
     JSON_Value *root_value = json_value_init_object();
     JSON_Object *root_object = json_value_get_object(root_value);
 
+    if (!root_object)
+    {
+        return answer_with_error("could not get root object");
+    }
+
     json_object_set_number(root_object, "port", port);
 
     char *serialized_string = json_serialize_to_string(root_value);
@@ -154,6 +163,11 @@ command_answer *send_connect_command(u16 port)
     JSON_Value *root_value = json_value_init_object();
     JSON_Object *root_object = json_value_get_object(root_value);
 
+    if (!root_object)
+    {
+        return answer_with_error("could not get root object");
+    }
+
     json_object_set_number(root_object, "port", port);
 
     char *serialized_string = json_serialize_to_string(root_value);
@@ -168,8 +182,19 @@ command_answer *send_connect_command(u16 port)
 
 csr_sign_answer *send_csrsign_command(unsigned char *csr)
 {
+    JSON_Value *json = NULL;
+    const char *errormsg;
+
+    csr_sign_answer *csr_sign_answer = kzalloc(sizeof(struct csr_sign_answer), GFP_KERNEL);
+
     JSON_Value *root_value = json_value_init_object();
     JSON_Object *root_object = json_value_get_object(root_value);
+
+    if (!root_object)
+    {
+        errormsg = "could not get root object";
+        goto error;
+    }
 
     json_object_set_string(root_object, "csr", csr);
 
@@ -180,66 +205,106 @@ csr_sign_answer *send_csrsign_command(unsigned char *csr)
     json_free_serialized_string(serialized_string);
     json_value_free(root_value);
 
-    csr_sign_answer *csr_sign_answer = kzalloc(sizeof(struct csr_sign_answer), GFP_KERNEL);
-
     if (answer->error)
     {
-        csr_sign_answer->error = strdup(answer->error);
+        errormsg = answer->error;
+        goto error;
     }
 
     if (answer->answer)
     {
-        JSON_Value *json = NULL;
         json = json_parse_string(answer->answer);
+
+        if (json == NULL)
+        {
+            errormsg = "could not parse answer JSON data";
+            goto error;
+        }
+
         JSON_Object *root = json_value_get_object(json);
 
-        JSON_Array *trust_anchors = json_object_get_array(root, "trust_anchors");
-        csr_sign_answer->trust_anchors_len = json_array_get_count(trust_anchors);
-        csr_sign_answer->trust_anchors = kmalloc(csr_sign_answer->trust_anchors_len * sizeof *csr_sign_answer->trust_anchors, GFP_KERNEL);
+        if (root == NULL)
+        {
+            errormsg = "could not get root object from parsed JSON";
+            goto error;
+        }
 
+        JSON_Array *trust_anchors = json_object_get_array(root, "trust_anchors");
+
+        if (trust_anchors == NULL)
+        {
+            errormsg = "could not find trust anchors";
+            goto error;
+        }
+
+        csr_sign_answer->trust_anchors_len = json_array_get_count(trust_anchors);
         size_t srclen;
 
-        size_t u;
-        for (u = 0; u < csr_sign_answer->trust_anchors_len; u++)
+        if (csr_sign_answer->trust_anchors_len > 0)
         {
-            JSON_Object *ta = json_array_get_object(trust_anchors, u);
+            csr_sign_answer->trust_anchors = kmalloc(csr_sign_answer->trust_anchors_len * sizeof *csr_sign_answer->trust_anchors, GFP_KERNEL);
 
-            csr_sign_answer->trust_anchors[u].flags = BR_X509_TA_CA;
-            csr_sign_answer->trust_anchors[u].pkey.key_type = BR_KEYTYPE_RSA;
+            size_t u;
+            for (u = 0; u < csr_sign_answer->trust_anchors_len; u++)
+            {
+                JSON_Object *ta = json_array_get_object(trust_anchors, u);
 
-            // RAW (DN)
-            char *raw_subject = json_object_get_string(ta, "rawSubject");
-            srclen = strlen(raw_subject);
-            csr_sign_answer->trust_anchors[u].dn.data = kmalloc(srclen, GFP_KERNEL);
-            csr_sign_answer->trust_anchors[u].dn.len = base64_decode(csr_sign_answer->trust_anchors[u].dn.data, srclen, raw_subject, srclen);
+                csr_sign_answer->trust_anchors[u].flags = BR_X509_TA_CA;
+                csr_sign_answer->trust_anchors[u].pkey.key_type = BR_KEYTYPE_RSA;
 
-            // RSA_N
-            char *rsa_n = json_object_dotget_string(ta, "publicKey.RSA_N");
-            srclen = strlen(rsa_n);
-            csr_sign_answer->trust_anchors[u].pkey.key.rsa.n = kmalloc(srclen, GFP_KERNEL);
-            csr_sign_answer->trust_anchors[u].pkey.key.rsa.nlen = base64_decode(csr_sign_answer->trust_anchors[u].pkey.key.rsa.n, srclen, rsa_n, srclen);
+                // RAW (DN)
+                const char *raw_subject = json_object_get_string(ta, "rawSubject");
+                if (raw_subject != NULL)
+                {
+                    srclen = strlen(raw_subject);
+                    csr_sign_answer->trust_anchors[u].dn.data = kmalloc(srclen, GFP_KERNEL);
+                    csr_sign_answer->trust_anchors[u].dn.len = base64_decode(csr_sign_answer->trust_anchors[u].dn.data, srclen, raw_subject, srclen);
+                }
 
-            // RSA_E
-            char *rsa_e = json_object_dotget_string(ta, "publicKey.RSA_E");
-            srclen = strlen(rsa_e);
-            csr_sign_answer->trust_anchors[u].pkey.key.rsa.e = kmalloc(srclen, GFP_KERNEL);
-            csr_sign_answer->trust_anchors[u].pkey.key.rsa.elen = base64_decode(csr_sign_answer->trust_anchors[u].pkey.key.rsa.e, srclen, rsa_e, srclen);
+                // RSA_N
+                const char *rsa_n = json_object_dotget_string(ta, "publicKey.RSA_N");
+                if (rsa_n != NULL)
+                {
+                    srclen = strlen(rsa_n);
+                    csr_sign_answer->trust_anchors[u].pkey.key.rsa.n = kmalloc(srclen, GFP_KERNEL);
+                    csr_sign_answer->trust_anchors[u].pkey.key.rsa.nlen = base64_decode(csr_sign_answer->trust_anchors[u].pkey.key.rsa.n, srclen, rsa_n, srclen);
+                }
+
+                // RSA_E
+                const char *rsa_e = json_object_dotget_string(ta, "publicKey.RSA_E");
+                if (rsa_e != NULL)
+                {
+                    srclen = strlen(rsa_e);
+                    csr_sign_answer->trust_anchors[u].pkey.key.rsa.e = kmalloc(srclen, GFP_KERNEL);
+                    csr_sign_answer->trust_anchors[u].pkey.key.rsa.elen = base64_decode(csr_sign_answer->trust_anchors[u].pkey.key.rsa.e, srclen, rsa_e, srclen);
+                }
+            }
+        }
+
+        const char *raw = json_object_dotget_string(root, "certificate.raw");
+        if (raw == NULL)
+        {
+            errormsg = "could not find certificate in response";
+            goto error;
         }
 
         csr_sign_answer->chain = kzalloc(1 * sizeof *csr_sign_answer->chain, GFP_KERNEL);
         csr_sign_answer->chain_len = 1;
 
-        char *raw = json_object_dotget_string(root, "certificate.raw");
         srclen = strlen(raw);
         csr_sign_answer->chain[0].data = kmalloc(srclen, GFP_KERNEL);
         csr_sign_answer->chain[0].data_len = base64_decode(csr_sign_answer->chain[0].data, srclen, raw, srclen);
-
-        if (json)
-        {
-            json_value_free(json);
-        }
     }
 
+    return csr_sign_answer;
+
+error:
+    if (errormsg)
+    {
+        csr_sign_answer->error = strdup(errormsg);
+    }
+
+    json_value_free(json);
     free_command_answer(answer);
 
     return csr_sign_answer;
@@ -293,17 +358,17 @@ struct command *get_command(void)
     return cmd;
 }
 
+command_answer *answer_with_error(char *error_message)
+{
+    command_answer *answer = kzalloc(sizeof(struct command_answer), GFP_KERNEL);
+    answer->error = strdup(error_message);
+
+    return answer;
+}
+
 void free_command_answer(struct command_answer *cmd_answer)
 {
-    if (cmd_answer->error)
-    {
-        kfree(cmd_answer->error);
-    }
-
-    if (cmd_answer->answer)
-    {
-        kfree(cmd_answer->answer);
-    }
-
+    kfree(cmd_answer->error);
+    kfree(cmd_answer->answer);
     kfree(cmd_answer);
 }

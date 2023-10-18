@@ -35,6 +35,7 @@ typedef struct csr_sign_answer
 void free_command_answer(command_answer *cmd_answer);
 
 command_answer *send_command(char *name, char *data, task_context *context);
+command_answer *answer_with_error(char *error_message);
 
 command_answer *send_attest_command(direction direction, struct sock *s, u16 port);
 command_answer *send_accept_command(u16 port);

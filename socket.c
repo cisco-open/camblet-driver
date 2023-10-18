@@ -41,8 +41,8 @@ static struct proto nasp_ktls_prot;
 static struct proto nasp_v6_prot;
 static struct proto nasp_v6_ktls_prot;
 
-static const br_rsa_private_key *rsa_priv;
-static const br_rsa_public_key *rsa_pub;
+static br_rsa_private_key *rsa_priv;
+static br_rsa_public_key *rsa_pub;
 
 typedef struct
 {
@@ -427,45 +427,6 @@ void dump_array(unsigned char array[], size_t len)
 	{
 		pr_cont("%x, ", array[u]);
 	}
-}
-
-void dump_msghdr(struct msghdr *msg)
-{
-	char data[1024];
-	size_t len, nr_segs, iovlen;
-	int npages;
-
-	pr_info("msg_name = %p\n", msg->msg_name);
-	pr_info("msg_namelen = %u\n", msg->msg_namelen);
-	pr_info("msg_iter.type = %u\n", msg->msg_iter.iter_type);
-	pr_info("msg_iter.count = %zd\n", msg->msg_iter.count);
-
-	pr_info("iovoffset = %zd", msg->msg_iter.iov_offset);
-	msg->msg_iter.iov_offset = 0;
-	// iov_iter_zero(2, &msg->msg_iter);
-	pr_info("iovoffset = %zd", msg->msg_iter.iov_offset);
-
-	nr_segs = iov_iter_single_seg_count(&msg->msg_iter);
-	pr_info("iovsegcount = %zd", nr_segs);
-
-	npages = iov_iter_npages(&msg->msg_iter, 16384);
-	pr_info("npages = %d", npages);
-
-	struct iovec *iov;
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
-	iov = msg->msg_iter.iov;
-#else
-	iov = iter_iov(&msg->msg_iter);
-#endif
-
-	iovlen = iov_length(iov, npages);
-	pr_info("iovlen = %zd", iovlen);
-
-	len = copy_from_iter(data, iovlen - msg->msg_iter.count, &msg->msg_iter);
-	pr_info("copylen = %zd\n", len);
-	pr_info("msg = [%.*s]\n", (int)len, data);
-	pr_info("iovoffset = %zd\n", msg->msg_iter.iov_offset);
 }
 
 static int configure_ktls_sock(nasp_socket *s);
@@ -860,10 +821,19 @@ static int handle_cert_gen(nasp_socket *sc)
 			}
 
 			sc->parameters->subject = "CN=nasp-protected-workload";
-			sc->parameters->dns = sc->opa_socket_ctx.dns;
-			sc->parameters->uri = sc->opa_socket_ctx.uri;
-			sc->parameters->email = "nasp@outshift.cisco.com";
-			sc->parameters->ip = "127.0.0.1";
+			sc->parameters->dns = "";
+			sc->parameters->uri = "";
+			sc->parameters->email = "";
+			sc->parameters->ip = "";
+
+			if (sc->opa_socket_ctx.dns)
+			{
+				sc->parameters->dns = sc->opa_socket_ctx.dns;
+			}
+			if (sc->opa_socket_ctx.uri)
+			{
+				sc->parameters->uri = sc->opa_socket_ctx.uri;
+			}
 
 			csr_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
 			if (generated_csr.err)
