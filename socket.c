@@ -931,6 +931,11 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		prot = &nasp_v6_prot;
 	}
 
+	if (!client && *err != 0)
+	{
+		goto error;
+	}
+
 	u16 port = (u16)(sk->sk_portpair >> 16);
 
 	sc = nasp_socket_accept(client);
@@ -1054,6 +1059,11 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		prot = &nasp_v6_prot;
 	}
 
+	if (err != 0)
+	{
+		goto error;
+	}
+
 	printk("nasp: nasp_connect uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
 
 	nasp_socket *sc = nasp_socket_connect(sk);
@@ -1160,7 +1170,7 @@ error:
 
 	pr_err("nasp: [%s] connect error, socket closed", current->comm);
 
-	return -1;
+	return err;
 }
 
 int socket_init(void)
