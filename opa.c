@@ -245,14 +245,14 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
         size_t id_len = json_object_dotget_string_len(matched_policy, "id");
         if (egress_id_len > 0 || id_len > 0)
         {
-            ret.id = kzalloc(egress_id_len + id_len, GFP_KERNEL);
+            ret.id = kzalloc(egress_id_len + id_len + 1, GFP_KERNEL);
             if (id_len > 0)
             {
-                strncat(ret.id, json_object_dotget_string(matched_policy, "id"), egress_id_len + id_len - strlen(ret.id));
+                strcat(ret.id, json_object_dotget_string(matched_policy, "id"));
             }
             if (egress_id_len > 0)
             {
-                strncat(ret.id, json_object_dotget_string(matched_policy, "egress.id"), egress_id_len + id_len - strlen(ret.id));
+                strcat(ret.id, json_object_dotget_string(matched_policy, "egress.id"));
             }
         }
 
@@ -306,13 +306,13 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
                 }
             }
 
-            ret.dns = kzalloc(dns_len, GFP_KERNEL);
+            ret.dns = kzalloc(dns_len + 1, GFP_KERNEL);
             for (i = 0; i < json_array_get_count(dns); i++)
             {
-                strncat(ret.dns, json_array_get_string(dns, i), dns_len - strlen(ret.dns));
+                strcat(ret.dns, json_array_get_string(dns, i));
                 if (i < json_array_get_count(dns) - 1)
                 {
-                    strncat(ret.dns, ",", dns_len - strlen(ret.dns));
+                    strcat(ret.dns, ",");
                 }
             }
         }
