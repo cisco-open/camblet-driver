@@ -478,7 +478,7 @@ int this_cpu_opa_eval(const char *input)
 {
     int ret = false;
     i32 inputAddr = 0;
-    i32 inputLen = strlen(input) + 1;
+    i32 inputLen = strlen(input);
     wasm_vm_result result;
 
     opa_wrapper *opa = this_cpu_opa();
@@ -533,7 +533,7 @@ opa_socket_context this_cpu_opa_socket_eval(const char *input)
 {
     opa_socket_context ret = {0};
     i32 inputAddr = 0;
-    i32 inputLen = strlen(input) + 1;
+    i32 inputLen = strlen(input);
     wasm_vm_result result;
 
     opa_wrapper *opa = this_cpu_opa();
