@@ -98,8 +98,13 @@ bail:
 csr_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len, csr_parameters *parameters)
 {
     csr_result result;
-
+// We do not want to concern ourselves with how variadic parameters are handled in wasm; instead,
+// we initialize all parameters that are NULL with an empty string.
 #define ALLOCATE_AND_CHECK(field)                                                 \
+    if (!parameters->field)                                                       \
+    {                                                                             \
+        parameters->field = "";                                                   \
+    }                                                                             \
     i32 field##_len = strlen(parameters->field);                                  \
     i32 field##_ptr;                                                              \
     field##_ptr = alloc_and_copy_parameter(parameters->field, field##_len, csr);  \
