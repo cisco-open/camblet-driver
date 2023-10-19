@@ -19,11 +19,15 @@
 #include <linux/ipc_namespace.h>
 #include <linux/pid_namespace.h>
 #include <linux/time_namespace.h>
-#include <linux/fs/mount.h>
 #include <net/net_namespace.h>
 #include <linux/utsname.h>
 
 #include "task_context.h"
+
+struct mnt_namespace
+{
+    struct ns_common ns;
+};
 
 task_context *get_task_context(void)
 {
