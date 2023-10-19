@@ -92,7 +92,7 @@ xwc_end_chain(const br_x509_class **ctx)
     {
         pr_info("nasp: peer certificate is not allowed!");
 
-        return 62;
+        return BR_ERR_X509_NOT_TRUSTED;
     }
 
     return 0;
