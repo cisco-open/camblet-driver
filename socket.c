@@ -821,10 +821,6 @@ static int handle_cert_gen(nasp_socket *sc)
 			}
 
 			sc->parameters->subject = "CN=nasp-protected-workload";
-			sc->parameters->dns = "";
-			sc->parameters->uri = "";
-			sc->parameters->email = "";
-			sc->parameters->ip = "";
 
 			if (sc->opa_socket_ctx.dns)
 			{
