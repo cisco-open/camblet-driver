@@ -23,8 +23,8 @@ const wasm_vm_result wasm_vm_result_ok = {0};
 
 typedef struct wasm_vm
 {
-    spinlock_t _lock;
-    unsigned long _lock_flags;
+    struct mutex _lock;
+
     int cpu;
 
     IM3Environment _env;
@@ -52,7 +52,7 @@ wasm_vm *wasm_vm_new(int cpu)
         return NULL;
     }
 
-    spin_lock_init(&vm->_lock);
+    mutex_init(&vm->_lock);
 
     return vm;
 }
@@ -470,12 +470,12 @@ void wasm_vm_dump_symbols(wasm_vm *vm)
 
 void wasm_vm_lock(wasm_vm *vm)
 {
-    spin_lock_irqsave(&vm->_lock, vm->_lock_flags);
+    mutex_lock(&vm->_lock);
 }
 
 void wasm_vm_unlock(wasm_vm *vm)
 {
-    spin_unlock_irqrestore(&vm->_lock, vm->_lock_flags);
+    mutex_unlock(&vm->_lock);
 }
 
 wasm_vm_result wasm_vm_get_module(wasm_vm *vm, const char *name)
