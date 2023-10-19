@@ -22,8 +22,14 @@ typedef struct opa_wrapper
     wasm_vm_function *value_dump;
     wasm_vm_function *value_parse;
     wasm_vm_function *value_free;
+    wasm_vm_function *heap_ptr_get;
+    wasm_vm_function *heap_ptr_set;
+    wasm_vm_function *heap_stash_clear;
+    wasm_vm_function *heap_blocks_stash;
     void **builtins;
 
+    i32 baseHeapAddr;
+    i32 evalHeapAddr;
     i32 dataValueAddr;
 } opa_wrapper;
 
@@ -42,6 +48,98 @@ static wasm_vm_result opa_free(opa_wrapper *opa, i32 ptr)
 static wasm_vm_result opa_value_free(opa_wrapper *opa, i32 ptr)
 {
     return wasm_vm_call_direct(opa->vm, opa->value_free, ptr);
+}
+
+static wasm_vm_result opa_heap_ptr_get(opa_wrapper *opa)
+{
+    return wasm_vm_call_direct(opa->vm, opa->heap_ptr_get);
+}
+
+static wasm_vm_result opa_heap_ptr_set(opa_wrapper *opa, i32 ptr)
+{
+    return wasm_vm_call_direct(opa->vm, opa->heap_ptr_set, ptr);
+}
+
+static wasm_vm_result opa_heap_stash_clear(opa_wrapper *opa)
+{
+    return wasm_vm_call_direct(opa->vm, opa->heap_stash_clear);
+}
+
+static wasm_vm_result opa_heap_block_stash(opa_wrapper *opa)
+{
+    return wasm_vm_call_direct(opa->vm, opa->heap_blocks_stash);
+}
+
+static wasm_vm_result opa_value_parse(opa_wrapper *opa, i32 dataAddr, i32 dataLen)
+{
+    return wasm_vm_call_direct(opa->vm, opa->value_parse, dataAddr, dataLen);
+}
+
+static i32 opa_set_data_from_json(opa_wrapper *opa, const char *data, bool free)
+{
+    int dataLen = strlen(data);
+    wasm_vm_result result = opa_malloc(opa, dataLen);
+    if (result.err)
+        return -1;
+
+    i32 dataAddr = result.data->i32;
+    memcpy(wasm_vm_memory(opa->value_parse->module) + dataAddr, data, dataLen);
+
+    result = opa_value_parse(opa, dataAddr, dataLen);
+    if (result.err)
+        return -1;
+
+    i32 dataValueAddr = result.data->i32;
+
+    if (free)
+    {
+        result = opa_free(opa, dataAddr);
+        if (result.err)
+        {
+            return -1;
+        }
+    }
+
+    return dataValueAddr;
+}
+
+static int opa_set_data(opa_wrapper *opa, const char *data)
+{
+    wasm_vm_result result = opa_heap_stash_clear(opa);
+    if (result.err)
+        return -1;
+
+    result = opa_heap_ptr_set(opa, opa->baseHeapAddr);
+    if (result.err)
+        return -1;
+
+    // json
+    i32 dataValueAddr = opa_set_data_from_json(opa, data, true);
+    if (dataValueAddr < 0)
+    {
+        return -1;
+    }
+    opa->dataValueAddr = dataValueAddr;
+
+    result = opa_heap_block_stash(opa);
+    if (result.err)
+        return -1;
+
+    result = opa_heap_ptr_get(opa);
+    if (result.err)
+        return -1;
+
+    opa->evalHeapAddr = result.data->i32;
+
+    return 0;
+}
+
+static wasm_vm_result opa_eval(opa_wrapper *opa, i32 inputAddr, i32 inputLen, i32 dataValueAddr, i32 heapAddr)
+{
+    i32 entrypoint = 0;
+    i32 format = 0; // 0 is JSON, 1 is “value”, i.e. serialized Rego values
+
+    return wasm_vm_call_direct(opa->vm, opa->eval, 0, entrypoint, dataValueAddr, inputAddr, inputLen, heapAddr, format);
 }
 
 opa_wrapper *this_cpu_opa(void)
@@ -147,24 +245,6 @@ void opa_socket_context_free(opa_socket_context ctx)
     {
         kfree(ctx.allowed_spiffe_ids[i]);
     }
-}
-
-static int parse_opa_eval_result(char *json)
-{
-    JSON_Value *root_value = json_parse_string(json);
-    if (root_value)
-    {
-        JSON_Array *results = json_value_get_array(root_value);
-        JSON_Object *result = json_array_get_object(results, 0);
-        int ret = json_object_get_boolean(result, "result");
-        json_value_free(root_value);
-        if (ret == -1)
-        {
-            ret = false;
-        }
-        return ret;
-    }
-    return false;
 }
 
 opa_socket_context parse_opa_socket_eval_result(char *json)
@@ -416,26 +496,34 @@ wasm_vm_result init_opa_for(wasm_vm *vm, wasm_vm_module *module)
     wasm_vm_try_get_function(builtinsFunc, wasm_vm_get_function(vm, module->name, "builtins"));
     wasm_vm_try_get_function(opa->value_parse, wasm_vm_get_function(vm, module->name, "opa_json_parse"));
     wasm_vm_try_get_function(opa->value_free, wasm_vm_get_function(vm, module->name, "opa_value_free"));
+
+    wasm_vm_try_get_function(opa->heap_ptr_get, wasm_vm_get_function(vm, module->name, "opa_heap_ptr_get"));
+    wasm_vm_try_get_function(opa->heap_ptr_set, wasm_vm_get_function(vm, module->name, "opa_heap_ptr_set"));
+    wasm_vm_try_get_function(opa->heap_stash_clear, wasm_vm_get_function(vm, module->name, "opa_heap_stash_clear"));
+    wasm_vm_try_get_function(opa->heap_blocks_stash, wasm_vm_get_function(vm, module->name, "opa_heap_blocks_stash"));
+
     opa->vm = vm;
+
+    result = opa_malloc(opa, 0);
+    if (result.err)
+        goto error;
+
+    result = opa_heap_ptr_get(opa);
+    if (result.err)
+        goto error;
+    opa->baseHeapAddr = result.data->i32;
 
     result = wasm_vm_call_direct(vm, builtinsFunc);
     if (result.err)
         goto error;
 
     result = wasm_vm_call_direct(vm, opa->json_dump, result.data->i32);
-
-error:
     if (result.err)
-    {
-        kfree(opa);
-        return result;
-    }
-
-    uint8_t *memory = wasm_vm_memory(opa->eval->module);
+        goto error;
     i32 builtinsJson = result.data->i32;
 
     // parse and link
-    char *builtins = memory + builtinsJson;
+    char *builtins = wasm_vm_memory(opa->eval->module) + builtinsJson;
     if (parse_opa_builtins(opa, builtins) > 0)
     {
         result = link_opa_builtins(opa, module);
@@ -451,81 +539,20 @@ error:
 
     opas[wasm_vm_cpu(vm)] = opa;
 
+error:
+    if (result.err)
+    {
+        kfree(opa);
+        return result;
+    }
+
     return wasm_vm_result_ok;
-}
-
-static wasm_vm_result opa_value_parse(opa_wrapper *opa, i32 dataAddr, i32 dataLen)
-{
-    return wasm_vm_call_direct(opa->vm, opa->value_parse, dataAddr, dataLen);
-}
-
-static wasm_vm_result opa_eval(opa_wrapper *opa, i32 inputAddr, i32 inputLen)
-{
-    i32 entrypoint = 0;
-    i32 heapAddr = 0;
-    i32 format = 0; // 0 is JSON, 1 is “value”, i.e. serialized Rego values
-
-    return wasm_vm_call_direct(opa->vm, opa->eval, 0, entrypoint, opa->dataValueAddr, inputAddr, inputLen, heapAddr, format);
-}
-
-int this_cpu_opa_eval(const char *input)
-{
-    int ret = false;
-    i32 inputAddr = 0;
-    i32 inputLen = strlen(input);
-    wasm_vm_result result;
-
-    opa_wrapper *opa = this_cpu_opa();
-    pr_info("nasp: opa %s.eval input: %s", opa->eval->module->name, input);
-
-    wasm_vm_lock(opa->vm);
-
-    if (!opa)
-    {
-        ret = true;
-        pr_warn("nasp: opa policy module not loaded, eval always evalautes to true");
-        goto cleanup;
-    }
-
-    result = opa_malloc(opa, inputLen);
-    if (result.err)
-    {
-        pr_crit("opa wasm_vm_opa_malloc error: %s", result.err);
-        goto cleanup;
-    }
-
-    uint8_t *memory = wasm_vm_memory(opa->eval->module);
-
-    inputAddr = result.data->i32;
-    memcpy(memory + inputAddr, input, inputLen);
-
-    result = opa_eval(opa, inputAddr, inputLen);
-    if (result.err)
-    {
-        pr_crit("wasm_vm_opa_eval error: %s", result.err);
-        goto cleanup;
-    }
-
-    char *json = (char *)(memory + result.data->i32);
-    ret = parse_opa_eval_result(json);
-
-    pr_info("nasp: opa %s.eval result: %s -> %d", opa->eval->module->name, json, ret);
-
-cleanup:
-    if (inputAddr != 0)
-    {
-        result = opa_free(opa, inputAddr);
-        if (result.err)
-            pr_crit("opa wasm_vm_opa_free json error: %s", result.err);
-    }
-
-    wasm_vm_unlock(opa->vm);
-    return ret;
 }
 
 opa_socket_context this_cpu_opa_socket_eval(const char *input)
 {
     opa_socket_context ret = {0};
+    i32 heapAddr = 0;
     i32 inputAddr = 0;
     i32 inputLen = strlen(input);
     wasm_vm_result result;
@@ -541,95 +568,51 @@ opa_socket_context this_cpu_opa_socket_eval(const char *input)
         goto cleanup;
     }
 
-    result = opa_malloc(opa, inputLen);
-    if (result.err)
+    heapAddr = opa->evalHeapAddr;
+    inputAddr = opa->evalHeapAddr;
+
+    uint32_t memorySize = m3_GetMemorySize(opa->eval->module->runtime);
+
+    int rest = inputAddr + inputLen - memorySize;
+    if (rest > 0)
     {
-        pr_crit("opa wasm_vm_opa_malloc error: %s", result.err);
-        goto cleanup;
+        pr_crit("nasp: opa_eval ADDRESS TOO SMALL!!!\n");
     }
 
-    uint8_t *memory = wasm_vm_memory(opa->eval->module);
+    memcpy(wasm_vm_memory(opa->eval->module) + inputAddr, input, inputLen);
+    heapAddr += inputLen;
 
-    inputAddr = result.data->i32;
-    memcpy(memory + inputAddr, input, inputLen);
-
-    result = opa_eval(opa, inputAddr, inputLen);
+    result = opa_eval(opa, inputAddr, inputLen, opa->dataValueAddr, heapAddr);
     if (result.err)
     {
         pr_crit("wasm_vm_opa_eval error: %s", result.err);
         goto cleanup;
     }
 
-    char *json = (char *)(memory + result.data->i32);
+    char *json = (char *)(wasm_vm_memory(opa->eval->module) + result.data->i32);
     ret = parse_opa_socket_eval_result(json);
 
     pr_info("nasp: opa %s.eval result: id[%s] allowed[%d] mtls[%d]", opa->eval->module->name, ret.id, ret.allowed, ret.mtls);
 
 cleanup:
-    if (inputAddr != 0)
-    {
-        result = opa_free(opa, inputAddr);
-        if (result.err)
-            pr_crit("opa wasm_vm_opa_free json error: %s", result.err);
-    }
-
     wasm_vm_unlock(opa->vm);
+
     return ret;
 }
 
 void load_opa_data(const char *data)
 {
-    i32 dataAddr = 0;
-    i32 dataLen = strlen(data) + 1;
-
     unsigned cpu;
+
     for_each_possible_cpu(cpu)
     {
-        pr_info("nasp: load_opa_data cpu[%d]", cpu);
         opa_wrapper *opa = opas[cpu];
-
         wasm_vm_lock(opa->vm);
-
-        wasm_vm_result result;
-
-        if (opa->dataValueAddr > 0)
-        {
-            result = opa_value_free(opa, opa->dataValueAddr);
-            if (result.err)
-                pr_crit("load_opa_data opa_value_free error: %s", result.err);
-            opa->dataValueAddr = 0;
-            pr_info("free nasp data");
-        }
-
-        result = opa_malloc(opa, dataLen);
-        if (result.err)
-        {
-            pr_crit("load_opa_data opa_malloc error: %s", result.err);
-            wasm_vm_unlock(opa->vm);
-
-            continue;
-        }
-
-        uint8_t *memory = wasm_vm_memory(opa->value_parse->module);
-
-        dataAddr = result.data->i32;
-        memcpy(memory + dataAddr, data, dataLen);
-
-        result = opa_value_parse(opa, dataAddr, dataLen);
-        if (result.err)
-        {
-            pr_crit("load_opa_data opa_value_parse error: %s", result.err);
-            wasm_vm_unlock(opa->vm);
-
-            continue;
-        }
-
-        opa->dataValueAddr = result.data->i32;
-
-        result = opa_free(opa, dataAddr);
-        if (result.err)
-            pr_crit("load_opa_data opa_free error: %s", result.err);
-
+        int ret = opa_set_data(opa, data);
         wasm_vm_unlock(opa->vm);
+        if (ret < 0)
+        {
+            printk("nasp: load_opa_data: error happened");
+        }
     }
 }

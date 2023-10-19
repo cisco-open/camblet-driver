@@ -73,7 +73,8 @@ xwc_end_chain(const br_x509_class **ctx)
 
     for (i = 0; i < mini_cc->num_name_elts; i++)
     {
-        pr_info("nasp: peer certificate name_elts[%d]: status: %d, value: %s (len: %d)", i, mini_cc->name_elts[i].status, mini_cc->name_elts[i].buf, mini_cc->name_elts[i].len);
+        pr_info("nasp: peer certificate name_elts[%d]: status: %d, value: %s (len: %ld)", i, mini_cc->name_elts[i].status, mini_cc->name_elts[i].buf, mini_cc->name_elts[i].len);
+
         if (mini_cc->name_elts[i].oid == OID_uniformResourceIdentifier)
         {
             for (k = 0; k < nasp_cc->socket_context->allowed_spiffe_ids_length; k++)
