@@ -90,6 +90,7 @@ static i32 alloc_and_copy_parameter(char *str, i32 str_length, csr_module *csr)
         goto bail;
     }
     addr = malloc_result.data->i32;
+
     strncpy(wasm_vm_memory(get_csr_module(csr)) + addr, str, str_length);
 bail:
     return addr;
@@ -149,6 +150,10 @@ bail:
     int i;
     for (i = 0; i < (sizeof(pointers) / sizeof(pointers[0])); i++)
     {
+        if (pointers[i] <= 1)
+        {
+            continue;
+        }
         wasm_vm_result free_result = csr_free(csr, pointers[i]);
         if (free_result.err)
         {

@@ -1010,6 +1010,7 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
 	u16 port = ntohs(usin->sin_port);
+	nasp_socket *sc = NULL;
 
 	int err;
 	struct proto *prot;
@@ -1032,7 +1033,7 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	pr_info("nasp: nasp_connect uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
 
-	nasp_socket *sc = nasp_socket_connect(sk);
+	sc = nasp_socket_connect(sk);
 	if (!sc)
 	{
 		pr_err("nasp: nasp_socket_connect failed to create nasp_socket");
@@ -1130,9 +1131,9 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 error:
 	nasp_socket_free(sc);
 
-	release_sock(sk);
-	sk->sk_prot->close(sk, 0);
 	lock_sock(sk);
+	sk->sk_prot->close(sk, 0);
+	release_sock(sk);
 
 	pr_err("nasp: [%s] connect error, socket closed", current->comm);
 
