@@ -76,14 +76,20 @@ static i32 opa_set_data_from_json(opa_wrapper *opa, const char *data, bool free)
 
     wasm_vm_result result = opa_malloc(opa, dataLen);
     if (result.err)
+    {
+        pr_crit("nasp: opa_set_data_from_json: opa_malloc: %s", result.err);
         return -1;
+    }
 
     i32 dataAddr = result.data->i32;
     memcpy(wasm_vm_memory(opa->json_parse->module) + dataAddr, data, dataLen);
 
     result = opa_json_parse(opa, dataAddr, dataLen);
     if (result.err)
+    {
+        pr_crit("nasp: opa_set_data_from_json: opa_json_parse: %s", result.err);
         goto cleanup;
+    }
 
     dataValueAddr = result.data->i32;
 
@@ -93,6 +99,7 @@ cleanup:
         result = opa_free(opa, dataAddr);
         if (result.err)
         {
+            pr_crit("nasp: opa_set_data_from_json: opa_free: %s", result.err);
             return -1;
         }
     }
@@ -104,11 +111,17 @@ static int opa_set_data(opa_wrapper *opa, const char *data)
 {
     wasm_vm_result result = opa_heap_stash_clear(opa);
     if (result.err)
+    {
+        pr_crit("nasp: opa_set_data: opa_heap_stash_clear: %s", result.err);
         return -1;
+    }
 
     result = opa_heap_ptr_set(opa, opa->baseHeapAddr);
     if (result.err)
+    {
+        pr_crit("nasp: opa_set_data: opa_heap_ptr_set: %s", result.err);
         return -1;
+    }
 
     // json
     i32 dataValueAddr = opa_set_data_from_json(opa, data, true);
@@ -120,11 +133,17 @@ static int opa_set_data(opa_wrapper *opa, const char *data)
 
     result = opa_heap_block_stash(opa);
     if (result.err)
+    {
+        pr_crit("nasp: opa_set_data: opa_heap_block_stash: %s", result.err);
         return -1;
+    }
 
     result = opa_heap_ptr_get(opa);
     if (result.err)
+    {
+        pr_crit("nasp: opa_set_data: opa_heap_ptr_get: %s", result.err);
         return -1;
+    }
 
     opa->evalHeapAddr = result.data->i32;
 
