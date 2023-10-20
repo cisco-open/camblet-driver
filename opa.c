@@ -20,8 +20,7 @@ typedef struct opa_wrapper
     wasm_vm_function *eval;
     wasm_vm_function *json_dump;
     wasm_vm_function *value_dump;
-    wasm_vm_function *value_parse;
-    wasm_vm_function *value_free;
+    wasm_vm_function *json_parse;
     wasm_vm_function *heap_ptr_get;
     wasm_vm_function *heap_ptr_set;
     wasm_vm_function *heap_stash_clear;
@@ -45,11 +44,6 @@ static wasm_vm_result opa_free(opa_wrapper *opa, i32 ptr)
     return wasm_vm_call_direct(opa->vm, opa->free, ptr);
 }
 
-static wasm_vm_result opa_value_free(opa_wrapper *opa, i32 ptr)
-{
-    return wasm_vm_call_direct(opa->vm, opa->value_free, ptr);
-}
-
 static wasm_vm_result opa_heap_ptr_get(opa_wrapper *opa)
 {
     return wasm_vm_call_direct(opa->vm, opa->heap_ptr_get);
@@ -70,9 +64,9 @@ static wasm_vm_result opa_heap_block_stash(opa_wrapper *opa)
     return wasm_vm_call_direct(opa->vm, opa->heap_blocks_stash);
 }
 
-static wasm_vm_result opa_value_parse(opa_wrapper *opa, i32 dataAddr, i32 dataLen)
+static wasm_vm_result opa_json_parse(opa_wrapper *opa, i32 dataAddr, i32 dataLen)
 {
-    return wasm_vm_call_direct(opa->vm, opa->value_parse, dataAddr, dataLen);
+    return wasm_vm_call_direct(opa->vm, opa->json_parse, dataAddr, dataLen);
 }
 
 static i32 opa_set_data_from_json(opa_wrapper *opa, const char *data, bool free)
@@ -83,9 +77,9 @@ static i32 opa_set_data_from_json(opa_wrapper *opa, const char *data, bool free)
         return -1;
 
     i32 dataAddr = result.data->i32;
-    memcpy(wasm_vm_memory(opa->value_parse->module) + dataAddr, data, dataLen);
+    memcpy(wasm_vm_memory(opa->json_parse->module) + dataAddr, data, dataLen);
 
-    result = opa_value_parse(opa, dataAddr, dataLen);
+    result = opa_json_parse(opa, dataAddr, dataLen);
     if (result.err)
         return -1;
 
@@ -391,21 +385,23 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             }
         }
 
-        // if (!ret.uri)
-        // {
-        //     ret.uri = strdup("spiffe://unspecified");
-        // }
-
-        // if (!ret.dns)
-        // {
-        //     ret.dns = strdup("example.org");
-        // }
-
     free:
         json_value_free(root_value);
     }
 
     return ret;
+}
+
+static size_t get_memory_page_count(size_t size)
+{
+    size_t pages = size / d_m3MemPageSize;
+
+    if (pages * d_m3MemPageSize == size)
+    {
+        return pages;
+    }
+
+    return pages + 1;
 }
 
 m3ApiRawFunction(opa_abort)
@@ -494,8 +490,7 @@ wasm_vm_result init_opa_for(wasm_vm *vm, wasm_vm_module *module)
     wasm_vm_try_get_function(opa->json_dump, wasm_vm_get_function(vm, module->name, "opa_json_dump"));
     wasm_vm_try_get_function(opa->value_dump, wasm_vm_get_function(vm, module->name, "opa_value_dump"));
     wasm_vm_try_get_function(builtinsFunc, wasm_vm_get_function(vm, module->name, "builtins"));
-    wasm_vm_try_get_function(opa->value_parse, wasm_vm_get_function(vm, module->name, "opa_json_parse"));
-    wasm_vm_try_get_function(opa->value_free, wasm_vm_get_function(vm, module->name, "opa_value_free"));
+    wasm_vm_try_get_function(opa->json_parse, wasm_vm_get_function(vm, module->name, "opa_json_parse"));
 
     wasm_vm_try_get_function(opa->heap_ptr_get, wasm_vm_get_function(vm, module->name, "opa_heap_ptr_get"));
     wasm_vm_try_get_function(opa->heap_ptr_set, wasm_vm_get_function(vm, module->name, "opa_heap_ptr_set"));
@@ -558,15 +553,17 @@ opa_socket_context this_cpu_opa_socket_eval(const char *input)
     wasm_vm_result result;
 
     opa_wrapper *opa = this_cpu_opa();
-    pr_info("nasp: opa %s.eval input: %s", opa->eval->module->name, input);
-
-    wasm_vm_lock(opa->vm);
 
     if (!opa)
     {
         pr_warn("nasp: opa socket policy module not loaded, eval always evaluates to NULL");
-        goto cleanup;
+
+        return ret;
     }
+
+    printk("nasp: opa %s.eval input: %s", opa->eval->module->name, input);
+
+    wasm_vm_lock(opa->vm);
 
     heapAddr = opa->evalHeapAddr;
     inputAddr = opa->evalHeapAddr;
@@ -574,9 +571,14 @@ opa_socket_context this_cpu_opa_socket_eval(const char *input)
     uint32_t memorySize = m3_GetMemorySize(opa->eval->module->runtime);
 
     int rest = inputAddr + inputLen - memorySize;
-    if (rest > 0)
+    if (rest > 0) // need to grow memory
     {
-        pr_crit("nasp: opa_eval ADDRESS TOO SMALL!!!\n");
+        M3Result m3result = ResizeMemory(opa->eval->module->runtime, get_memory_page_count(memorySize + rest));
+        if (m3result)
+        {
+            pr_crit("wasm_vm_opa_eval error: could not grow wasm module memory");
+            goto cleanup;
+        }
     }
 
     memcpy(wasm_vm_memory(opa->eval->module) + inputAddr, input, inputLen);
@@ -585,7 +587,7 @@ opa_socket_context this_cpu_opa_socket_eval(const char *input)
     result = opa_eval(opa, inputAddr, inputLen, opa->dataValueAddr, heapAddr);
     if (result.err)
     {
-        pr_crit("wasm_vm_opa_eval error: %s", result.err);
+        pr_crit("nasp: opa %s.eval error: %s", opa->eval->module->name, result.err);
         goto cleanup;
     }
 
