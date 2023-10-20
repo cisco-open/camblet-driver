@@ -274,7 +274,7 @@ static void nasp_socket_free(nasp_socket *s)
 {
 	if (s)
 	{
-		printk("nasp: freeing nasp_socket of %s", current->comm);
+		pr_info("nasp: freeing nasp_socket of %s", current->comm);
 
 		if (s->p)
 		{
@@ -293,7 +293,7 @@ static void nasp_socket_free(nasp_socket *s)
 			}
 			else
 			{
-				printk("nasp: %s br_sslio SSL closed", current->comm);
+				pr_info("nasp: %s br_sslio SSL closed", current->comm);
 			}
 		}
 
@@ -446,7 +446,7 @@ static int ensure_tls_handshake(nasp_socket *s)
 		ret = br_sslio_flush(&s->ioc);
 		if (ret == 0)
 		{
-			printk("nasp: %s %s TLS handshake done, sk: %p", current->comm, get_direction(s), s->sock);
+			pr_info("nasp: %s %s TLS handshake done, sk: %p", current->comm, get_direction(s), s->sock);
 		}
 		else
 		{
@@ -459,7 +459,7 @@ static int ensure_tls_handshake(nasp_socket *s)
 
 		if (protocol)
 		{
-			printk("nasp: %s protocol name: %s", current->comm, protocol);
+			pr_info("nasp: %s protocol name: %s", current->comm, protocol);
 			if (nasp_socket_proxywasm_enabled(s))
 				set_property_v(s->pc, "upstream.negotiated_protocol", protocol, strlen(protocol));
 		}
@@ -630,7 +630,7 @@ void nasp_close(struct sock *sk, long timeout)
 	nasp_socket *s = READ_ONCE(sk->sk_user_data);
 	if (s)
 	{
-		printk("nasp: close %s running for sk %p ", current->comm, sk);
+		pr_info("nasp: close %s running for sk %p ", current->comm, sk);
 		nasp_socket_free(s);
 		WRITE_ONCE(sk->sk_user_data, NULL);
 	}
@@ -686,8 +686,8 @@ static int configure_ktls_sock(nasp_socket *s)
 		return 0;
 	}
 
-	printk("nasp: configure_ktls for %s cipher suite: %x version: %x, iv: %.*s", current->comm, params->cipher_suite, params->version, 12, eng->out.chapol.iv);
-	printk("nasp: configure_ktls for %s cipher suite: %x version: %x, iv: %.*s", current->comm, params->cipher_suite, params->version, 12, eng->in.chapol.iv);
+	pr_info("nasp: configure_ktls for %s cipher suite: %x version: %x, iv: %.*s", current->comm, params->cipher_suite, params->version, 12, eng->out.chapol.iv);
+	pr_info("nasp: configure_ktls for %s cipher suite: %x version: %x, iv: %.*s", current->comm, params->cipher_suite, params->version, 12, eng->in.chapol.iv);
 
 	struct tls12_crypto_info_chacha20_poly1305 crypto_info_tx;
 	crypto_info_tx.info.version = TLS_1_2_VERSION;
@@ -929,7 +929,7 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 	if (client && sc->opa_socket_ctx.allowed)
 	{
 		u16 client_port = (u16)(client->sk_portpair);
-		printk("nasp_accept: uid: %d app: %s on ports: %d <- %d", current_uid().val, current->comm, port, client_port);
+		pr_info("nasp_accept: uid: %d app: %s on ports: %d <- %d", current_uid().val, current->comm, port, client_port);
 
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
@@ -1030,7 +1030,7 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		goto error;
 	}
 
-	printk("nasp: nasp_connect uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
+	pr_info("nasp: nasp_connect uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
 
 	nasp_socket *sc = nasp_socket_connect(sk);
 	if (!sc)
@@ -1188,7 +1188,7 @@ int socket_init(void)
 		return -1;
 	}
 
-	printk(KERN_INFO "nasp: socket support loaded.");
+	pr_info("nasp: socket support loaded.");
 
 	return 0;
 }
@@ -1205,5 +1205,5 @@ void socket_exit(void)
 	kfree(rsa_priv);
 	kfree(rsa_pub);
 
-	printk(KERN_INFO "nasp: socket support unloaded.");
+	pr_info("nasp: socket support unloaded.");
 }
