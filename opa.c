@@ -71,7 +71,9 @@ static wasm_vm_result opa_json_parse(opa_wrapper *opa, i32 dataAddr, i32 dataLen
 
 static i32 opa_set_data_from_json(opa_wrapper *opa, const char *data, bool free)
 {
+    i32 dataValueAddr = 0;
     int dataLen = strlen(data);
+
     wasm_vm_result result = opa_malloc(opa, dataLen);
     if (result.err)
         return -1;
@@ -81,10 +83,11 @@ static i32 opa_set_data_from_json(opa_wrapper *opa, const char *data, bool free)
 
     result = opa_json_parse(opa, dataAddr, dataLen);
     if (result.err)
-        return -1;
+        goto cleanup;
 
-    i32 dataValueAddr = result.data->i32;
+    dataValueAddr = result.data->i32;
 
+cleanup:
     if (free)
     {
         result = opa_free(opa, dataAddr);
@@ -109,7 +112,7 @@ static int opa_set_data(opa_wrapper *opa, const char *data)
 
     // json
     i32 dataValueAddr = opa_set_data_from_json(opa, data, true);
-    if (dataValueAddr < 0)
+    if (dataValueAddr <= 0)
     {
         return -1;
     }
@@ -614,7 +617,7 @@ void load_opa_data(const char *data)
         wasm_vm_unlock(opa->vm);
         if (ret < 0)
         {
-            printk("nasp: load_opa_data: error happened");
+            printk("nasp: load_opa_data: could not set data");
         }
     }
 }
