@@ -58,7 +58,7 @@ static i32 time_now_ns(opa_wrapper *opa, i32 _ctx)
     wasm_vm_result result = opa_malloc(opa, sizeof(now));
     if (result.err)
     {
-        FATAL("opa wasm_vm_opa_malloc error: %s", result.err);
+        pr_crit("opa wasm_vm_opa_malloc error: %s", result.err);
         return 0;
     }
 
@@ -77,16 +77,16 @@ static i32 trace(opa_wrapper *opa, i32 _ctx, i32 arg1)
     wasm_vm_result result = wasm_vm_call_direct(opa->vm, opa->value_dump, arg1);
     if (result.err)
     {
-        FATAL("opa wasm_vm_value_dump error: %s", result.err);
+        pr_crit("opa wasm_vm_value_dump error: %s", result.err);
         return 0;
     }
 
-    printk("nasp: opa: Note %s", (char *)(mem + result.data->i32));
+    pr_info("nasp: opa: Note %s", (char *)(mem + result.data->i32));
 
     result = opa_malloc(opa, sizeof(true));
     if (result.err)
     {
-        FATAL("opa wasm_vm_opa_malloc error: %s", result.err);
+        pr_crit("opa wasm_vm_opa_malloc error: %s", result.err);
         return 0;
     }
 
@@ -106,7 +106,7 @@ static int parse_opa_builtins(opa_wrapper *opa, char *json)
     {
         JSON_Object *object = json_object(root_value);
         int builtins = json_object_get_count(object);
-        printk("nasp: opa module builtins = %s", json);
+        pr_info("nasp: opa module builtins = %s", json);
 
         // indexing starts from 1 for some reason, so we need one bigger array
         opa->builtins = kzalloc(builtins + 1 * sizeof(void *), GFP_KERNEL);
@@ -126,7 +126,7 @@ static int parse_opa_builtins(opa_wrapper *opa, char *json)
             }
             else
             {
-                printk(KERN_WARNING "nasp: this opa module uses an unsupported builtin function: %s", name);
+                pr_warn("nasp: this opa module uses an unsupported builtin function: %s", name);
             }
         }
 
@@ -338,7 +338,7 @@ m3ApiRawFunction(opa_abort)
 m3ApiRawFunction(opa_println)
 {
     m3ApiGetArgMem(char *, addr);
-    printk(addr);
+    pr_info("%s", addr);
     m3ApiSuccess();
 }
 
@@ -351,7 +351,7 @@ m3ApiRawFunction(opa_builtin0)
 
     opa_wrapper *opa = (opa_wrapper *)_ctx->userdata;
 
-    printk("nasp: calling opa_builtin0 %d", builtin_id);
+    pr_info("nasp: calling opa_builtin0 %d", builtin_id);
 
     i32 (*builtin)(opa_wrapper *, i32) = opa->builtins[builtin_id];
 
@@ -374,7 +374,7 @@ m3ApiRawFunction(opa_builtin1)
 
     opa_wrapper *opa = (opa_wrapper *)_ctx->userdata;
 
-    printk("nasp: calling opa_builtin1 %d", builtin_id);
+    pr_info("nasp: calling opa_builtin1 %d", builtin_id);
 
     i32 (*builtin)(opa_wrapper *, i32, i32) = opa->builtins[builtin_id];
 
@@ -476,7 +476,7 @@ int this_cpu_opa_eval(const char *input)
     wasm_vm_result result;
 
     opa_wrapper *opa = this_cpu_opa();
-    printk("nasp: opa %s.eval input: %s", opa->eval->module->name, input);
+    pr_info("nasp: opa %s.eval input: %s", opa->eval->module->name, input);
 
     wasm_vm_lock(opa->vm);
 
@@ -490,7 +490,7 @@ int this_cpu_opa_eval(const char *input)
     result = opa_malloc(opa, inputLen);
     if (result.err)
     {
-        FATAL("opa wasm_vm_opa_malloc error: %s", result.err);
+        pr_crit("opa wasm_vm_opa_malloc error: %s", result.err);
         goto cleanup;
     }
 
@@ -502,21 +502,21 @@ int this_cpu_opa_eval(const char *input)
     result = opa_eval(opa, inputAddr, inputLen);
     if (result.err)
     {
-        FATAL("wasm_vm_opa_eval error: %s", result.err);
+        pr_crit("wasm_vm_opa_eval error: %s", result.err);
         goto cleanup;
     }
 
     char *json = (char *)(memory + result.data->i32);
     ret = parse_opa_eval_result(json);
 
-    printk("nasp: opa %s.eval result: %s -> %d", opa->eval->module->name, json, ret);
+    pr_info("nasp: opa %s.eval result: %s -> %d", opa->eval->module->name, json, ret);
 
 cleanup:
     if (inputAddr != 0)
     {
         result = opa_free(opa, inputAddr);
         if (result.err)
-            FATAL("opa wasm_vm_opa_free json error: %s", result.err);
+            pr_crit("opa wasm_vm_opa_free json error: %s", result.err);
     }
 
     wasm_vm_unlock(opa->vm);
@@ -531,7 +531,7 @@ opa_socket_context this_cpu_opa_socket_eval(const char *input)
     wasm_vm_result result;
 
     opa_wrapper *opa = this_cpu_opa();
-    printk("nasp: opa %s.eval input: %s", opa->eval->module->name, input);
+    pr_info("nasp: opa %s.eval input: %s", opa->eval->module->name, input);
 
     wasm_vm_lock(opa->vm);
 
@@ -544,7 +544,7 @@ opa_socket_context this_cpu_opa_socket_eval(const char *input)
     result = opa_malloc(opa, inputLen);
     if (result.err)
     {
-        FATAL("opa wasm_vm_opa_malloc error: %s", result.err);
+        pr_crit("opa wasm_vm_opa_malloc error: %s", result.err);
         goto cleanup;
     }
 
@@ -556,21 +556,21 @@ opa_socket_context this_cpu_opa_socket_eval(const char *input)
     result = opa_eval(opa, inputAddr, inputLen);
     if (result.err)
     {
-        FATAL("wasm_vm_opa_eval error: %s", result.err);
+        pr_crit("wasm_vm_opa_eval error: %s", result.err);
         goto cleanup;
     }
 
     char *json = (char *)(memory + result.data->i32);
     ret = parse_opa_socket_eval_result(json);
 
-    printk("nasp: opa %s.eval result: id[%s] allowed[%d] mtls[%d]", opa->eval->module->name, ret.id, ret.allowed, ret.mtls);
+    pr_info("nasp: opa %s.eval result: id[%s] allowed[%d] mtls[%d]", opa->eval->module->name, ret.id, ret.allowed, ret.mtls);
 
 cleanup:
     if (inputAddr != 0)
     {
         result = opa_free(opa, inputAddr);
         if (result.err)
-            FATAL("opa wasm_vm_opa_free json error: %s", result.err);
+            pr_crit("opa wasm_vm_opa_free json error: %s", result.err);
     }
 
     wasm_vm_unlock(opa->vm);
@@ -596,15 +596,15 @@ void load_opa_data(const char *data)
         {
             result = opa_value_free(opa, opa->dataValueAddr);
             if (result.err)
-                FATAL("load_opa_data opa_value_free error: %s", result.err);
+                pr_crit("load_opa_data opa_value_free error: %s", result.err);
             opa->dataValueAddr = 0;
-            printk("free nasp data");
+            pr_info("free nasp data");
         }
 
         result = opa_malloc(opa, dataLen);
         if (result.err)
         {
-            FATAL("load_opa_data opa_malloc error: %s", result.err);
+            pr_crit("load_opa_data opa_malloc error: %s", result.err);
             wasm_vm_unlock(opa->vm);
 
             continue;
@@ -618,7 +618,7 @@ void load_opa_data(const char *data)
         result = opa_value_parse(opa, dataAddr, dataLen);
         if (result.err)
         {
-            FATAL("load_opa_data opa_value_parse error: %s", result.err);
+            pr_crit("load_opa_data opa_value_parse error: %s", result.err);
             wasm_vm_unlock(opa->vm);
 
             continue;
@@ -628,7 +628,7 @@ void load_opa_data(const char *data)
 
         result = opa_free(opa, dataAddr);
         if (result.err)
-            FATAL("load_opa_data opa_free error: %s", result.err);
+            pr_crit("load_opa_data opa_free error: %s", result.err);
 
         wasm_vm_unlock(opa->vm);
     }

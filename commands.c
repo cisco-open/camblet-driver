@@ -50,7 +50,7 @@ command_answer *send_command(char *name, char *data, task_context *context)
     wake_up_interruptible(&command_wait_queue);
 
     // wait until the command is processed
-    printk("nasp: waiting for command [%s] [%pUB] to be processed", name, cmd->uuid.b);
+    pr_info("nasp: waiting for command [%s] [%pUB] to be processed", name, cmd->uuid.b);
 
     // wait for the command to be processed
     DEFINE_WAIT(wait);
@@ -63,7 +63,7 @@ command_answer *send_command(char *name, char *data, task_context *context)
 
     if (cmd->answer == NULL)
     {
-        printk(KERN_ERR "nasp: command [%s] [%pUB] answer timeout", name, cmd->uuid.b);
+        pr_err("nasp: command [%s] [%pUB] answer timeout", name, cmd->uuid.b);
 
         cmd->answer = kzalloc(sizeof(struct command_answer), GFP_KERNEL);
         cmd->answer->error = strdup("timeout");
