@@ -101,19 +101,19 @@ csr_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len
     csr_result result;
 // We do not want to concern ourselves with how variadic parameters are handled in wasm; instead,
 // we initialize all parameters that are NULL with an empty string.
-#define ALLOCATE_AND_CHECK(field)                                                 \
-    if (!parameters->field)                                                       \
-    {                                                                             \
-        parameters->field = "";                                                   \
-    }                                                                             \
-    i32 field##_len = strlen(parameters->field);                                  \
-    i32 field##_ptr;                                                              \
-    field##_ptr = alloc_and_copy_parameter(parameters->field, field##_len, csr);  \
-    if (field##_ptr == -1)                                                        \
-    {                                                                             \
-        result.err = "nasp: error during allocating ptr with length for " #field; \
-        goto bail;                                                                \
-    }
+#define ALLOCATE_AND_CHECK(field)                                                     \
+    i32 field##_ptr = 0;                                                              \
+    i32 field##_len = 0;                                                              \
+    if (parameters->field)                                                            \
+    {                                                                                 \
+        field##_len = strlen(parameters->field);                                      \
+        field##_ptr = alloc_and_copy_parameter(parameters->field, field##_len, csr);  \
+        if (field##_ptr == -1)                                                        \
+        {                                                                             \
+            result.err = "nasp: error during allocating ptr with length for " #field; \
+            goto bail;                                                                \
+        }                                                                             \
+    }                                                                                 \
 
     ALLOCATE_AND_CHECK(subject);
     ALLOCATE_AND_CHECK(dns);
