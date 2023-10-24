@@ -1,62 +1,51 @@
 package socket
 
-# the scheme of the input object is the following:
-# {
-#   "port": 8000,
-#   "command": "curl",
-#   "uid": 501,
-#   "direction": 0
+import future.keywords
+
+default allow := false
+
+policy_without_selectors(policy) := object.remove(policy, ["selectors"])
+
+is_subset(super, sub) if {
+	sub_set := {value | some value, _ in sub}
+	super_set := {value | some value, _ in super}
+	c := sub_set & super_set
+	c == sub_set
+}
+
+matching_policies contains policy if {
+	some p in data.policies
+	some selectorset in p.selectors
+	is_subset(input.selectors, selectorset)
+
+	policy := object.remove(object.union(p, {"matched_selectors": selectorset}), ["selectors"])
+}
+
+matching_policies_wo_egresses contains policy if {
+	some p in matching_policies
+	policy := object.remove(p, ["egress"])
+}
+
+# egresses contains result if {
+# 	some p in matching_policies
+# 	not p.egress
+# 	result := {"policy": object.remove(p, ["egress", "selectors"])}
 # }
 
-# direction constants
-INPUT := 0
-OUTPUT := 1
+# egresses contains result if {
+# 	some p in matching_policies
+# 	count(p.egress) == 0
+# 	result := {"policy": object.remove(p, ["egress", "selectors"])}
+# }
 
-allowed_ports := {8000, 8080, 5001}
+egresses contains result if {
+	some p in matching_policies
+	some k, egress in p.egress
+	some selectorset in egress.selectors
+	is_subset(input.remote.selectors, selectorset)
 
-allowed_commands := {
-	"curl",
-	"python3",
-	"file-server",
-	"nginx",
-	"iperf",
+	e := object.union(object.remove(egress, ["selectors"]), {"matched_selectors": selectorset})
+	result := object.union(object.remove(p, ["egress", "selectors"]), {"egress": e})
 }
 
-allow = {
-	"mtls": true,
-	"permissive": false,
-} {
-	allowed_ports[input.port]
-	allowed_commands[input.command]
-}
-
-# to test that our bearssl server is compatible with non-bearssl clients
-allow = {
-	"mtls": false,
-	"permissive": false,
-} {
-	input.port == 7000
-	input.command == "python3"
-}
-
-# Allow all traffic from the host curl to container nginx through docker-proxy.
-# From docker-proxy to nginx, we don't repackage the traffic again, mTLS is
-# flowing through the docker-proxy transparently. The most importnatn thing is
-# that nginx thinks that it listens on port 80, and we have to write the rule for that.
-allow = {
-	"mtls": true,
-	"permissive": false,
-} {
-	input.direction == OUTPUT
-	input.port == 8080
-	input.command == "curl"
-}
-
-allow = {
-	"mtls": true,
-	"permissive": false,
-} {
-	input.direction == INPUT
-	input.port == 80
-	input.command == "nginx"
-}
+allow := {"policies_with_egress": egresses, "policies": matching_policies_wo_egresses}

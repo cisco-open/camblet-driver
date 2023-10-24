@@ -61,7 +61,7 @@ wasm_vm_result init_csr_for(wasm_vm *vm, wasm_vm_module *module)
 error:
     if (result.err)
     {
-        FATAL("csr_module function lookups failed for module %s failed: %s -> %s", module->name, result.err, wasm_vm_last_error(module));
+        pr_crit("csr_module function lookups failed for module %s failed: %s -> %s", module->name, result.err, wasm_vm_last_error(module));
         return result;
     }
 
@@ -90,24 +90,30 @@ static i32 alloc_and_copy_parameter(char *str, i32 str_length, csr_module *csr)
         goto bail;
     }
     addr = malloc_result.data->i32;
+
     strncpy(wasm_vm_memory(get_csr_module(csr)) + addr, str, str_length);
 bail:
     return addr;
 }
 
-wasm_vm_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len, csr_parameters *parameters)
+csr_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len, csr_parameters *parameters)
 {
-    wasm_vm_result result;
-
-#define ALLOCATE_AND_CHECK(field)                                                 \
-    i32 field##_len = strlen(parameters->field);                                  \
-    i32 field##_ptr;                                                              \
-    field##_ptr = alloc_and_copy_parameter(parameters->field, field##_len, csr);  \
-    if (field##_ptr == -1)                                                        \
-    {                                                                             \
-        result.err = "nasp: error during allocating ptr with length for " #field; \
-        goto bail;                                                                \
-    }
+    csr_result result;
+// We do not want to concern ourselves with how variadic parameters are handled in wasm; instead,
+// we initialize all parameters that are NULL with an empty string.
+#define ALLOCATE_AND_CHECK(field)                                                     \
+    i32 field##_ptr = 0;                                                              \
+    i32 field##_len = 0;                                                              \
+    if (parameters->field)                                                            \
+    {                                                                                 \
+        field##_len = strlen(parameters->field);                                      \
+        field##_ptr = alloc_and_copy_parameter(parameters->field, field##_len, csr);  \
+        if (field##_ptr == -1)                                                        \
+        {                                                                             \
+            result.err = "nasp: error during allocating ptr with length for " #field; \
+            goto bail;                                                                \
+        }                                                                             \
+    }                                                                                 \
 
     ALLOCATE_AND_CHECK(subject);
     ALLOCATE_AND_CHECK(dns);
@@ -115,29 +121,43 @@ wasm_vm_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff
     ALLOCATE_AND_CHECK(email);
     ALLOCATE_AND_CHECK(ip);
 
-    result = wasm_vm_call_direct(csr->vm, csr->generate_csr,
-                                 priv_key_buff_ptr, priv_key_buff_len,
-                                 subject_ptr, subject_len,
-                                 dns_ptr, dns_len,
-                                 uri_ptr, uri_len,
-                                 email_ptr, email_len,
-                                 ip_ptr, ip_len);
-    if (result.err != NULL)
+    wasm_vm_result vm_result = wasm_vm_call_direct(csr->vm, csr->generate_csr,
+                                                   priv_key_buff_ptr, priv_key_buff_len,
+                                                   subject_ptr, subject_len,
+                                                   dns_ptr, dns_len,
+                                                   uri_ptr, uri_len,
+                                                   email_ptr, email_len,
+                                                   ip_ptr, ip_len);
+    if (vm_result.err != NULL)
     {
-        pr_err("nasp: calling csr_gen errored %s\n", result.err);
+        pr_err("nasp: calling csr_gen errored %s\n", vm_result.err);
+        result.err = vm_result.err;
         goto bail;
     }
-    printk("nasp: result of calling csr_gen %lldd\n", result.data->i64);
+    pr_info("nasp: result of calling csr_gen %lld\n", vm_result.data->i64);
+
+    if (vm_result.data->i64 == 0)
+    {
+        result.err = "csr_gen wasm module returned empty value";
+        goto bail;
+    }
+    result.csr_len = (i32)(vm_result.data->i64);
+    result.csr_ptr = (i32)(vm_result.data->i64 >> 32);
+
 bail:
     i32 pointers[] = {subject_ptr, dns_ptr, uri_ptr, email_ptr, ip_ptr};
 
     int i;
     for (i = 0; i < (sizeof(pointers) / sizeof(pointers[0])); i++)
     {
+        if (pointers[i] <= 1)
+        {
+            continue;
+        }
         wasm_vm_result free_result = csr_free(csr, pointers[i]);
         if (free_result.err)
         {
-            result = free_result;
+            result.err = free_result.err;
         }
     }
     return result;

@@ -27,6 +27,7 @@
 #include "rsa_tools.h"
 #include "socket.h"
 #include "tls.h"
+#include "string.h"
 
 const char *ALPNs[] = {
 	"istio-peer-exchange",
@@ -40,8 +41,8 @@ static struct proto nasp_ktls_prot;
 static struct proto nasp_v6_prot;
 static struct proto nasp_v6_ktls_prot;
 
-static const br_rsa_private_key *rsa_priv;
-static const br_rsa_public_key *rsa_pub;
+static br_rsa_private_key *rsa_priv;
+static br_rsa_public_key *rsa_pub;
 
 typedef struct
 {
@@ -75,6 +76,8 @@ typedef struct
 	buffer_t *write_buffer;
 
 	struct sock *sock;
+
+	opa_socket_context opa_socket_ctx;
 
 	int (*ktls_recvmsg)(struct sock *sock,
 						struct msghdr *msg,
@@ -271,7 +274,7 @@ static void nasp_socket_free(nasp_socket *s)
 {
 	if (s)
 	{
-		printk("nasp: freeing nasp_socket of %s", current->comm);
+		pr_info("nasp: freeing nasp_socket of %s", current->comm);
 
 		if (s->p)
 		{
@@ -290,7 +293,7 @@ static void nasp_socket_free(nasp_socket *s)
 			}
 			else
 			{
-				printk("nasp: %s br_sslio SSL closed", current->comm);
+				pr_info("nasp: %s br_sslio SSL closed", current->comm);
 			}
 		}
 
@@ -304,6 +307,8 @@ static void nasp_socket_free(nasp_socket *s)
 		}
 
 		br_x509_nasp_free(&s->xc);
+
+		opa_socket_context_free(s->opa_socket_ctx);
 
 		// if (c->rsa_priv != NULL)
 		// {
@@ -424,45 +429,6 @@ void dump_array(unsigned char array[], size_t len)
 	}
 }
 
-void dump_msghdr(struct msghdr *msg)
-{
-	char data[1024];
-	size_t len, nr_segs, iovlen;
-	int npages;
-
-	pr_info("msg_name = %p\n", msg->msg_name);
-	pr_info("msg_namelen = %u\n", msg->msg_namelen);
-	pr_info("msg_iter.type = %u\n", msg->msg_iter.iter_type);
-	pr_info("msg_iter.count = %zd\n", msg->msg_iter.count);
-
-	pr_info("iovoffset = %zd", msg->msg_iter.iov_offset);
-	msg->msg_iter.iov_offset = 0;
-	// iov_iter_zero(2, &msg->msg_iter);
-	pr_info("iovoffset = %zd", msg->msg_iter.iov_offset);
-
-	nr_segs = iov_iter_single_seg_count(&msg->msg_iter);
-	pr_info("iovsegcount = %zd", nr_segs);
-
-	npages = iov_iter_npages(&msg->msg_iter, 16384);
-	pr_info("npages = %d", npages);
-
-	struct iovec *iov;
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
-	iov = msg->msg_iter.iov;
-#else
-	iov = iter_iov(&msg->msg_iter);
-#endif
-
-	iovlen = iov_length(iov, npages);
-	pr_info("iovlen = %zd", iovlen);
-
-	len = copy_from_iter(data, iovlen - msg->msg_iter.count, &msg->msg_iter);
-	pr_info("copylen = %zd\n", len);
-	pr_info("msg = [%.*s]\n", (int)len, data);
-	pr_info("iovoffset = %zd\n", msg->msg_iter.iov_offset);
-}
-
 static int configure_ktls_sock(nasp_socket *s);
 
 static bool nasp_socket_proxywasm_enabled(nasp_socket *s)
@@ -480,7 +446,7 @@ static int ensure_tls_handshake(nasp_socket *s)
 		ret = br_sslio_flush(&s->ioc);
 		if (ret == 0)
 		{
-			printk("nasp: %s %s TLS handshake done, sk: %p", current->comm, get_direction(s), s->sock);
+			pr_info("nasp: %s %s TLS handshake done, sk: %p", current->comm, get_direction(s), s->sock);
 		}
 		else
 		{
@@ -493,7 +459,7 @@ static int ensure_tls_handshake(nasp_socket *s)
 
 		if (protocol)
 		{
-			printk("nasp: %s protocol name: %s", current->comm, protocol);
+			pr_info("nasp: %s protocol name: %s", current->comm, protocol);
 			if (nasp_socket_proxywasm_enabled(s))
 				set_property_v(s->pc, "upstream.negotiated_protocol", protocol, strlen(protocol));
 		}
@@ -664,7 +630,7 @@ void nasp_close(struct sock *sk, long timeout)
 	nasp_socket *s = READ_ONCE(sk->sk_user_data);
 	if (s)
 	{
-		printk("nasp: close %s running for sk %p ", current->comm, sk);
+		pr_info("nasp: close %s running for sk %p ", current->comm, sk);
 		nasp_socket_free(s);
 		WRITE_ONCE(sk->sk_user_data, NULL);
 	}
@@ -720,8 +686,8 @@ static int configure_ktls_sock(nasp_socket *s)
 		return 0;
 	}
 
-	printk("nasp: configure_ktls for %s cipher suite: %x version: %x, iv: %.*s", current->comm, params->cipher_suite, params->version, 12, eng->out.chapol.iv);
-	printk("nasp: configure_ktls for %s cipher suite: %x version: %x, iv: %.*s", current->comm, params->cipher_suite, params->version, 12, eng->in.chapol.iv);
+	pr_info("nasp: configure_ktls for %s cipher suite: %x version: %x, iv: %.*s", current->comm, params->cipher_suite, params->version, 12, eng->out.chapol.iv);
+	pr_info("nasp: configure_ktls for %s cipher suite: %x version: %x, iv: %.*s", current->comm, params->cipher_suite, params->version, 12, eng->in.chapol.iv);
 
 	struct tls12_crypto_info_chacha20_poly1305 crypto_info_tx;
 	crypto_info_tx.info.version = TLS_1_2_VERSION;
@@ -791,17 +757,9 @@ static int configure_ktls_sock(nasp_socket *s)
 	return 0;
 }
 
-typedef enum
-{
-	INPUT,
-	OUTPUT
-} direction;
-
 // a function to evaluate the connection if it should be intercepted, now with opa
-static opa_socket_context socket_eval(u16 port, direction direction, const char *command, u32 uid)
+static opa_socket_context socket_eval(const char *input)
 {
-	char input[256];
-	sprintf(input, "{\"port\": %d, \"direction\": %d, \"command\": \"%s\", \"uid\": %d}", port, direction, command, uid);
 	return this_cpu_opa_socket_eval(input);
 }
 
@@ -862,18 +820,23 @@ static int handle_cert_gen(nasp_socket *sc)
 				return -1;
 			}
 
-			sc->parameters->subject = "CN=banzai.cloud";
-			sc->parameters->dns = "banzaicloud.com";
-			sc->parameters->uri = "banzaicloud";
-			sc->parameters->email = "bmolnar@cisco.com";
-			sc->parameters->ip = "127.0.0.1";
+			sc->parameters->subject = "CN=nasp-protected-workload";
 
-			wasm_vm_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
+			if (sc->opa_socket_ctx.dns)
+			{
+				sc->parameters->dns = sc->opa_socket_ctx.dns;
+			}
+			if (sc->opa_socket_ctx.uri)
+			{
+				sc->parameters->uri = sc->opa_socket_ctx.uri;
+			}
+
+			csr_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
 			if (generated_csr.err)
 			{
 				pr_err("nasp: generate_csr wasm_vm_csr_gen error: %s", generated_csr.err);
 				csr_unlock(csr);
-				return error;
+				return -1;
 			}
 
 			wasm_vm_result free_result = csr_free(csr, addr);
@@ -884,10 +847,14 @@ static int handle_cert_gen(nasp_socket *sc)
 				return -1;
 			}
 
-			i64 csr_from_module = generated_csr.data->i64;
-
-			i32 csr_len = (i32)(csr_from_module);
-			csr_ptr = (i32)(csr_from_module >> 32) + mem;
+			csr_ptr = strndup(generated_csr.csr_ptr + mem, generated_csr.csr_len);
+			free_result = csr_free(csr, generated_csr.csr_ptr);
+			if (free_result.err)
+			{
+				pr_err("nasp: generate_csr wasm_vm_csr_free error: %s", free_result.err);
+				csr_unlock(csr);
+				return -1;
+			}
 		}
 		csr_unlock(csr);
 
@@ -930,37 +897,42 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		prot = &nasp_v6_prot;
 	}
 
+	if (!client && *err != 0)
+	{
+		goto error;
+	}
+
 	u16 port = (u16)(sk->sk_portpair >> 16);
 
-	opa_socket_context opa_socket = socket_eval(port, INPUT, current->comm, current_uid().val);
-	if (client && opa_socket.allowed)
+	sc = nasp_socket_accept(client);
+	if (!sc)
+	{
+		pr_err("nasp: nasp_socket_accept failed to create nasp_socket");
+		goto error;
+	}
+
+	// send attest command
+	command_answer *answer = send_attest_command(INPUT, client, port);
+
+	if (answer->error)
+	{
+		pr_err("nasp: accept failed to send attest command: %s", answer->error);
+	}
+	else
+	{
+		pr_info("nasp: accept attest command answer: %s", answer->answer);
+		sc->opa_socket_ctx = socket_eval(answer->answer);
+	}
+
+	free_command_answer(answer);
+
+	if (client && sc->opa_socket_ctx.allowed)
 	{
 		u16 client_port = (u16)(client->sk_portpair);
-		printk("nasp_accept: uid: %d app: %s on ports: %d <- %d", current_uid().val, current->comm, port, client_port);
-
-		sc = nasp_socket_accept(client);
-		if (!sc)
-		{
-			pr_err("nasp: nasp_socket_accept failed to create nasp_socket");
-			goto error;
-		}
+		pr_info("nasp_accept: uid: %d app: %s on ports: %d <- %d", current_uid().val, current->comm, port, client_port);
 
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
-
-		// Sample how to send a command to the userspace agents
-		command_answer *answer = send_accept_command(port);
-
-		if (answer->error)
-		{
-			pr_err("nasp: accept failed to send command: %s", answer->error);
-		}
-		else
-		{
-			pr_info("nasp: accept command answer: %s", answer->answer);
-		}
-
-		free_command_answer(answer);
 
 		int result = handle_cert_gen(sc);
 		if (result == -1)
@@ -984,12 +956,12 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		br_ssl_server_init_full_rsa(sc->sc, sc->chain, sc->chain_len, sc->rsa_priv);
 
 		// mTLS enablement
-		if (opa_socket.mtls)
+		if (sc->opa_socket_ctx.mtls)
 		{
 			br_x509_minimal_init_full(&sc->xc.ctx, sc->trust_anchors, sc->trust_anchors_len);
 			br_ssl_server_set_trust_anchor_names_alt(sc->sc, sc->trust_anchors, sc->trust_anchors_len);
 
-			br_x509_nasp_init(&sc->xc, &sc->sc->eng);
+			br_x509_nasp_init(&sc->xc, &sc->sc->eng, &sc->opa_socket_ctx);
 			br_ssl_engine_set_default_rsavrfy(&sc->sc->eng);
 		}
 
@@ -1038,11 +1010,10 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
 	u16 port = ntohs(usin->sin_port);
+	nasp_socket *sc = NULL;
 
 	int err;
 	struct proto *prot;
-
-	nasp_socket *sc = NULL;
 
 	if (sk->sk_family == AF_INET)
 	{
@@ -1055,35 +1026,42 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		prot = &nasp_v6_prot;
 	}
 
-	printk("nasp: nasp_connect uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
+	if (err != 0)
+	{
+		goto error;
+	}
 
-	opa_socket_context opa_socket = socket_eval(port, OUTPUT, current->comm, current_uid().val);
-	if (err == 0 && opa_socket.allowed)
+	pr_info("nasp: nasp_connect uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
+
+	sc = nasp_socket_connect(sk);
+	if (!sc)
+	{
+		pr_err("nasp: nasp_socket_connect failed to create nasp_socket");
+		goto error;
+	}
+
+	// send attest command
+	command_answer *answer = send_attest_command(OUTPUT, sk, port);
+
+	if (answer->error)
+	{
+		pr_err("nasp: connect failed to send attest command: %s", answer->error);
+	}
+	else
+	{
+		pr_info("nasp: connect attest command answer: %s", answer->answer);
+
+		sc->opa_socket_ctx = socket_eval(answer->answer);
+	}
+
+	free_command_answer(answer);
+
+	if (err == 0 && sc->opa_socket_ctx.allowed)
 	{
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
-		nasp_socket *sc = nasp_socket_connect(sk);
-		if (!sc)
-		{
-			pr_err("nasp: nasp_socket_connect failed to create nasp_socket");
-			goto error;
-		}
-
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
-
-		command_answer *answer = send_connect_command(port);
-
-		if (answer->error)
-		{
-			pr_err("nasp: failed to send command: %s", answer->error);
-		}
-		else
-		{
-			pr_info("nasp: command answer: %s", answer->answer);
-		}
-
-		free_command_answer(answer);
 
 		int result = handle_cert_gen(sc);
 		if (result == -1)
@@ -1107,10 +1085,10 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		pr_info("nasp: connect use cert from agent");
 		br_ssl_client_init_full(sc->cc, &sc->xc.ctx, sc->trust_anchors, sc->trust_anchors_len);
 
-		br_x509_nasp_init(&sc->xc, &sc->cc->eng);
+		br_x509_nasp_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx);
 
 		// mTLS enablement
-		if (opa_socket.mtls)
+		if (sc->opa_socket_ctx.mtls)
 		{
 			br_ssl_client_set_single_rsa(sc->cc, sc->chain, sc->chain_len, sc->rsa_priv, br_rsa_pkcs1_sign_get_default());
 		}
@@ -1153,13 +1131,13 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 error:
 	nasp_socket_free(sc);
 
-	release_sock(sk);
-	sk->sk_prot->close(sk, 0);
 	lock_sock(sk);
+	sk->sk_prot->close(sk, 0);
+	release_sock(sk);
 
 	pr_err("nasp: [%s] connect error, socket closed", current->comm);
 
-	return -1;
+	return err;
 }
 
 int socket_init(void)
@@ -1211,7 +1189,7 @@ int socket_init(void)
 		return -1;
 	}
 
-	printk(KERN_INFO "nasp: socket support loaded.");
+	pr_info("nasp: socket support loaded.");
 
 	return 0;
 }
@@ -1228,5 +1206,5 @@ void socket_exit(void)
 	kfree(rsa_priv);
 	kfree(rsa_pub);
 
-	printk(KERN_INFO "nasp: socket support unloaded.");
+	pr_info("nasp: socket support unloaded.");
 }

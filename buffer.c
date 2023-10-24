@@ -22,8 +22,11 @@ buffer_t *buffer_new(int capacity)
 
 void buffer_free(buffer_t *buffer)
 {
-  kfree(buffer->data);
-  kfree(buffer);
+  if (buffer)
+  {
+    kfree(buffer->data);
+    kfree(buffer);
+  }
 }
 
 char *buffer_access(buffer_t *buffer, int len)

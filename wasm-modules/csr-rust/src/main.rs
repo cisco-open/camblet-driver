@@ -124,46 +124,55 @@ pub unsafe extern "C" fn csr_gen(priv_key: &[u8], subject: &[u8], dns: &[u8], ur
     let mut subject_alt_names = Vec::new();
     use std::net::IpAddr;
 
-    let raw_ip = match str::from_utf8(&ip) {
-        Ok(ip) => ip,
-        Err(err) => { println!("error parsing ip: {}", err); return 0},
-    };
-    for ip_str in raw_ip.split(',') {
-        let trimmed_ip_str = ip_str.trim().trim_end_matches(char::from(0));
+    if !ip.is_empty() {
+        let raw_ip = match str::from_utf8(&ip) {
+            Ok(ip) => ip,
+            Err(err) => { println!("error parsing ip: {}", err); return 0},
+        };
+        for ip_str in raw_ip.split(',') {
+            let trimmed_ip_str = ip_str.trim().trim_end_matches(char::from(0));
 
-        match trimmed_ip_str.parse::<IpAddr>() {
-            Ok(pip) => subject_alt_names.push(GeneralName::from(pip)),
-            Err(err) => { println!("error processing ip: {}", err); return 0},
+            match trimmed_ip_str.parse::<IpAddr>() {
+                Ok(pip) => subject_alt_names.push(GeneralName::from(pip)),
+                Err(err) => { println!("error processing ip: {}", err); return 0},
+            }
         }
     }
+    if !dns.is_empty() {
+        let dns_values = match process_ia5string(&dns, GeneralName::DnsName) {
+            Ok(dns_values) => dns_values,
+            Err(err) => {println!("error parsing dns values: {}", err); return 0},
+        };
+        subject_alt_names.extend(dns_values);
+    }
 
-    let dns_values = match process_ia5string(&dns, GeneralName::DnsName) {
-        Ok(dns_values) => dns_values,
-        Err(err) => {println!("error parsing dns values: {}", err); return 0},
-    };
-    subject_alt_names.extend(dns_values);
+    if !uri.is_empty() {
+        let uri_values = match process_ia5string(&uri, GeneralName::UniformResourceIdentifier) {
+            Ok(uri_values) => uri_values,
+            Err(err) => {println!("error parsing uri values: {}", err); return 0},
+        };
+        subject_alt_names.extend(uri_values);
+    }
 
-    let uri_values = match process_ia5string(&uri, GeneralName::UniformResourceIdentifier) {
-        Ok(uri_values) => uri_values,
-        Err(err) => {println!("error parsing uri values: {}", err); return 0},
-    };
-    subject_alt_names.extend(uri_values);
-
-    let email_values = match process_ia5string(&email, GeneralName::Rfc822Name) {
-        Ok(email_values) => email_values,
-        Err(err) => {println!("error parsing email values: {}", err); return 0},
-    };
-    subject_alt_names.extend(email_values);
+    if !email.is_empty() {
+        let email_values = match process_ia5string(&email, GeneralName::Rfc822Name) {
+            Ok(email_values) => email_values,
+            Err(err) => {println!("error parsing email values: {}", err); return 0},
+        };
+        subject_alt_names.extend(email_values);
+    }
     
     let mut builder = match RequestBuilder::new(subject, &signing_key) {
         Ok(builder) => builder,
         Err(err) => { println!("error creating builder: {}", err); return 0 },
     };
 
-    let _ = match builder.add_extension(&SubjectAltName(subject_alt_names)) {
-            Ok(()) => (),
-            Err(err) => { println!("error adding extension Subject Alt Name to cert req builder: {}", err); return 0},
-    };
+    if !subject_alt_names.is_empty() {
+        let _ = match builder.add_extension(&SubjectAltName(subject_alt_names)) {
+                Ok(()) => (),
+                Err(err) => { println!("error adding extension Subject Alt Name to cert req builder: {}", err); return 0},
+        };
+    }
 
     let cert_req = match builder.build() {
         Ok(cert_req) => cert_req,

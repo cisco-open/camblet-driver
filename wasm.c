@@ -23,8 +23,8 @@ const wasm_vm_result wasm_vm_result_ok = {0};
 
 typedef struct wasm_vm
 {
-    spinlock_t _lock;
-    unsigned long _lock_flags;
+    struct mutex _lock;
+
     int cpu;
 
     IM3Environment _env;
@@ -52,7 +52,7 @@ wasm_vm *wasm_vm_new(int cpu)
         return NULL;
     }
 
-    spin_lock_init(&vm->_lock);
+    mutex_init(&vm->_lock);
 
     return vm;
 }
@@ -102,7 +102,7 @@ wasm_vm_result wasm_vm_new_per_cpu(void)
     int cpu = 0;
     for_each_possible_cpu(cpu)
     {
-        printk("nasp: creating vm for cpu %d", cpu);
+        pr_info("nasp: creating vm for cpu %d", cpu);
         vms[cpu] = wasm_vm_new(cpu);
     }
     return wasm_vm_result_ok;
@@ -115,7 +115,7 @@ wasm_vm_result wasm_vm_destroy_per_cpu(void)
         int cpu = 0;
         for_each_possible_cpu(cpu)
         {
-            printk("nasp: destroying vm for cpu %d", cpu);
+            pr_info("nasp: destroying vm for cpu %d", cpu);
             wasm_vm_destroy(vms[cpu]);
         }
     }
@@ -139,7 +139,7 @@ static void wasm_vm_print_backtrace(wasm_vm_function *func)
         pr_err("found no frames");
     while (curr)
     {
-        // printk("found frame function is -> %p", curr->function);
+        // pr_info("found frame function is -> %p", curr->function);
         pr_err("  %d: 0x%06x - %s!%s",
                frameCount, curr->moduleOffset,
                m3_GetModuleName(m3_GetFunctionModule(curr->function)),
@@ -432,11 +432,11 @@ static M3Result m3_link_all(IM3Module module)
 
 static void *print_module_symbols(IM3Module module, void * i_info)
 {
-    printk("nasp:   module = %s\n", module->name);
+    pr_info("nasp:   module = %s\n", module->name);
     int i;
     for (i = 0; i < module->numGlobals; i++)
     {
-        printk("nasp:     global -> %s", module->globals[i].name);
+        pr_info("nasp:     global -> %s", module->globals[i].name);
     }
     for (i = 0; i < module->numFunctions; i++)
     {
@@ -445,7 +445,7 @@ static void *print_module_symbols(IM3Module module, void * i_info)
         bool isImported = f->import.moduleUtf8 || f->import.fieldUtf8;
 
         if (isImported)
-            printk("nasp:     import -> %s.%s", f->import.moduleUtf8, f->names[0]);
+            pr_info("nasp:     import -> %s.%s", f->import.moduleUtf8, f->names[0]);
     }
     for (i = 0; i < module->numFunctions; i++)
     {
@@ -453,7 +453,7 @@ static void *print_module_symbols(IM3Module module, void * i_info)
 
         if (f->export_name != NULL)
         {
-            printk("nasp:     function -> %s(%d) -> %d", f->export_name, f->funcType->numArgs, f->funcType->numRets);
+            pr_info("nasp:     function -> %s(%d) -> %d", f->export_name, f->funcType->numArgs, f->funcType->numRets);
         }
     }
 
@@ -462,7 +462,7 @@ static void *print_module_symbols(IM3Module module, void * i_info)
 
 void wasm_vm_dump_symbols(wasm_vm *vm)
 {
-    printk("nasp: vm for cpu = %d\n", vm->cpu);
+    pr_info("nasp: vm for cpu = %d\n", vm->cpu);
     int i;
     for (i = 0; i < vm->_num_runtimes; i++)
         ForEachModule(vm->_runtimes[i], print_module_symbols, NULL);
@@ -470,12 +470,12 @@ void wasm_vm_dump_symbols(wasm_vm *vm)
 
 void wasm_vm_lock(wasm_vm *vm)
 {
-    spin_lock_irqsave(&vm->_lock, vm->_lock_flags);
+    mutex_lock(&vm->_lock);
 }
 
 void wasm_vm_unlock(wasm_vm *vm)
 {
-    spin_unlock_irqrestore(&vm->_lock, vm->_lock_flags);
+    mutex_unlock(&vm->_lock);
 }
 
 wasm_vm_result wasm_vm_get_module(wasm_vm *vm, const char *name)

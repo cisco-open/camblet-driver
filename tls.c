@@ -61,9 +61,39 @@ xwc_end_chain(const br_x509_class **ctx)
     if (err)
         return err;
 
-    for (int i = 0; i < mini_cc->num_name_elts; i++)
+    int i, k;
+    bool allowed = true;
+
+    if (nasp_cc->socket_context->allowed_spiffe_ids_length > 0)
     {
-        printk("nasp: peer certificate name_elts[%d]: status: %d, value: %s", i, mini_cc->name_elts[i].status, mini_cc->name_elts[i].buf);
+        allowed = false;
+    }
+
+    pr_info("nasp: allowed spiffe id len[%d]", nasp_cc->socket_context->allowed_spiffe_ids_length);
+
+    for (i = 0; i < mini_cc->num_name_elts; i++)
+    {
+        pr_info("nasp: peer certificate name_elts[%d]: status: %d, value: %s (len: %ld)", i, mini_cc->name_elts[i].status, mini_cc->name_elts[i].buf, mini_cc->name_elts[i].len);
+
+        if (mini_cc->name_elts[i].oid == OID_uniformResourceIdentifier)
+        {
+            for (k = 0; k < nasp_cc->socket_context->allowed_spiffe_ids_length; k++)
+            {
+                if (strncmp(nasp_cc->socket_context->allowed_spiffe_ids[k], mini_cc->name_elts[i].buf, strlen(nasp_cc->socket_context->allowed_spiffe_ids[k])) == 0)
+                {
+                    pr_info("nasp: %s == ^%s", mini_cc->name_elts[i].buf, nasp_cc->socket_context->allowed_spiffe_ids[k]);
+                    allowed = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!allowed)
+    {
+        pr_info("nasp: peer certificate is not allowed!");
+
+        return BR_ERR_X509_NOT_TRUSTED;
     }
 
     return 0;
@@ -87,14 +117,17 @@ static const br_x509_class x509_nasp_vtable = {
     xwc_get_pkey,
 };
 
-void br_x509_nasp_init(br_x509_nasp_context *ctx, br_ssl_engine_context *eng)
+void br_x509_nasp_init(br_x509_nasp_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context)
 {
     ctx->vtable = &x509_nasp_vtable;
+    ctx->socket_context = socket_context;
 
     br_name_element *name_elts = kmalloc(sizeof(br_name_element) * 3, GFP_KERNEL);
 
     char const *oids[] = {OID_rfc822Name, OID_dNSName, OID_uniformResourceIdentifier};
-    for (int i = 0; i < sizeof(oids) / sizeof(oids[0]); i++)
+
+    int i;
+    for (i = 0; i < sizeof(oids) / sizeof(oids[0]); i++)
     {
         name_elts[i].oid = oids[i];
         name_elts[i].buf = kmalloc(sizeof(char) * 256, GFP_KERNEL);
@@ -108,7 +141,8 @@ void br_x509_nasp_init(br_x509_nasp_context *ctx, br_ssl_engine_context *eng)
 
 void br_x509_nasp_free(br_x509_nasp_context *ctx)
 {
-    for (int i = 0; i < ctx->ctx.num_name_elts; i++)
+    int i;
+    for (i = 0; i < ctx->ctx.num_name_elts; i++)
     {
         kfree(ctx->ctx.name_elts[i].buf);
     }
