@@ -8,6 +8,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"math/big"
@@ -52,10 +53,12 @@ func certificate() tls.Certificate {
 	return cert
 }
 
+var port int
 var tlsOn bool
 
 func main() {
 
+	flag.IntVar(&port, "port", 8000, "Listening port")
 	flag.BoolVar(&tlsOn, "tls", false, "Enable TLS")
 	flag.Parse()
 
@@ -107,14 +110,14 @@ func main() {
 	var err error
 
 	if tlsOn {
-		log.Println("Listening on https://0.0.0.0:8000...")
+		log.Println("Listening on https://0.0.0.0:" + fmt.Sprint(port) + "...")
 
 		tlsConfig := &tls.Config{
 			Certificates: []tls.Certificate{certificate()},
 			NextProtos:   []string{"h2", "http/1.1"},
 		}
 
-		l, err := net.Listen("tcp", ":8000")
+		l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -122,8 +125,8 @@ func main() {
 		tlsListener := tls.NewListener(l, tlsConfig)
 		err = http.Serve(tlsListener, nil)
 	} else {
-		log.Println("Listening on http://0.0.0.0:8000...")
-		err = http.ListenAndServe(":8000", nil)
+		log.Println("Listening on http://0.0.0.0:" + fmt.Sprint(port) + "...")
+		err = http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 	}
 
 	if err != nil {
