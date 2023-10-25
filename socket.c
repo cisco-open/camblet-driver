@@ -77,6 +77,7 @@ struct nasp_socket
 	proxywasm_context *pc;
 	i64 direction;
 	char *protocol;
+	struct mutex lock;
 
 	buffer_t *read_buffer;
 	buffer_t *write_buffer;
@@ -349,6 +350,8 @@ static nasp_socket *nasp_socket_accept(struct sock *sock)
 
 	s->sock = sock;
 
+	mutex_init(&s->lock);
+
 	proxywasm *p = this_cpu_proxywasm();
 
 	if (p)
@@ -379,6 +382,8 @@ static nasp_socket *nasp_socket_connect(struct sock *sock)
 	s->write_buffer = buffer_new(16 * 1024);
 
 	s->sock = sock;
+
+	mutex_init(&s->lock);
 
 	proxywasm *p = this_cpu_proxywasm();
 
@@ -419,6 +424,15 @@ static int ensure_tls_handshake(nasp_socket *s)
 	int ret = 0;
 	char *protocol = READ_ONCE(s->protocol);
 
+	if (protocol != NULL)
+	{
+		return ret;
+	}
+
+	mutex_lock(&s->lock);
+
+	protocol = READ_ONCE(s->protocol);
+
 	if (protocol == NULL)
 	{
 		ret = br_sslio_flush(&s->ioc);
@@ -430,7 +444,7 @@ static int ensure_tls_handshake(nasp_socket *s)
 		{
 			const br_ssl_engine_context *ec = get_ssl_engine_context(s);
 			pr_err("nasp: %s TLS handshake error %d", current->comm, br_ssl_engine_last_error(ec));
-			return ret;
+			goto bail;
 		}
 
 		protocol = br_ssl_engine_get_selected_protocol(&s->sc->eng);
@@ -458,10 +472,13 @@ static int ensure_tls_handshake(nasp_socket *s)
 			if (ret != 0)
 			{
 				pr_err("nasp: socket %s configure_ktls_sock failed %d", current->comm, ret);
-				return ret;
+				goto bail;
 			}
 		}
 	}
+
+bail:
+	mutex_unlock(&s->lock);
 
 	return ret;
 }
