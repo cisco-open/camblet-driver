@@ -954,7 +954,7 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 	if (client && sc->opa_socket_ctx.allowed)
 	{
 		u16 client_port = (u16)(client->sk_portpair);
-		pr_info("nasp_accept: uid: %d app: %s on ports: %d <- %d", current_uid().val, current->comm, port, client_port);
+		pr_info("nasp: nasp_accept uid: %d app: %s on ports: %d <- %d", current_uid().val, current->comm, port, client_port);
 
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
