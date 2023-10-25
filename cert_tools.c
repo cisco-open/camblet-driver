@@ -22,13 +22,18 @@ static unsigned long cert_cache_lock_flags;
 
 // add_cert_to_cache adds a certificate chain with a given trust anchor to a linked list. The key will identify this entry.
 // the function is thread safe.
-void add_cert_to_cache(u16 key, br_x509_certificate *chain, size_t chain_len,
+void add_cert_to_cache(char* key, br_x509_certificate *chain, size_t chain_len,
                        br_x509_trust_anchor *trust_anchors, size_t trust_anchors_len)
 {
     cert_with_key *new_entry = kzalloc(sizeof(cert_with_key), GFP_KERNEL);
     if (!new_entry)
     {
         pr_err("cert_tools: memory allocation error");
+        return;
+    }
+    if (!key)
+    {
+        pr_err("cert_tools: provided key is null");
         return;
     }
     new_entry->key = key;
@@ -45,13 +50,13 @@ void add_cert_to_cache(u16 key, br_x509_certificate *chain, size_t chain_len,
 
 // find_cert_from_cache tries to find a certificate bundle for the given key. In case of failure it returns a NULL.
 // the function is thread safe
-cert_with_key *find_cert_from_cache(u32 key)
+cert_with_key *find_cert_from_cache(char* key)
 {
     cert_with_key *cert_bundle;
     spin_lock_irqsave(&cert_cache_lock, cert_cache_lock_flags);
     list_for_each_entry(cert_bundle, &cert_cache, list)
     {
-        if (cert_bundle->key == key)
+        if (strcmp(cert_bundle->key, key) == 0)
         {
             spin_unlock_irqrestore(&cert_cache_lock, cert_cache_lock_flags);
             return cert_bundle;

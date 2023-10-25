@@ -776,7 +776,7 @@ int (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 struct sock *(*accept_v6)(struct sock *sk, int flags, int *err, bool kern);
 int (*connect_v6)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 
-static int handle_cert_gen(nasp_socket *sc, u32 key)
+static int handle_cert_gen(nasp_socket *sc)
 {
 	// Generating certificate signing request
 	if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
@@ -879,7 +879,7 @@ static int handle_cert_gen(nasp_socket *sc, u32 key)
 	return 0;
 }
 
-static int cache_and_validate_cert(nasp_socket *sc, u32 key)
+static int cache_and_validate_cert(nasp_socket *sc, char* key)
 {
 	// Check if cert gen is required or we already have a cached certificate for this socket.
 	u16 cert_validation_err_no = 0;
@@ -887,7 +887,7 @@ static int cache_and_validate_cert(nasp_socket *sc, u32 key)
 	if (!cached_cert_bundle)
 	{
 	regen_cert:
-		int err = handle_cert_gen(sc, key);
+		int err = handle_cert_gen(sc);
 		if (err == -1)
 		{
 			return -1;
@@ -1000,7 +1000,7 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
 
-		int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.keyid);
+		int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.id);
 		if (result == -1)
 		{
 			goto error;
@@ -1130,7 +1130,7 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
 
-		int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.keyid);
+		int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.id);
 		if (result == -1)
 		{
 			goto error;
