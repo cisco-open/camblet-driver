@@ -47,19 +47,19 @@ jobs:
         fi
         sudo dkms install -m nasp -v 0.1.0
 
-    - name: Run the kernel module
-      working-directory: nasp-kernel-module 
-      run: |
-        sudo modprobe tls
-        sudo modprobe nasp
-        sudo dmesg -T
-
     - name: Build Nasp CLI
       working-directory: nasp
       run: |
         echo "checking out ${GITHUB_HEAD_REF} branch"
         git checkout ${GITHUB_HEAD_REF} || echo "branch not found"
         make build
+  
+    - name: Run the kernel module
+      working-directory: nasp-kernel-module 
+      run: |
+        sudo modprobe tls
+        sudo modprobe nasp
+        sudo dmesg -T
 
     # - name: Setup upterm session
     #   uses: lhotari/action-upterm@v1
@@ -79,7 +79,7 @@ jobs:
         sleep 2
 
         echo "Test downloading a bigger file"
-        truncate -s 2M bigfile.o
+        head -c 2M </dev/urandom > bigfile.o
         curl -v -o /tmp/bigfile_downloaded.o http://localhost:8000/bigfile.o
 
         echo "Test uploading this file"
