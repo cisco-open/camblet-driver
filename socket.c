@@ -100,8 +100,6 @@ struct nasp_socket
 
 	nasp_send_msg *send_msg;
 	nasp_send_msg *recv_msg;
-
-	bool passthrough;
 };
 
 static int get_read_buffer_capacity(nasp_socket *s);
@@ -261,7 +259,7 @@ static void nasp_socket_free(nasp_socket *s)
 			proxywasm_unlock(s->p);
 		}
 
-		if (s->protocol && !s->ktls_sendmsg && !s->passthrough)
+		if (s->protocol && !s->ktls_sendmsg && !s->opa_socket_ctx.passthrough)
 		{
 			// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
 			if (!br_sslio_close(&s->ioc))
@@ -334,7 +332,7 @@ int proxywasm_attach(proxywasm *p, nasp_socket *s, ListenerDirection direction, 
 	return 0;
 }
 
-static nasp_socket *nasp_socket_accept(struct sock *sock, opa_socket_context opa_ctx)
+static nasp_socket *nasp_socket_accept(struct sock *sock)
 {
 	nasp_socket *s = kzalloc(sizeof(nasp_socket), GFP_KERNEL);
 	s->sc = kzalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
@@ -348,7 +346,6 @@ static nasp_socket *nasp_socket_accept(struct sock *sock, opa_socket_context opa
 	s->write_buffer = buffer_new(16 * 1024);
 
 	s->sock = sock;
-	s->passthrough = opa_ctx.passthrough;
 
 	proxywasm *p = this_cpu_proxywasm();
 
@@ -368,7 +365,7 @@ static nasp_socket *nasp_socket_accept(struct sock *sock, opa_socket_context opa
 	return s;
 }
 
-static nasp_socket *nasp_socket_connect(struct sock *sock, opa_socket_context opa_ctx)
+static nasp_socket *nasp_socket_connect(struct sock *sock)
 {
 	nasp_socket *s = kzalloc(sizeof(nasp_socket), GFP_KERNEL);
 	s->cc = kzalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
@@ -380,7 +377,6 @@ static nasp_socket *nasp_socket_connect(struct sock *sock, opa_socket_context op
 	s->write_buffer = buffer_new(16 * 1024);
 
 	s->sock = sock;
-	s->passthrough = opa_ctx.passthrough;
 
 	proxywasm *p = this_cpu_proxywasm();
 
@@ -448,7 +444,7 @@ static int ensure_tls_handshake(nasp_socket *s)
 
 		WRITE_ONCE(s->protocol, protocol);
 
-		if (s->passthrough)
+		if (s->opa_socket_ctx.passthrough)
 		{
 			printk("nasp: socket %s enabling TLS passthrough", current->comm);
 			s->send_msg = plain_send_msg;
