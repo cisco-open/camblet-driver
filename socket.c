@@ -137,20 +137,22 @@ static int ktls_recv_msg(nasp_socket *s, void *buf, size_t size)
 
 static int bearssl_send_msg(nasp_socket *s, void *src, size_t len)
 {
-	int ret = br_sslio_write_all(&s->ioc, src, len);
-	if (ret < 0)
+	int err = br_sslio_write_all(&s->ioc, src, len);
+	if (err < 0)
 	{
 		const br_ssl_engine_context *ec = get_ssl_engine_context(s);
 		pr_err("nasp: socket_write: %s br_sslio_write_all error %d", current->comm, br_ssl_engine_last_error(ec));
-		return ret;
+		return err;
 	}
 
-	ret = br_sslio_flush(&s->ioc);
-	if (ret < 0)
+	err = br_sslio_flush(&s->ioc);
+	if (err < 0)
 	{
-		pr_err("nasp: socket_write: %s br_sslio_flush returned an error %d", current->comm, ret);
+		pr_err("nasp: socket_write: %s br_sslio_flush returned an error %d", current->comm, err);
+		return err;
 	}
-	return ret;
+
+	return len;
 }
 
 static int bearssl_recv_msg(nasp_socket *s, void *dst, size_t len)
