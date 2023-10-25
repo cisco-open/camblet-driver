@@ -34,7 +34,6 @@ task_context *get_task_context(void)
     struct task_context *context = kmalloc(sizeof(struct task_context), GFP_KERNEL);
 
     strcpy(context->command_name, current->comm);
-    context->command_path_buffer = kmalloc(COMMAND_PATH_BUFLEN, GFP_KERNEL);
     context->command_path = get_current_proc_path(context->command_path_buffer, COMMAND_PATH_BUFLEN);
     current_uid_gid(&context->uid, &context->gid);
     context->pid = current->pid;
@@ -53,7 +52,6 @@ task_context *get_task_context(void)
 
 void free_task_context(struct task_context *context)
 {
-    kfree(context->command_path_buffer);
     kfree(context);
 }
 

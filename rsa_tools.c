@@ -32,6 +32,7 @@ int init_rnd_gen()
     }
     return 0;
 }
+
 // BearSSL RSA Keygen related functions
 // Generates a 2048 bit long rsa key pair
 uint32_t generate_rsa_keys(br_rsa_private_key *rsa_priv, br_rsa_public_key *rsa_pub)
