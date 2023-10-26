@@ -83,6 +83,7 @@ struct nasp_socket
 	buffer_t *write_buffer;
 
 	struct sock *sock;
+	bool sock_closed;
 
 	opa_socket_context opa_socket_ctx;
 
@@ -100,7 +101,7 @@ struct nasp_socket
 						size_t size);
 
 	nasp_send_msg *send_msg;
-	nasp_send_msg *recv_msg;
+	nasp_recv_msg *recv_msg;
 };
 
 static int get_read_buffer_capacity(nasp_socket *s);
@@ -165,6 +166,10 @@ static int bearssl_recv_msg(nasp_socket *s, void *dst, size_t len)
 		int last_error = br_ssl_engine_last_error(ec);
 		if (last_error == 0)
 			return 0;
+		if (last_error == BR_ERR_IO && s->sock_closed)
+			return 0;
+		if (last_error == BR_ERR_IO)
+			return -EIO;
 		pr_err("nasp: %s br_sslio_read error %d", current->comm, last_error);
 	}
 	return ret;
@@ -265,10 +270,12 @@ static void nasp_socket_free(nasp_socket *s)
 		if (s->protocol && !s->ktls_sendmsg && !s->opa_socket_ctx.passthrough)
 		{
 			// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
-			if (!br_sslio_close(&s->ioc))
+			if (br_sslio_close(&s->ioc) != BR_ERR_OK)
 			{
 				const br_ssl_engine_context *ec = get_ssl_engine_context(s);
-				pr_err("nasp: %s br_sslio_close returned an error: %d", current->comm, br_ssl_engine_last_error(ec));
+				int err = br_ssl_engine_last_error(ec);
+				if (err != 0 && err != BR_ERR_IO)
+					pr_err("nasp: %s br_sslio_close returned an error: %d", current->comm, err);
 			}
 			else
 			{
@@ -543,7 +550,9 @@ int nasp_recvmsg(struct sock *sock,
 		ret = nasp_socket_read(s, get_read_buffer_for_read(s, len), len);
 		if (ret < 0)
 		{
-			pr_err("nasp: %s recvmsg nasp_socket_read error %d", current->comm, ret);
+			if (ret == -ERESTARTSYS)
+				ret = -EINTR;
+
 			goto bail;
 		}
 		else if (ret == 0)
@@ -894,7 +903,17 @@ static int handle_cert_gen(nasp_socket *sc)
  */
 static int br_low_read(void *ctx, unsigned char *buf, size_t len)
 {
-	return plain_recv_msg((nasp_socket *)ctx, buf, len);
+	nasp_socket *s = (nasp_socket *)ctx;
+	int ret = plain_recv_msg(s, buf, len);
+	// BearSSL doesn't like 0 return value, but it's not an error
+	// so we return -1 instead and set sock_closed to true to
+	// indicate that the socket is closed without errors.
+	if (ret == 0)
+	{
+		s->sock_closed = true;
+		ret = -1;
+	}
+	return ret;
 }
 
 /*
