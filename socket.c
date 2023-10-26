@@ -295,8 +295,8 @@ static void nasp_socket_free(nasp_socket *s)
 		buffer_free(s->read_buffer);
 		buffer_free(s->write_buffer);
 
-		kfree(s->rsa_priv);
-		kfree(s->rsa_pub);
+		free_rsa_private_key(s->rsa_priv);
+		free_rsa_public_key(s->rsa_pub);
 		kfree(s->parameters);
 		kfree(s);
 	}
