@@ -42,6 +42,9 @@ static struct proto nasp_ktls_prot;
 static struct proto nasp_v6_prot;
 static struct proto nasp_v6_ktls_prot;
 
+static br_rsa_private_key *rsa_priv;
+static br_rsa_public_key *rsa_pub;
+
 struct nasp_socket;
 typedef struct nasp_socket nasp_socket;
 
@@ -295,8 +298,10 @@ static void nasp_socket_free(nasp_socket *s)
 		buffer_free(s->read_buffer);
 		buffer_free(s->write_buffer);
 
-		free_rsa_private_key(s->rsa_priv);
-		free_rsa_public_key(s->rsa_pub);
+		kfree(s->rsa_priv);
+		kfree(s->rsa_pub);
+		// free_rsa_private_key(s->rsa_priv);
+		// free_rsa_public_key(s->rsa_pub);
 		kfree(s->parameters);
 		kfree(s);
 	}
@@ -864,8 +869,8 @@ static int handle_cert_gen(nasp_socket *sc)
 		kfree(csr_sign_answer->error);
 		kfree(csr_sign_answer);
 		return -1;
-	} 
-	else 
+	}
+	else
 	{
 		sc->trust_anchors = csr_sign_answer->trust_anchors;
 		sc->trust_anchors_len = csr_sign_answer->trust_anchors_len;
@@ -876,7 +881,7 @@ static int handle_cert_gen(nasp_socket *sc)
 	return 0;
 }
 
-static int cache_and_validate_cert(nasp_socket *sc, char* key)
+static int cache_and_validate_cert(nasp_socket *sc, char *key)
 {
 	// Check if cert gen is required or we already have a cached certificate for this socket.
 	u16 cert_validation_err_no = 0;
@@ -993,6 +998,9 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 	{
 		u16 client_port = (u16)(client->sk_portpair);
 		pr_info("nasp: nasp_accept uid: %d app: %s on ports: %d <- %d", current_uid().val, current->comm, port, client_port);
+
+		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
+		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
 
 		int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.id);
 		if (result == -1)
@@ -1121,6 +1129,9 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	{
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
+		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
+		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
+
 		int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.id);
 		if (result == -1)
 		{
@@ -1236,6 +1247,16 @@ int socket_init(void)
 	memcpy(&nasp_v6_ktls_prot, &nasp_v6_prot, sizeof(nasp_v6_prot));
 	nasp_v6_ktls_prot.close = NULL; // mark it as uninitialized
 
+	//- generate global tls key
+	rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
+	rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
+	u_int32_t result = generate_rsa_keys(rsa_priv, rsa_pub);
+	if (result == 0)
+	{
+		pr_err("nasp: socket_init error generating rsa keys");
+		return -1;
+	}
+
 	pr_info("nasp: socket support loaded.");
 
 	return 0;
@@ -1248,6 +1269,12 @@ void socket_exit(void)
 
 	tcpv6_prot.accept = accept_v6;
 	tcpv6_prot.connect = connect_v6;
+
+	//- free global tls key
+	// free_rsa_private_key(rsa_priv);
+	// free_rsa_pubplic_key(rsa_pub);
+	kfree(rsa_priv);
+	kfree(rsa_pub);
 
 	pr_info("nasp: socket support unloaded.");
 }
