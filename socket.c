@@ -83,6 +83,7 @@ struct nasp_socket
 	buffer_t *write_buffer;
 
 	struct sock *sock;
+	bool sock_closed;
 
 	opa_socket_context opa_socket_ctx;
 
@@ -164,6 +165,8 @@ static int bearssl_recv_msg(nasp_socket *s, void *dst, size_t len)
 		const br_ssl_engine_context *ec = get_ssl_engine_context(s);
 		int last_error = br_ssl_engine_last_error(ec);
 		if (last_error == 0)
+			return 0;
+		if (last_error == BR_ERR_IO && s->sock_closed)
 			return 0;
 		if (last_error == BR_ERR_IO)
 			return -EIO;
@@ -900,7 +903,17 @@ static int handle_cert_gen(nasp_socket *sc)
  */
 static int br_low_read(void *ctx, unsigned char *buf, size_t len)
 {
-	return plain_recv_msg((nasp_socket *)ctx, buf, len);
+	nasp_socket * s = (nasp_socket *)ctx;
+	int ret = plain_recv_msg(s, buf, len);
+	// BearSSL doesn't like 0 return value, but it's not an error
+	// so we return -1 instead and set sock_closed to true to
+	// indicate that the socket is closed without errors.
+	if (ret == 0)
+	{
+		s->sock_closed = true;
+		ret = -1;
+	}
+	return ret;
 }
 
 /*
