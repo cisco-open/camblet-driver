@@ -13,6 +13,7 @@
 #include "linux/list.h"
 #include "linux/slab.h"
 #include "rsa_tools.h"
+#include "string.h"
 
 // certs that are in use or used once by a workload
 static LIST_HEAD(cert_cache);
@@ -37,7 +38,7 @@ void add_cert_to_cache(char *key, br_x509_certificate *chain, size_t chain_len,
         pr_err("cert_tools: memory allocation error");
         return;
     }
-    new_entry->key = key;
+    new_entry->key = strdup(key);
     new_entry->chain = chain;
     new_entry->chain_len = chain_len;
     new_entry->trust_anchors = trust_anchors;
@@ -57,8 +58,10 @@ cert_with_key *find_cert_from_cache(char *key)
     spin_lock_irqsave(&cert_cache_lock, cert_cache_lock_flags);
     list_for_each_entry(cert_bundle, &cert_cache, list)
     {
-        if (strcmp(cert_bundle->key, key) == 0)
+        pr_err("KEY:%s, CACHEDKEY:%s", key, cert_bundle->key);
+        if (strncmp(cert_bundle->key, key, strlen(key)) == 0)
         {
+            pr_err("CERT FOUND IN CACHE!!!");
             spin_unlock_irqrestore(&cert_cache_lock, cert_cache_lock_flags);
             return cert_bundle;
         }
@@ -75,6 +78,7 @@ void remove_cert_from_cache(cert_with_key *cert_bundle)
     {
         spin_lock_irqsave(&cert_cache_lock, cert_cache_lock_flags);
         list_del(&cert_bundle->list);
+        kfree(cert_bundle->key);
         free_br_x509_certificate(cert_bundle->chain, cert_bundle->chain_len);
         free_br_x509_trust_anchors(cert_bundle->trust_anchors, cert_bundle->trust_anchors_len);
         kfree(cert_bundle);

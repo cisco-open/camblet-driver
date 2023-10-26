@@ -1271,10 +1271,10 @@ void socket_exit(void)
 	tcpv6_prot.connect = connect_v6;
 
 	//- free global tls key
-	// free_rsa_private_key(rsa_priv);
-	// free_rsa_pubplic_key(rsa_pub);
-	kfree(rsa_priv);
-	kfree(rsa_pub);
+	free_rsa_private_key(rsa_priv);
+	free_rsa_pubplic_key(rsa_pub);
+	// kfree(rsa_priv);
+	// kfree(rsa_pub);
 
 	pr_info("nasp: socket support unloaded.");
 }
