@@ -25,15 +25,15 @@ static unsigned long cert_cache_lock_flags;
 void add_cert_to_cache(char* key, br_x509_certificate *chain, size_t chain_len,
                        br_x509_trust_anchor *trust_anchors, size_t trust_anchors_len)
 {
+    if (!key)
+    {
+        pr_err("cert_tools: provided key is null");
+        return;
+    }
     cert_with_key *new_entry = kzalloc(sizeof(cert_with_key), GFP_KERNEL);
     if (!new_entry)
     {
         pr_err("cert_tools: memory allocation error");
-        return;
-    }
-    if (!key)
-    {
-        pr_err("cert_tools: provided key is null");
         return;
     }
     new_entry->key = key;
@@ -74,6 +74,7 @@ void remove_cert_from_cache(cert_with_key *cert_bundle)
     {
         spin_lock_irqsave(&cert_cache_lock, cert_cache_lock_flags);
         list_del(&cert_bundle->list);
+        kfree(cert_bundle->chain->data);
         kfree(cert_bundle->chain);
         kfree(cert_bundle->trust_anchors);
         kfree(cert_bundle);

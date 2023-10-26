@@ -42,9 +42,6 @@ static struct proto nasp_ktls_prot;
 static struct proto nasp_v6_prot;
 static struct proto nasp_v6_ktls_prot;
 
-static br_rsa_private_key *rsa_priv;
-static br_rsa_public_key *rsa_pub;
-
 struct nasp_socket;
 typedef struct nasp_socket nasp_socket;
 
@@ -997,9 +994,6 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		u16 client_port = (u16)(client->sk_portpair);
 		pr_info("nasp: nasp_accept uid: %d app: %s on ports: %d <- %d", current_uid().val, current->comm, port, client_port);
 
-		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
-		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
-
 		int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.id);
 		if (result == -1)
 		{
@@ -1127,9 +1121,6 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	{
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
-		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
-		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
-
 		int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.id);
 		if (result == -1)
 		{
@@ -1245,16 +1236,6 @@ int socket_init(void)
 	memcpy(&nasp_v6_ktls_prot, &nasp_v6_prot, sizeof(nasp_v6_prot));
 	nasp_v6_ktls_prot.close = NULL; // mark it as uninitialized
 
-	//- generate global tls key
-	rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
-	rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
-	u_int32_t result = generate_rsa_keys(rsa_priv, rsa_pub);
-	if (result == 0)
-	{
-		pr_err("nasp: socket_init error generating rsa keys");
-		return -1;
-	}
-
 	pr_info("nasp: socket support loaded.");
 
 	return 0;
@@ -1267,10 +1248,6 @@ void socket_exit(void)
 
 	tcpv6_prot.accept = accept_v6;
 	tcpv6_prot.connect = connect_v6;
-
-	//- free global tls key
-	kfree(rsa_priv);
-	kfree(rsa_pub);
 
 	pr_info("nasp: socket support unloaded.");
 }

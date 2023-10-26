@@ -292,8 +292,8 @@ csr_sign_answer *send_csrsign_command(unsigned char *csr)
         csr_sign_answer->chain_len = 1;
 
         srclen = strlen(raw);
-        csr_sign_answer->chain[0].data = kmalloc(srclen, GFP_KERNEL);
-        csr_sign_answer->chain[0].data_len = base64_decode(csr_sign_answer->chain[0].data, srclen, raw, srclen);
+        csr_sign_answer->chain->data = kmalloc(srclen, GFP_KERNEL);
+        csr_sign_answer->chain->data_len = base64_decode(csr_sign_answer->chain->data, srclen, raw, srclen);
     }
 
     return csr_sign_answer;
