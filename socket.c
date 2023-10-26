@@ -271,7 +271,7 @@ static void nasp_socket_free(nasp_socket *s)
 			{
 				const br_ssl_engine_context *ec = get_ssl_engine_context(s);
 				int err = br_ssl_engine_last_error(ec);
-				if (err != BR_ERR_IO)
+				if (err != 0 && err != BR_ERR_IO)
 					pr_err("nasp: %s br_sslio_close returned an error: %d", current->comm, err);
 			}
 			else
