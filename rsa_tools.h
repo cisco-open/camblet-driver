@@ -17,6 +17,8 @@ int init_rnd_gen(void);
 uint32_t generate_rsa_keys(br_rsa_private_key *rsa_priv, br_rsa_public_key *rsa_pub);
 void free_rsa_private_key(br_rsa_private_key *key);
 void free_rsa_public_key(br_rsa_public_key *key);
+void free_br_x509_certificate(br_x509_certificate *chain, size_t chain_len);
+void free_br_x509_trust_anchors(br_x509_trust_anchor *trust_anchors, size_t trust_anchor_len);
 int encode_rsa_priv_key_to_der(unsigned char *der, br_rsa_private_key *rsa_priv, br_rsa_public_key *rsa_pub);
 
 #endif

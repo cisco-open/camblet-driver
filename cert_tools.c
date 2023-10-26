@@ -12,6 +12,7 @@
 
 #include "linux/list.h"
 #include "linux/slab.h"
+#include "rsa_tools.h"
 
 // certs that are in use or used once by a workload
 static LIST_HEAD(cert_cache);
@@ -22,7 +23,7 @@ static unsigned long cert_cache_lock_flags;
 
 // add_cert_to_cache adds a certificate chain with a given trust anchor to a linked list. The key will identify this entry.
 // the function is thread safe.
-void add_cert_to_cache(char* key, br_x509_certificate *chain, size_t chain_len,
+void add_cert_to_cache(char *key, br_x509_certificate *chain, size_t chain_len,
                        br_x509_trust_anchor *trust_anchors, size_t trust_anchors_len)
 {
     if (!key)
@@ -50,7 +51,7 @@ void add_cert_to_cache(char* key, br_x509_certificate *chain, size_t chain_len,
 
 // find_cert_from_cache tries to find a certificate bundle for the given key. In case of failure it returns a NULL.
 // the function is thread safe
-cert_with_key *find_cert_from_cache(char* key)
+cert_with_key *find_cert_from_cache(char *key)
 {
     cert_with_key *cert_bundle;
     spin_lock_irqsave(&cert_cache_lock, cert_cache_lock_flags);
@@ -74,9 +75,8 @@ void remove_cert_from_cache(cert_with_key *cert_bundle)
     {
         spin_lock_irqsave(&cert_cache_lock, cert_cache_lock_flags);
         list_del(&cert_bundle->list);
-        kfree(cert_bundle->chain->data);
-        kfree(cert_bundle->chain);
-        kfree(cert_bundle->trust_anchors);
+        free_br_x509_certificate(cert_bundle->chain, cert_bundle->chain_len);
+        free_br_x509_trust_anchors(cert_bundle->trust_anchors, cert_bundle->trust_anchors_len);
         kfree(cert_bundle);
         spin_unlock_irqrestore(&cert_cache_lock, cert_cache_lock_flags);
     }

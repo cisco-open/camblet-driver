@@ -57,6 +57,34 @@ void free_rsa_public_key(br_rsa_public_key *key)
     kfree(key);
 }
 
+void free_br_x509_certificate(br_x509_certificate *chain, size_t chain_len)
+{
+    if (chain_len > 0)
+    {
+        size_t i;
+        for (i = 0; i < chain_len; i++)
+        {
+            kfree(chain[i].data);
+        }
+    }
+    kfree(chain);
+}
+
+void free_br_x509_trust_anchors(br_x509_trust_anchor *trust_anchors, size_t trust_anchor_len)
+{
+    if (trust_anchor_len > 0)
+    {
+        size_t i;
+        for (i = 0; i < trust_anchor_len; i++)
+        {
+            kfree(trust_anchors[i].dn.data);
+            kfree(trust_anchors[i].pkey.key.rsa.n);
+            kfree(trust_anchors[i].pkey.key.rsa.e);
+        }
+    }
+    kfree(trust_anchors);
+}
+
 // BearSSL RSA Keygen related functions
 // Encodes rsa private key to pkcs8 der format and returns it's lenght.
 // If the der parameter is set to NULL then it computes only the length
