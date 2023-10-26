@@ -903,7 +903,7 @@ static int handle_cert_gen(nasp_socket *sc)
  */
 static int br_low_read(void *ctx, unsigned char *buf, size_t len)
 {
-	nasp_socket * s = (nasp_socket *)ctx;
+	nasp_socket *s = (nasp_socket *)ctx;
 	int ret = plain_recv_msg(s, buf, len);
 	// BearSSL doesn't like 0 return value, but it's not an error
 	// so we return -1 instead and set sock_closed to true to
