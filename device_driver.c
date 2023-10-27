@@ -356,7 +356,7 @@ static int device_release(struct inode *inode, struct file *file)
 
 static int write_command_to_buffer(char *buffer, size_t buffer_size, struct command *cmd)
 {
-    char *uuid = kmalloc(UUID_STRING_LEN + 1, GFP_KERNEL);
+    char uuid[UUID_STRING_LEN + 1];
     int length = snprintf(uuid, UUID_STRING_LEN + 1, "%pUB", cmd->uuid.b);
     if (length < 0)
     {
