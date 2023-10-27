@@ -15,12 +15,27 @@
 #include "rsa_tools.h"
 #include "string.h"
 
+// Define the maximum number of elements inside the cache
+#define MAX_CACHE_LENGTH 64
+
 // certs that are in use or used once by a workload
 static LIST_HEAD(cert_cache);
 
 // lock for the above list to make it thread safe
 static DEFINE_SPINLOCK(cert_cache_lock);
 static unsigned long cert_cache_lock_flags;
+
+static size_t linkedlist_length(struct list_head *head) 
+{
+    struct list_head *pos;
+    int length = 0;
+
+    list_for_each(pos, head) {
+        length++;
+    }
+
+    return length;
+}
 
 // add_cert_to_cache adds a certificate chain with a given trust anchor to a linked list. The key will identify this entry.
 // the function is thread safe.
@@ -31,6 +46,11 @@ void add_cert_to_cache(char *key, br_x509_certificate *chain, size_t chain_len,
     {
         pr_err("cert_tools: provided key is null");
         return;
+    }
+    if (linkedlist_length(&cert_cache) >= MAX_CACHE_LENGTH)
+    {
+        // TODO handle cases when cache lenght is maxed out but no expired certificate
+        remove_unused_expired_certs_from_cache();
     }
     cert_with_key *new_entry = kzalloc(sizeof(cert_with_key), GFP_KERNEL);
     if (!new_entry)
@@ -49,6 +69,23 @@ void add_cert_to_cache(char *key, br_x509_certificate *chain, size_t chain_len,
     list_add(&new_entry->list, &cert_cache);
     spin_unlock_irqrestore(&cert_cache_lock, cert_cache_lock_flags);
 }
+// remove_unused_expired_certs_from_cache iterates over the whole cache and tries to clean up the unused/expired certificates.
+// it works like a garbage collection which now runs before every add.
+void remove_unused_expired_certs_from_cache()
+{
+    cert_with_key *cert_bundle, *cert_bundle_tmp;
+    spin_lock_irqsave(&cert_cache_lock, cert_cache_lock_flags);
+    list_for_each_entry_safe_reverse(cert_bundle, cert_bundle_tmp, &cert_cache, list)
+    {
+        if (!validate_cert(cert_bundle->chain))
+        {
+            spin_unlock_irqrestore(&cert_cache_lock, cert_cache_lock_flags);
+            remove_cert_from_cache(cert_bundle);
+            spin_lock_irqsave(&cert_cache_lock, cert_cache_lock_flags);
+        }
+    }
+    spin_unlock_irqrestore(&cert_cache_lock, cert_cache_lock_flags);
+}
 
 // find_cert_from_cache tries to find a certificate bundle for the given key. In case of failure it returns a NULL.
 // the function is thread safe
@@ -58,10 +95,8 @@ cert_with_key *find_cert_from_cache(char *key)
     spin_lock_irqsave(&cert_cache_lock, cert_cache_lock_flags);
     list_for_each_entry(cert_bundle, &cert_cache, list)
     {
-        pr_err("KEY:%s, CACHEDKEY:%s", key, cert_bundle->key);
         if (strncmp(cert_bundle->key, key, strlen(key)) == 0)
         {
-            pr_err("CERT FOUND IN CACHE!!!");
             spin_unlock_irqrestore(&cert_cache_lock, cert_cache_lock_flags);
             return cert_bundle;
         }

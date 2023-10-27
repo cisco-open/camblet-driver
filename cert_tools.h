@@ -28,5 +28,6 @@ void add_cert_to_cache(char* key, br_x509_certificate *chain, size_t chain_len,
 cert_with_key *find_cert_from_cache(char* key);
 void remove_cert_from_cache(cert_with_key *cert);
 bool validate_cert(br_x509_certificate *cert);
+void remove_unused_expired_certs_from_cache(void);
 
 #endif
