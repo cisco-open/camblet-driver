@@ -465,8 +465,6 @@ static int ensure_tls_handshake(nasp_socket *s)
 		else
 			protocol = "no-mtls";
 
-		WRITE_ONCE(s->protocol, protocol);
-
 		if (s->opa_socket_ctx.passthrough)
 		{
 			printk("nasp: socket %s enabling TLS passthrough", current->comm);
@@ -482,6 +480,8 @@ static int ensure_tls_handshake(nasp_socket *s)
 				goto bail;
 			}
 		}
+
+		WRITE_ONCE(s->protocol, protocol);
 	}
 
 bail:
