@@ -1272,7 +1272,7 @@ void socket_exit(void)
 
 	//- free global tls key
 	free_rsa_private_key(rsa_priv);
-	free_rsa_pubplic_key(rsa_pub);
+	free_rsa_public_key(rsa_pub);
 	// kfree(rsa_priv);
 	// kfree(rsa_pub);
 
