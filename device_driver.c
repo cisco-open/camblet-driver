@@ -441,6 +441,12 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
 
     int bytes_read = 0;
     int bytes_to_read = json_length; // min(length, c->size - *offset);
+
+    if (bytes_to_read >= length)
+    {
+        pr_err("nasp: user buffer too small: %d", bytes_to_read);
+    }
+
     if (bytes_to_read > 0)
     {
         // if (copy_to_user(buffer, c->data + *offset, bytes_to_read))
@@ -452,7 +458,7 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
         put_user('\n', buffer + bytes_to_read);
 
         bytes_read = bytes_to_read + 1;
-        // *offset += bytes_to_read;
+        *offset = 0;
     }
 
     return bytes_read;
