@@ -68,10 +68,7 @@ struct nasp_socket
 	br_rsa_public_key *rsa_pub;
 	csr_parameters *parameters;
 
-	br_x509_certificate *chain;
-	size_t chain_len;
-	br_x509_trust_anchor *trust_anchors;
-	size_t trust_anchors_len;
+	x509_certificate *cert;
 
 	proxywasm *p;
 	proxywasm_context *pc;
@@ -300,8 +297,8 @@ static void nasp_socket_free(nasp_socket *s)
 
 		kfree(s->rsa_priv);
 		kfree(s->rsa_pub);
-		// free_rsa_private_key(s->rsa_priv);
-		// free_rsa_public_key(s->rsa_pub);
+		x509_certificate_put(s->cert);
+
 		kfree(s->parameters);
 		kfree(s);
 	}
@@ -339,8 +336,6 @@ static nasp_socket *nasp_socket_accept(struct sock *sock)
 	s->sc = kzalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
 	s->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
 	s->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
-	s->chain = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
-	s->trust_anchors = kzalloc(sizeof(br_x509_trust_anchor), GFP_KERNEL);
 	s->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
 	s->read_buffer = buffer_new(16 * 1024);
 	s->write_buffer = buffer_new(16 * 1024);
@@ -373,8 +368,6 @@ static nasp_socket *nasp_socket_connect(struct sock *sock)
 	s->cc = kzalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
 	s->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
 	s->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
-	s->chain = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
-	s->trust_anchors = kzalloc(sizeof(br_x509_trust_anchor), GFP_KERNEL);
 	s->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
 	s->read_buffer = buffer_new(16 * 1024);
 	s->write_buffer = buffer_new(16 * 1024);
@@ -872,10 +865,8 @@ static int handle_cert_gen(nasp_socket *sc)
 	}
 	else
 	{
-		sc->trust_anchors = csr_sign_answer->trust_anchors;
-		sc->trust_anchors_len = csr_sign_answer->trust_anchors_len;
-		sc->chain = csr_sign_answer->chain;
-		sc->chain_len = csr_sign_answer->chain_len;
+		x509_certificate_get(csr_sign_answer->cert);
+		sc->cert = csr_sign_answer->cert;
 	}
 	kfree(csr_sign_answer);
 	return 0;
@@ -885,6 +876,9 @@ static int cache_and_validate_cert(nasp_socket *sc, char *key)
 {
 	// Check if cert gen is required or we already have a cached certificate for this socket.
 	u16 cert_validation_err_no = 0;
+
+	remove_unused_expired_certs_from_cache();
+
 	cert_with_key *cached_cert_bundle = find_cert_from_cache(key);
 	if (!cached_cert_bundle)
 	{
@@ -894,18 +888,16 @@ static int cache_and_validate_cert(nasp_socket *sc, char *key)
 		{
 			return -1;
 		}
-		add_cert_to_cache(key, sc->chain, sc->chain_len, sc->trust_anchors, sc->trust_anchors_len);
+		add_cert_to_cache(key, sc->cert);
 	}
 	// Cert found in the cache use that
 	else
 	{
-		sc->chain = cached_cert_bundle->chain;
-		sc->chain_len = cached_cert_bundle->chain_len;
-		sc->trust_anchors = cached_cert_bundle->trust_anchors;
-		sc->trust_anchors_len = cached_cert_bundle->trust_anchors_len;
+		x509_certificate_get(cached_cert_bundle->cert);
+		sc->cert = cached_cert_bundle->cert;
 	}
 	// Validate the cached or the generated cert
-	if (!validate_cert(sc->chain))
+	if (!validate_cert(sc->cert->chain))
 	{
 		pr_warn("nasp: provided certificate is invalid");
 		remove_cert_from_cache(cached_cert_bundle);
@@ -1022,13 +1014,13 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
 		 */
 		pr_info("nasp: accept use cert from agent");
-		br_ssl_server_init_full_rsa(sc->sc, sc->chain, sc->chain_len, sc->rsa_priv);
+		br_ssl_server_init_full_rsa(sc->sc, sc->cert->chain, sc->cert->chain_len, sc->rsa_priv);
 
 		// mTLS enablement
 		if (sc->opa_socket_ctx.mtls)
 		{
-			br_x509_minimal_init_full(&sc->xc.ctx, sc->trust_anchors, sc->trust_anchors_len);
-			br_ssl_server_set_trust_anchor_names_alt(sc->sc, sc->trust_anchors, sc->trust_anchors_len);
+			br_x509_minimal_init_full(&sc->xc.ctx, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
+			br_ssl_server_set_trust_anchor_names_alt(sc->sc, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
 
 			br_x509_nasp_init(&sc->xc, &sc->sc->eng, &sc->opa_socket_ctx);
 			br_ssl_engine_set_default_rsavrfy(&sc->sc->eng);
@@ -1151,14 +1143,14 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
 		 */
 		pr_info("nasp: connect use cert from agent");
-		br_ssl_client_init_full(sc->cc, &sc->xc.ctx, sc->trust_anchors, sc->trust_anchors_len);
+		br_ssl_client_init_full(sc->cc, &sc->xc.ctx, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
 
 		br_x509_nasp_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx);
 
 		// mTLS enablement
 		if (sc->opa_socket_ctx.mtls)
 		{
-			br_ssl_client_set_single_rsa(sc->cc, sc->chain, sc->chain_len, sc->rsa_priv, br_rsa_pkcs1_sign_get_default());
+			br_ssl_client_set_single_rsa(sc->cc, sc->cert->chain, sc->cert->chain_len, sc->rsa_priv, br_rsa_pkcs1_sign_get_default());
 		}
 
 		/*
@@ -1273,8 +1265,6 @@ void socket_exit(void)
 	//- free global tls key
 	free_rsa_private_key(rsa_priv);
 	free_rsa_public_key(rsa_pub);
-	// kfree(rsa_priv);
-	// kfree(rsa_pub);
 
 	pr_info("nasp: socket support unloaded.");
 }

@@ -11,24 +11,40 @@
 #ifndef cert_tools_h
 #define cert_tools_h
 
+#include <linux/kref.h>
+
 #include "bearssl.h"
 
 typedef struct
 {
-    char *key;
+    struct kref kref;
     br_x509_certificate *chain;
     size_t chain_len;
     br_x509_trust_anchor *trust_anchors;
     size_t trust_anchors_len;
+} x509_certificate;
+
+typedef struct
+{
+    char *key;
+    x509_certificate *cert;
     struct list_head list;
 } cert_with_key;
 
-void add_cert_to_cache(char *key, br_x509_certificate *chain, size_t chain_len,
-                       br_x509_trust_anchor *trust_anchors, size_t trust_anchors_len);
+x509_certificate *x509_certificate_init(void);
+void x509_certificate_release(struct kref *kref);
+void x509_certificate_free(x509_certificate *cert);
+void x509_certificate_get(x509_certificate *cert);
+void x509_certificate_put(x509_certificate *cert);
+
+void add_cert_to_cache(char *key, x509_certificate *cert);
 cert_with_key *find_cert_from_cache(char *key);
 void remove_cert_from_cache(cert_with_key *cert);
 void remove_cert_from_cache_locked(cert_with_key *cert);
 bool validate_cert(br_x509_certificate *cert);
 void remove_unused_expired_certs_from_cache(void);
+
+void cert_cache_lock(void);
+void cert_cache_unlock(void);
 
 #endif
