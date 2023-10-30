@@ -908,7 +908,7 @@ static int cache_and_validate_cert(nasp_socket *sc, char *key)
 	if (!validate_cert(sc->chain))
 	{
 		pr_warn("nasp: provided certificate is invalid");
-		remove_cert_from_cache_locked(cached_cert_bundle);
+		remove_cert_from_cache(cached_cert_bundle);
 		cert_validation_err_no++;
 		if (cert_validation_err_no == 1)
 		{

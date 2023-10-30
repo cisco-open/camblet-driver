@@ -108,18 +108,18 @@ cert_with_key *find_cert_from_cache(char *key)
 
 // remove_cert_from_cache_locked removes a given certificate bundle from the cache
 // the function is thread safe
-void remove_cert_from_cache_locked(cert_with_key *cert_bundle)
+void remove_cert_from_cache(cert_with_key *cert_bundle)
 {
     if (cert_bundle)
     {
         spin_lock_irqsave(&cert_cache_lock, cert_cache_lock_flags);
-        remove_cert_from_cache(cert_bundle);
+        remove_cert_from_cache_locked(cert_bundle);
         spin_unlock_irqrestore(&cert_cache_lock, cert_cache_lock_flags);
     }
 }
 
 // remove_cert_from_cache removes a given certificate bundle from the cache
-void remove_cert_from_cache(cert_with_key *cert_bundle)
+void remove_cert_from_cache_locked(cert_with_key *cert_bundle)
 {
     if (cert_bundle)
     {
