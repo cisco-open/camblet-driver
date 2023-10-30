@@ -413,7 +413,7 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
 {
     pr_info("nasp: device_read: length: %lu offset: %llu", length, *offset);
 
-    struct command *c = get_next_command();
+    command *c = get_next_command();
     if (c == NULL)
     {
         return -EINTR;
