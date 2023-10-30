@@ -51,7 +51,7 @@ void add_cert_to_cache(char *key, br_x509_certificate *chain, size_t chain_len,
     }
     if (linkedlist_length(&cert_cache) >= MAX_CACHE_LENGTH)
     {
-        // TODO handle cases when cache lenght is maxed out but no expired certificate
+        // TODO handle cases when cache length is maxed out but no expired certificate
         remove_unused_expired_certs_from_cache();
     }
     cert_with_key *new_entry = kzalloc(sizeof(cert_with_key), GFP_KERNEL);
