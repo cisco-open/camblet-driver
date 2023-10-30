@@ -25,12 +25,13 @@ static LIST_HEAD(cert_cache);
 static DEFINE_SPINLOCK(cert_cache_lock);
 static unsigned long cert_cache_lock_flags;
 
-static size_t linkedlist_length(struct list_head *head) 
+static size_t linkedlist_length(struct list_head *head)
 {
     struct list_head *pos;
     int length = 0;
 
-    list_for_each(pos, head) {
+    list_for_each(pos, head)
+    {
         length++;
     }
 
@@ -42,6 +43,7 @@ static size_t linkedlist_length(struct list_head *head)
 void add_cert_to_cache(char *key, br_x509_certificate *chain, size_t chain_len,
                        br_x509_trust_anchor *trust_anchors, size_t trust_anchors_len)
 {
+    pr_err("adding certificate to cache");
     if (!key)
     {
         pr_err("cert_tools: provided key is null");
@@ -79,9 +81,7 @@ void remove_unused_expired_certs_from_cache()
     {
         if (!validate_cert(cert_bundle->chain))
         {
-            spin_unlock_irqrestore(&cert_cache_lock, cert_cache_lock_flags);
             remove_cert_from_cache(cert_bundle);
-            spin_lock_irqsave(&cert_cache_lock, cert_cache_lock_flags);
         }
     }
     spin_unlock_irqrestore(&cert_cache_lock, cert_cache_lock_flags);
@@ -97,6 +97,7 @@ cert_with_key *find_cert_from_cache(char *key)
     {
         if (strncmp(cert_bundle->key, key, strlen(key)) == 0)
         {
+            pr_err("found cert in the cache using it");
             spin_unlock_irqrestore(&cert_cache_lock, cert_cache_lock_flags);
             return cert_bundle;
         }
@@ -105,19 +106,28 @@ cert_with_key *find_cert_from_cache(char *key)
     return 0;
 }
 
-// remove_cert_from_cache removes a given certificate bundle from the cache
+// remove_cert_from_cache_locked removes a given certificate bundle from the cache
 // the function is thread safe
-void remove_cert_from_cache(cert_with_key *cert_bundle)
+void remove_cert_from_cache_locked(cert_with_key *cert_bundle)
 {
     if (cert_bundle)
     {
         spin_lock_irqsave(&cert_cache_lock, cert_cache_lock_flags);
+        remove_cert_from_cache(cert_bundle);
+        spin_unlock_irqrestore(&cert_cache_lock, cert_cache_lock_flags);
+    }
+}
+
+// remove_cert_from_cache removes a given certificate bundle from the cache
+void remove_cert_from_cache(cert_with_key *cert_bundle)
+{
+    if (cert_bundle)
+    {
         list_del(&cert_bundle->list);
         kfree(cert_bundle->key);
         free_br_x509_certificate(cert_bundle->chain, cert_bundle->chain_len);
         free_br_x509_trust_anchors(cert_bundle->trust_anchors, cert_bundle->trust_anchors_len);
         kfree(cert_bundle);
-        spin_unlock_irqrestore(&cert_cache_lock, cert_cache_lock_flags);
     }
 }
 

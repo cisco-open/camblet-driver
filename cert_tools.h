@@ -15,7 +15,7 @@
 
 typedef struct
 {
-    char* key;
+    char *key;
     br_x509_certificate *chain;
     size_t chain_len;
     br_x509_trust_anchor *trust_anchors;
@@ -23,10 +23,11 @@ typedef struct
     struct list_head list;
 } cert_with_key;
 
-void add_cert_to_cache(char* key, br_x509_certificate *chain, size_t chain_len,
+void add_cert_to_cache(char *key, br_x509_certificate *chain, size_t chain_len,
                        br_x509_trust_anchor *trust_anchors, size_t trust_anchors_len);
-cert_with_key *find_cert_from_cache(char* key);
+cert_with_key *find_cert_from_cache(char *key);
 void remove_cert_from_cache(cert_with_key *cert);
+void remove_cert_from_cache_locked(cert_with_key *cert);
 bool validate_cert(br_x509_certificate *cert);
 void remove_unused_expired_certs_from_cache(void);
 
