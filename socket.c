@@ -962,6 +962,12 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		goto error;
 	}
 
+	// return if the agent is not running
+	if (atomic_read(&already_open) == CDEV_NOT_USED)
+	{
+		return client;
+	}
+
 	u16 port = (u16)(sk->sk_portpair >> 16);
 
 	sc = nasp_socket_accept(client);
@@ -1088,6 +1094,12 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if (err != 0)
 	{
 		goto error;
+	}
+
+	// return if the agent is not running
+	if (atomic_read(&already_open) == CDEV_NOT_USED)
+	{
+		return err;
 	}
 
 	pr_info("nasp: nasp_connect uid: %d app: %s to port: %d", current_uid().val, current->comm, port);

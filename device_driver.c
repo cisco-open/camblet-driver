@@ -29,14 +29,8 @@
 
 static int major; /* major number assigned to our device driver */
 
-enum
-{
-    CDEV_NOT_USED = 0,
-    CDEV_EXCLUSIVE_OPEN = 1,
-};
-
 /* Is device open? Used to prevent multiple access to device */
-static atomic_t already_open = ATOMIC_INIT(CDEV_NOT_USED);
+atomic_t already_open = ATOMIC_INIT(CDEV_NOT_USED);
 
 static char device_buffer[DEVICE_BUFFER_SIZE];
 static size_t device_buffer_size = 0;
