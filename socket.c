@@ -1062,8 +1062,6 @@ error:
 	if (client)
 		client->sk_prot->close(client, 0);
 
-	pr_err("nasp: [%s] accept error, socket closed", current->comm);
-
 	return NULL;
 }
 
@@ -1194,8 +1192,6 @@ error:
 	lock_sock(sk);
 	sk->sk_prot->close(sk, 0);
 	release_sock(sk);
-
-	pr_err("nasp: [%s] connect error, socket closed", current->comm);
 
 	return err;
 }
