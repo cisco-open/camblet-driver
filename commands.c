@@ -310,12 +310,12 @@ error:
     return csr_sign_answer;
 }
 
-struct command *lookup_in_flight_command(char *id)
+command *lookup_in_flight_command(char *id)
 {
     spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
 
-    struct command *cmd = NULL;
-    struct command *tmp;
+    command *cmd = NULL;
+    command *tmp;
     list_for_each_entry(tmp, &in_flight_command_list, list)
     {
         if (strncmp(tmp->uuid.b, id, UUID_SIZE) == 0)
@@ -331,8 +331,8 @@ struct command *lookup_in_flight_command(char *id)
 }
 
 // get a command from the list (called from the driver),
-//  this is a blocking function, it will wait until a command is available
-struct command *get_command(void)
+// this is a blocking function, it will wait until a command is available
+command *get_next_command(void)
 {
     if (list_empty(&command_list))
     {
@@ -350,7 +350,7 @@ struct command *get_command(void)
     }
 
     spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
-    struct command *cmd = list_first_entry(&command_list, struct command, list);
+    command *cmd = list_first_entry(&command_list, struct command, list);
     list_del(&cmd->list);
     list_add_tail(&cmd->list, &in_flight_command_list);
     spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
@@ -366,7 +366,7 @@ command_answer *answer_with_error(char *error_message)
     return answer;
 }
 
-void free_command_answer(struct command_answer *cmd_answer)
+void free_command_answer(command_answer *cmd_answer)
 {
     kfree(cmd_answer->error);
     kfree(cmd_answer->answer);
