@@ -205,7 +205,7 @@ wasm_vm_result load_module(const char *name, const char *code, unsigned length, 
     return result;
 }
 
-int parse_json_from_buffer(const char *data)
+static int parse_command(const char *data)
 {
     int status = SUCCESS;
     JSON_Value *json = NULL;
@@ -359,7 +359,7 @@ static char *serialize_command(struct command *cmd)
     int length = snprintf(uuid, UUID_STRING_LEN + 1, "%pUB", cmd->uuid.b);
     if (length < 0)
     {
-        pr_crit("uuid stringify failed");
+        pr_crit("nasp: uuid stringify failed");
         goto cleanup;
     }
 
@@ -413,7 +413,7 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
 {
     pr_info("nasp: device_read: length: %lu offset: %llu", length, *offset);
 
-    struct command *c = get_command();
+    struct command *c = get_next_command();
     if (c == NULL)
     {
         return -EINTR;
@@ -490,10 +490,10 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
         }
 
         // parse the json
-        int status = parse_json_from_buffer(device_buffer);
+        int status = parse_command(device_buffer);
         if (status != 0)
         {
-            pr_err("nasp: parse_json_from_buffer failed: %d", status);
+            pr_err("nasp: parse_command failed: %d", status);
         }
 
         memmove(device_buffer, device_buffer + i, device_buffer_size - i);

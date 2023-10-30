@@ -55,6 +55,6 @@ typedef struct command
 } command;
 
 command *lookup_in_flight_command(char *id);
-command *get_command(void);
+command *get_next_command(void);
 
 #endif
