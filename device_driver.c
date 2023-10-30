@@ -41,8 +41,6 @@ static atomic_t already_open = ATOMIC_INIT(CDEV_NOT_USED);
 static char device_buffer[DEVICE_BUFFER_SIZE];
 static size_t device_buffer_size = 0;
 
-static char device_out_buffer[64 * 1024];
-
 static int device_open(struct inode *, struct file *);
 static int device_release(struct inode *, struct file *);
 static ssize_t device_read(struct file *, char __user *, size_t, loff_t *);
@@ -354,8 +352,9 @@ static int device_release(struct inode *inode, struct file *file)
     return 0;
 }
 
-static int write_command_to_buffer(char *buffer, size_t buffer_size, struct command *cmd)
+static char *serialize_command(struct command *cmd)
 {
+    char *serialized_string = NULL;
     char uuid[UUID_STRING_LEN + 1];
     int length = snprintf(uuid, UUID_STRING_LEN + 1, "%pUB", cmd->uuid.b);
     if (length < 0)
@@ -395,23 +394,12 @@ static int write_command_to_buffer(char *buffer, size_t buffer_size, struct comm
     json_object_set_string(root_object, "command", cmd->name);
     json_object_set_string(root_object, "data", cmd->data);
 
-    char *serialized_string = json_serialize_to_string(root_value);
-
-    length = strlen(serialized_string);
-    if (length > buffer_size)
-    {
-        pr_err("nasp: command buffer too small: %d", length);
-        length = -1;
-        goto cleanup;
-    }
-
-    strcpy(buffer, serialized_string);
+    serialized_string = json_serialize_to_string(root_value);
 
 cleanup:
-    json_free_serialized_string(serialized_string);
     json_value_free(root_value);
 
-    return length;
+    return serialized_string;
 }
 
 /*
@@ -431,16 +419,16 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
         return -EINTR;
     }
 
-    int json_length = write_command_to_buffer(device_out_buffer, sizeof device_out_buffer, c);
-    if (json_length < 0)
+    char *command_json = serialize_command(c);
+    if (command_json == NULL)
     {
         return -EFAULT;
     }
 
-    pr_info("nasp: the command json is done: %s", device_out_buffer);
+    pr_info("nasp: the command json is done: %s", command_json);
 
     int bytes_read = 0;
-    int bytes_to_read = json_length; // min(length, c->size - *offset);
+    int bytes_to_read = strlen(command_json); // min(length, c->size - *offset);
 
     if (bytes_to_read >= length)
     {
@@ -450,8 +438,9 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
     if (bytes_to_read > 0)
     {
         // if (copy_to_user(buffer, c->data + *offset, bytes_to_read))
-        if (copy_to_user(buffer, device_out_buffer, bytes_to_read))
+        if (copy_to_user(buffer, command_json, bytes_to_read))
         {
+            kfree(command_json);
             return -EFAULT;
         }
 
@@ -461,6 +450,7 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
         *offset = 0;
     }
 
+    kfree(command_json);
     return bytes_read;
 }
 
