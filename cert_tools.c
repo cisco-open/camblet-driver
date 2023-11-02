@@ -13,6 +13,7 @@
 
 #include "cert_tools.h"
 #include "string.h"
+#include "rsa_tools.h"
 
 // Define the maximum number of elements inside the cache
 #define MAX_CACHE_LENGTH 64
@@ -23,12 +24,12 @@ static LIST_HEAD(cert_cache);
 // lock for the above list to make it thread safe
 static DEFINE_MUTEX(certificate_cache_lock);
 
-void cert_cache_lock(void)
+static void cert_cache_lock(void)
 {
     mutex_lock(&certificate_cache_lock);
 }
 
-void cert_cache_unlock(void)
+static void cert_cache_unlock(void)
 {
     mutex_unlock(&certificate_cache_lock);
 }
@@ -50,24 +51,16 @@ static size_t linkedlist_length(struct list_head *head)
 // the function is thread safe.
 void add_cert_to_cache(char *key, x509_certificate *cert)
 {
-    pr_err("adding certificate to cache");
     if (!key)
     {
-        pr_err("cert_tools: provided key is null");
+        pr_err("nasp: provided key is null");
         return;
     }
-
-    remove_unused_expired_certs_from_cache();
 
     cert_with_key *new_entry = kzalloc(sizeof(cert_with_key), GFP_KERNEL);
     if (!new_entry)
     {
-        pr_err("cert_tools: memory allocation error");
-        return;
-    }
-    if (!key)
-    {
-        pr_err("cert_tools: provided key is null");
+        pr_err("nasp: memory allocation error");
         return;
     }
     new_entry->key = strdup(key);
@@ -86,28 +79,34 @@ void remove_unused_expired_certs_from_cache()
 {
     cert_with_key *cert_bundle, *cert_bundle_tmp;
 
-    if (linkedlist_length(&cert_cache) < MAX_CACHE_LENGTH)
+    if (linkedlist_length(&cert_cache) >= MAX_CACHE_LENGTH)
     {
+        pr_warn("nasp: cache is full removing the oldest element");
+        cert_with_key *last_entry = list_last_entry(&cert_cache, cert_with_key, list);
+        pr_warn("nasp: removing key:%s from the cache", last_entry->key);
+        remove_cert_from_cache(last_entry);
         return;
     }
 
     cert_cache_lock();
     list_for_each_entry_safe_reverse(cert_bundle, cert_bundle_tmp, &cert_cache, list)
     {
-        if (!validate_cert(cert_bundle->cert->chain))
+        if (!validate_cert(cert_bundle->cert->validity))
         {
-            cert_cache_unlock();
-            remove_cert_from_cache(cert_bundle);
-            cert_cache_lock();
+            remove_cert_from_cache_locked(cert_bundle);
         }
     }
     cert_cache_unlock();
 }
 
 // find_cert_from_cache tries to find a certificate bundle for the given key. In case of failure it returns a NULL.
+// this function also runs a garbage collection on the cache.
 // the function is thread safe
 cert_with_key *find_cert_from_cache(char *key)
 {
+
+    remove_unused_expired_certs_from_cache();
+
     cert_with_key *cert_bundle;
     cert_cache_lock();
     list_for_each_entry(cert_bundle, &cert_cache, list)
@@ -145,39 +144,45 @@ void remove_cert_from_cache_locked(cert_with_key *cert_bundle)
     }
 }
 
-// validate_cert validates the given certificate if it has expired or not.
-bool validate_cert(br_x509_certificate *cert)
+// decode_cert decodes the provided certificate and filling the validity seconds and days.
+// if the decode fails it returns -1
+int decode_cert(x509_certificate *x509_cert)
 {
-    bool result = false;
-
     br_x509_decoder_context dc;
 
     br_x509_decoder_init(&dc, 0, 0);
-    br_x509_decoder_push(&dc, cert->data, cert->data_len);
+    br_x509_decoder_push(&dc, x509_cert->chain->data, x509_cert->chain->data_len);
     int err = br_x509_decoder_last_error(&dc);
     if (err != 0)
     {
-        pr_err("cert_tools: cert decode faild during cert validation %d", err);
-        return result;
+        pr_err("nasp: cert decode faild during cert validation %d", err);
+        return -1;
     }
+    x509_cert->validity.nbs = dc.notbefore_seconds;
+    x509_cert->validity.nbd = dc.notbefore_days;
 
-    // Check if the cert is valid
-    uint32_t nbs = dc.notbefore_seconds;
-    uint32_t nbd = dc.notbefore_days;
-    uint32_t nas = dc.notafter_seconds;
-    uint32_t nad = dc.notafter_days;
+    x509_cert->validity.nas = dc.notafter_seconds;
+    x509_cert->validity.nad = dc.notafter_days;
+
+    return 0;
+}
+
+// validate_cert validates the given certificate if it has expired or not.
+bool validate_cert(x509_certificate_validity cert_validity)
+{
+    bool result = false;
 
     time64_t x = ktime_get_real_seconds();
     uint32_t vd = (uint32_t)(x / 86400) + 719528;
     uint32_t vs = (uint32_t)(x % 86400);
 
-    if (vd < nbd || (vd == nbd && vs < nbs))
+    if (vd < cert_validity.nbd || (vd == cert_validity.nbd && vs < cert_validity.nbs))
     {
-        pr_warn("cert_tools: cert expired");
+        pr_warn("nasp: cert expired");
     }
-    else if (vd > nad || (vd == nad && vs > nas))
+    else if (vd > cert_validity.nad || (vd == cert_validity.nad && vs > cert_validity.nas))
     {
-        pr_warn("cert_tools: cert not valid yet");
+        pr_warn("nasp: cert not valid yet");
     }
     else
     {
@@ -196,24 +201,7 @@ x509_certificate *x509_certificate_init(void)
     return cert;
 }
 
-void x509_certificate_get(x509_certificate *cert)
-{
-    kref_get(&cert->kref);
-}
-
-void x509_certificate_put(x509_certificate *cert)
-{
-    kref_put(&cert->kref, x509_certificate_release);
-}
-
-void x509_certificate_release(struct kref *kref)
-{
-    x509_certificate *cert = container_of(kref, x509_certificate, kref);
-
-    x509_certificate_free(cert);
-}
-
-void x509_certificate_free(x509_certificate *cert)
+static void x509_certificate_free(x509_certificate *cert)
 {
     pr_info("nasp: x509_certificate_free");
 
@@ -222,27 +210,25 @@ void x509_certificate_free(x509_certificate *cert)
         return;
     }
 
-    if (cert->chain_len > 0)
-    {
-        size_t i;
-        for (i = 0; i < cert->chain_len; i++)
-        {
-            kfree(cert->chain[i].data);
-        }
-    }
-    kfree(cert->chain);
-
-    if (cert->trust_anchors_len > 0)
-    {
-        size_t i;
-        for (i = 0; i < cert->trust_anchors_len; i++)
-        {
-            kfree(cert->trust_anchors[i].dn.data);
-            kfree(cert->trust_anchors[i].pkey.key.rsa.n);
-            kfree(cert->trust_anchors[i].pkey.key.rsa.e);
-        }
-    }
-    kfree(cert->trust_anchors);
+    free_br_x509_certificate(cert->chain, cert->chain_len);
+    free_br_x509_trust_anchors(cert->trust_anchors, cert->trust_anchors_len);
 
     kfree(cert);
+}
+
+static void x509_certificate_release(struct kref *kref)
+{
+    x509_certificate *cert = container_of(kref, x509_certificate, kref);
+
+    x509_certificate_free(cert);
+}
+
+void x509_certificate_get(x509_certificate *cert)
+{
+    kref_get(&cert->kref);
+}
+
+void x509_certificate_put(x509_certificate *cert)
+{
+    kref_put(&cert->kref, x509_certificate_release);
 }

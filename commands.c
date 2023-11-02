@@ -296,6 +296,13 @@ csr_sign_answer *send_csrsign_command(unsigned char *csr)
         srclen = strlen(raw);
         csr_sign_answer->cert->chain->data = kmalloc(srclen, GFP_KERNEL);
         csr_sign_answer->cert->chain->data_len = base64_decode(csr_sign_answer->cert->chain->data, srclen, raw, srclen);
+
+        int result = decode_cert(csr_sign_answer->cert);
+        if (result < 0)
+        {
+            errormsg = "could not decode generated certificate";
+            goto error;
+        }
     }
 
     return csr_sign_answer;

@@ -877,8 +877,6 @@ static int cache_and_validate_cert(nasp_socket *sc, char *key)
 	// Check if cert gen is required or we already have a cached certificate for this socket.
 	u16 cert_validation_err_no = 0;
 
-	remove_unused_expired_certs_from_cache();
-
 	cert_with_key *cached_cert_bundle = find_cert_from_cache(key);
 	if (!cached_cert_bundle)
 	{
@@ -897,7 +895,7 @@ static int cache_and_validate_cert(nasp_socket *sc, char *key)
 		sc->cert = cached_cert_bundle->cert;
 	}
 	// Validate the cached or the generated cert
-	if (!validate_cert(sc->cert->chain))
+	if (!validate_cert(sc->cert->validity))
 	{
 		pr_warn("nasp: provided certificate is invalid");
 		remove_cert_from_cache(cached_cert_bundle);
