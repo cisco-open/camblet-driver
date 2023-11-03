@@ -17,10 +17,10 @@
 
 typedef struct
 {
-    uint32_t nbs;
-    uint32_t nbd;
-    uint32_t nas;
-    uint32_t nad;
+    uint32_t notbefore_seconds;
+    uint32_t notbefore_days;
+    uint32_t notafter_seconds;
+    uint32_t notafter_days;
 } x509_certificate_validity;
 
 typedef struct
@@ -52,6 +52,6 @@ void remove_cert_from_cache_locked(cert_with_key *cert);
 void remove_unused_expired_certs_from_cache(void);
 
 bool validate_cert(x509_certificate_validity cert_validity);
-int decode_cert(x509_certificate *x509_cert);
+int set_cert_validity(x509_certificate *x509_cert);
 
 #endif

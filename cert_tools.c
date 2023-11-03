@@ -144,9 +144,9 @@ void remove_cert_from_cache_locked(cert_with_key *cert_bundle)
     }
 }
 
-// decode_cert decodes the provided certificate and filling the validity seconds and days.
+// set_cert_validity decodes the provided certificate and filling the validity seconds and days.
 // if the decode fails it returns -1
-int decode_cert(x509_certificate *x509_cert)
+int set_cert_validity(x509_certificate *x509_cert)
 {
     br_x509_decoder_context dc;
 
@@ -155,14 +155,14 @@ int decode_cert(x509_certificate *x509_cert)
     int err = br_x509_decoder_last_error(&dc);
     if (err != 0)
     {
-        pr_err("nasp: cert decode faild during cert validation %d", err);
+        pr_err("nasp: cert decode faild during setting cert validity: %d", err);
         return -1;
     }
-    x509_cert->validity.nbs = dc.notbefore_seconds;
-    x509_cert->validity.nbd = dc.notbefore_days;
+    x509_cert->validity.notbefore_seconds = dc.notbefore_seconds;
+    x509_cert->validity.notbefore_days = dc.notbefore_days;
 
-    x509_cert->validity.nas = dc.notafter_seconds;
-    x509_cert->validity.nad = dc.notafter_days;
+    x509_cert->validity.notafter_seconds = dc.notafter_seconds;
+    x509_cert->validity.notafter_days = dc.notafter_days;
 
     return 0;
 }
@@ -176,11 +176,11 @@ bool validate_cert(x509_certificate_validity cert_validity)
     uint32_t vd = (uint32_t)(x / 86400) + 719528;
     uint32_t vs = (uint32_t)(x % 86400);
 
-    if (vd < cert_validity.nbd || (vd == cert_validity.nbd && vs < cert_validity.nbs))
+    if (vd < cert_validity.notbefore_days || (vd == cert_validity.notbefore_days && vs < cert_validity.notbefore_seconds))
     {
         pr_warn("nasp: cert expired");
     }
-    else if (vd > cert_validity.nad || (vd == cert_validity.nad && vs > cert_validity.nas))
+    else if (vd > cert_validity.notafter_days || (vd == cert_validity.notafter_days && vs > cert_validity.notafter_seconds))
     {
         pr_warn("nasp: cert not valid yet");
     }
@@ -205,7 +205,7 @@ static void x509_certificate_free(x509_certificate *cert)
 {
     pr_info("nasp: x509_certificate_free");
 
-    if (cert == NULL)
+    if (!cert)
     {
         return;
     }
@@ -225,10 +225,18 @@ static void x509_certificate_release(struct kref *kref)
 
 void x509_certificate_get(x509_certificate *cert)
 {
+    if (!cert)
+    {
+        return;
+    }
     kref_get(&cert->kref);
 }
 
 void x509_certificate_put(x509_certificate *cert)
 {
+    if (!cert)
+    {
+        return;
+    }
     kref_put(&cert->kref, x509_certificate_release);
 }
