@@ -15,6 +15,8 @@
 
 #define OPA_MODULE "opa"
 
+#define TEST "test"
+
 #define MAX_ALLOWED_SPIFFE_ID 16
 
 typedef struct
