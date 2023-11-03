@@ -993,6 +993,7 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 	if (response->error)
 	{
 		pr_err("nasp: accept failed to attest: %s", response->error);
+		kfree(response);
 	}
 	else
 	{
