@@ -22,6 +22,14 @@ wasm_vm_result load_module(const char *name, const char *code, unsigned length, 
 #define DEVICE_NAME "nasp"                 /* Dev name as it appears in /dev/devices   */
 #define DEVICE_BUFFER_SIZE 2 * 1024 * 1024 /* Max length of the message from the device */
 
+enum
+{
+    CDEV_NOT_USED = 0,
+    CDEV_EXCLUSIVE_OPEN = 1,
+};
+
+extern atomic_t already_open;
+
 int chardev_init(void);
 void chardev_exit(void);
 

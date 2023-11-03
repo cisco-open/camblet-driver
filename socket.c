@@ -28,6 +28,7 @@
 #include "socket.h"
 #include "tls.h"
 #include "string.h"
+#include "cert_tools.h"
 
 const char *ALPNs[] = {
 	"istio-peer-exchange",
@@ -65,13 +66,9 @@ struct nasp_socket
 
 	br_rsa_private_key *rsa_priv;
 	br_rsa_public_key *rsa_pub;
-	br_x509_certificate *cert;
 	csr_parameters *parameters;
 
-	br_x509_certificate *chain;
-	size_t chain_len;
-	br_x509_trust_anchor *trust_anchors;
-	size_t trust_anchors_len;
+	x509_certificate *cert;
 
 	proxywasm *p;
 	proxywasm_context *pc;
@@ -295,22 +292,13 @@ static void nasp_socket_free(nasp_socket *s)
 		br_x509_nasp_free(&s->xc);
 
 		opa_socket_context_free(s->opa_socket_ctx);
-
-		// if (c->rsa_priv != NULL)
-		// {
-		// 	kfree(c->rsa_priv->p);
-		// }
-		// if (c->rsa_pub != NULL)
-		// {
-		// 	kfree(c->rsa_pub->n);
-		// }
-
 		buffer_free(s->read_buffer);
 		buffer_free(s->write_buffer);
 
 		kfree(s->rsa_priv);
 		kfree(s->rsa_pub);
-		kfree(s->cert);
+		x509_certificate_put(s->cert);
+
 		kfree(s->parameters);
 		kfree(s);
 	}
@@ -348,9 +336,6 @@ static nasp_socket *nasp_socket_accept(struct sock *sock)
 	s->sc = kzalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
 	s->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
 	s->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
-	s->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
-	s->chain = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
-	s->trust_anchors = kzalloc(sizeof(br_x509_trust_anchor), GFP_KERNEL);
 	s->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
 	s->read_buffer = buffer_new(16 * 1024);
 	s->write_buffer = buffer_new(16 * 1024);
@@ -383,7 +368,6 @@ static nasp_socket *nasp_socket_connect(struct sock *sock)
 	s->cc = kzalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
 	s->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
 	s->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
-	s->cert = kzalloc(sizeof(br_x509_certificate), GFP_KERNEL);
 	s->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
 	s->read_buffer = buffer_new(16 * 1024);
 	s->write_buffer = buffer_new(16 * 1024);
@@ -789,111 +773,141 @@ int (*connect_v6)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 
 static int handle_cert_gen(nasp_socket *sc)
 {
-	// We should not only check for empty cert but we must check the certs validity
-	// TODO must set the certificate to avoid new cert generation every time
-	if (sc->chain_len == 0)
+	// Generating certificate signing request
+	if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
 	{
-		// generating certificate signing request
-		if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
+		u_int32_t result = generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
+		if (result == 0)
 		{
-			u_int32_t result = generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
-			if (result == 0)
-			{
-				pr_err("nasp: generate_csr error generating rsa keys");
-				return -1;
-			}
-		}
-
-		int len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
-		if (len <= 0)
-		{
-			pr_err("nasp: generate_csr error during rsa private der key length calculation");
+			pr_err("nasp: generate_csr error generating rsa keys");
 			return -1;
 		}
+	}
 
-		unsigned char *csr_ptr;
+	int len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
+	if (len <= 0)
+	{
+		pr_err("nasp: generate_csr error during rsa private der key length calculation");
+		return -1;
+	}
 
-		csr_module *csr = this_cpu_csr();
-		csr_lock(csr);
-		{
-			// Allocate memory inside the wasm vm since this data must be available inside the module
-			wasm_vm_result malloc_result = csr_malloc(csr, len);
-			if (malloc_result.err)
-			{
-				pr_err("nasp: generate_csr wasm_vm_csr_malloc error: %s", malloc_result.err);
-				csr_unlock(csr);
-				return -1;
-			}
+	unsigned char *csr_ptr;
 
-			uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
-			i32 addr = malloc_result.data->i32;
-
-			unsigned char *der = mem + addr;
-
-			int error = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
-			if (error <= 0)
-			{
-				pr_err("nasp: generate_csr error during rsa private key der encoding");
-				csr_unlock(csr);
-				return -1;
-			}
-
-			sc->parameters->subject = "CN=nasp-protected-workload";
-
-			if (sc->opa_socket_ctx.dns)
-			{
-				sc->parameters->dns = sc->opa_socket_ctx.dns;
-			}
-			if (sc->opa_socket_ctx.uri)
-			{
-				sc->parameters->uri = sc->opa_socket_ctx.uri;
-			}
-
-			csr_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
-			if (generated_csr.err)
-			{
-				pr_err("nasp: generate_csr wasm_vm_csr_gen error: %s", generated_csr.err);
-				csr_unlock(csr);
-				return -1;
-			}
-
-			wasm_vm_result free_result = csr_free(csr, addr);
-			if (free_result.err)
-			{
-				pr_err("nasp: generate_csr wasm_vm_csr_free error: %s", free_result.err);
-				csr_unlock(csr);
-				return -1;
-			}
-
-			csr_ptr = strndup(generated_csr.csr_ptr + mem, generated_csr.csr_len);
-			free_result = csr_free(csr, generated_csr.csr_ptr);
-			if (free_result.err)
-			{
-				pr_err("nasp: generate_csr wasm_vm_csr_free error: %s", free_result.err);
-				csr_unlock(csr);
-				return -1;
-			}
-		}
+	csr_module *csr = this_cpu_csr();
+	csr_lock(csr);
+	// Allocate memory inside the wasm vm since this data must be available inside the module
+	wasm_vm_result malloc_result = csr_malloc(csr, len);
+	if (malloc_result.err)
+	{
+		pr_err("nasp: generate_csr wasm_vm_csr_malloc error: %s", malloc_result.err);
 		csr_unlock(csr);
+		return -1;
+	}
 
-		csr_sign_answer *csr_sign_answer;
-		csr_sign_answer = send_csrsign_command(csr_ptr);
-		if (csr_sign_answer->error)
+	uint8_t *mem = wasm_vm_memory(get_csr_module(csr));
+	i32 addr = malloc_result.data->i32;
+
+	unsigned char *der = mem + addr;
+
+	int error = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
+	if (error <= 0)
+	{
+		pr_err("nasp: generate_csr error during rsa private key der encoding");
+		csr_unlock(csr);
+		return -1;
+	}
+
+	sc->parameters->subject = "CN=nasp-protected-workload";
+
+	if (sc->opa_socket_ctx.dns)
+	{
+		sc->parameters->dns = sc->opa_socket_ctx.dns;
+	}
+	if (sc->opa_socket_ctx.uri)
+	{
+		sc->parameters->uri = sc->opa_socket_ctx.uri;
+	}
+
+	csr_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
+	if (generated_csr.err)
+	{
+		pr_err("nasp: generate_csr wasm_vm_csr_gen error: %s", generated_csr.err);
+		csr_unlock(csr);
+		return -1;
+	}
+
+	wasm_vm_result free_result = csr_free(csr, addr);
+	if (free_result.err)
+	{
+		pr_err("nasp: generate_csr wasm_vm_csr_free error: %s", free_result.err);
+		csr_unlock(csr);
+		return -1;
+	}
+
+	csr_ptr = strndup(generated_csr.csr_ptr + mem, generated_csr.csr_len);
+	free_result = csr_free(csr, generated_csr.csr_ptr);
+	if (free_result.err)
+	{
+		pr_err("nasp: generate_csr wasm_vm_csr_free error: %s", free_result.err);
+		csr_unlock(csr);
+		return -1;
+	}
+	csr_unlock(csr);
+
+	csr_sign_answer *csr_sign_answer;
+	csr_sign_answer = send_csrsign_command(csr_ptr);
+	if (csr_sign_answer->error)
+	{
+		pr_err("nasp: generate_csr csr sign answer error: %s", csr_sign_answer->error);
+		kfree(csr_sign_answer->error);
+		kfree(csr_sign_answer);
+		return -1;
+	}
+	else
+	{
+		x509_certificate_get(csr_sign_answer->cert);
+		sc->cert = csr_sign_answer->cert;
+	}
+	kfree(csr_sign_answer);
+	return 0;
+}
+
+static int cache_and_validate_cert(nasp_socket *sc, char *key)
+{
+	// Check if cert gen is required or we already have a cached certificate for this socket.
+	u16 cert_validation_err_no = 0;
+
+	cert_with_key *cached_cert_bundle = find_cert_from_cache(key);
+	if (!cached_cert_bundle)
+	{
+	regen_cert:
+		int err = handle_cert_gen(sc);
+		if (err == -1)
 		{
-			pr_err("nasp: generate_csr csr sign answer error: %s", csr_sign_answer->error);
-			kfree(csr_sign_answer->error);
-			kfree(csr_sign_answer);
 			return -1;
 		}
-		else
+		add_cert_to_cache(key, sc->cert);
+	}
+	// Cert found in the cache use that
+	else
+	{
+		x509_certificate_get(cached_cert_bundle->cert);
+		sc->cert = cached_cert_bundle->cert;
+	}
+	// Validate the cached or the generated cert
+	if (!validate_cert(sc->cert->validity))
+	{
+		pr_warn("nasp: provided certificate is invalid");
+		remove_cert_from_cache(cached_cert_bundle);
+		cert_validation_err_no++;
+		if (cert_validation_err_no == 1)
 		{
-			sc->trust_anchors = csr_sign_answer->trust_anchors;
-			sc->trust_anchors_len = csr_sign_answer->trust_anchors_len;
-			sc->chain = csr_sign_answer->chain;
-			sc->chain_len = csr_sign_answer->chain_len;
+			goto regen_cert;
 		}
-
-		kfree(csr_sign_answer);
+		else if (cert_validation_err_no == 2)
+		{
+			return -1;
+		}
 	}
 	return 0;
 }
@@ -946,6 +960,12 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		goto error;
 	}
 
+	// return if the agent is not running
+	if (atomic_read(&already_open) == CDEV_NOT_USED)
+	{
+		return client;
+	}
+
 	u16 port = (u16)(sk->sk_portpair >> 16);
 
 	sc = nasp_socket_accept(client);
@@ -978,11 +998,12 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
 
-		int result = handle_cert_gen(sc);
+		int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.id);
 		if (result == -1)
 		{
 			goto error;
 		}
+
 		/*
 		 * Initialise the context with the cipher suites and
 		 * algorithms. This depends on the server key type
@@ -997,13 +1018,13 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
 		 */
 		pr_info("nasp: accept use cert from agent");
-		br_ssl_server_init_full_rsa(sc->sc, sc->chain, sc->chain_len, sc->rsa_priv);
+		br_ssl_server_init_full_rsa(sc->sc, sc->cert->chain, sc->cert->chain_len, sc->rsa_priv);
 
 		// mTLS enablement
 		if (sc->opa_socket_ctx.mtls)
 		{
-			br_x509_minimal_init_full(&sc->xc.ctx, sc->trust_anchors, sc->trust_anchors_len);
-			br_ssl_server_set_trust_anchor_names_alt(sc->sc, sc->trust_anchors, sc->trust_anchors_len);
+			br_x509_minimal_init_full(&sc->xc.ctx, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
+			br_ssl_server_set_trust_anchor_names_alt(sc->sc, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
 
 			br_x509_nasp_init(&sc->xc, &sc->sc->eng, &sc->opa_socket_ctx);
 			br_ssl_engine_set_default_rsavrfy(&sc->sc->eng);
@@ -1045,8 +1066,6 @@ error:
 	if (client)
 		client->sk_prot->close(client, 0);
 
-	pr_err("nasp: [%s] accept error, socket closed", current->comm);
-
 	return NULL;
 }
 
@@ -1073,6 +1092,12 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if (err != 0)
 	{
 		goto error;
+	}
+
+	// return if the agent is not running
+	if (atomic_read(&already_open) == CDEV_NOT_USED)
+	{
+		return err;
 	}
 
 	pr_info("nasp: nasp_connect uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
@@ -1107,12 +1132,11 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
 
-		int result = handle_cert_gen(sc);
+		int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.id);
 		if (result == -1)
 		{
 			goto error;
 		}
-
 		/*
 		 * Initialise the context with the cipher suites and
 		 * algorithms. This depends on the server key type
@@ -1127,14 +1151,14 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
 		 */
 		pr_info("nasp: connect use cert from agent");
-		br_ssl_client_init_full(sc->cc, &sc->xc.ctx, sc->trust_anchors, sc->trust_anchors_len);
+		br_ssl_client_init_full(sc->cc, &sc->xc.ctx, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
 
 		br_x509_nasp_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx);
 
 		// mTLS enablement
 		if (sc->opa_socket_ctx.mtls)
 		{
-			br_ssl_client_set_single_rsa(sc->cc, sc->chain, sc->chain_len, sc->rsa_priv, br_rsa_pkcs1_sign_get_default());
+			br_ssl_client_set_single_rsa(sc->cc, sc->cert->chain, sc->cert->chain_len, sc->rsa_priv, br_rsa_pkcs1_sign_get_default());
 		}
 
 		/*
@@ -1178,8 +1202,6 @@ error:
 	lock_sock(sk);
 	sk->sk_prot->close(sk, 0);
 	release_sock(sk);
-
-	pr_err("nasp: [%s] connect error, socket closed", current->comm);
 
 	return err;
 }
@@ -1247,8 +1269,8 @@ void socket_exit(void)
 	tcpv6_prot.connect = connect_v6;
 
 	//- free global tls key
-	kfree(rsa_priv);
-	kfree(rsa_pub);
+	free_rsa_private_key(rsa_priv);
+	free_rsa_public_key(rsa_pub);
 
 	pr_info("nasp: socket support unloaded.");
 }

@@ -60,6 +60,7 @@ nasp-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  main.o \
 			  csr.o \
 			  rsa_tools.o \
+			  cert_tools.o \
 			  wasm.o \
 			  opa.o \
 			  proxywasm.o \

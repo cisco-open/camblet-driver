@@ -14,6 +14,7 @@
 #include "task_context.h"
 #include "bearssl.h"
 #include "socket.h"
+#include "cert_tools.h"
 
 #define COMMAND_TIMEOUT_SECONDS 1
 
@@ -26,10 +27,7 @@ typedef struct command_answer
 typedef struct csr_sign_answer
 {
     char *error;
-    br_x509_certificate *chain;
-    size_t chain_len;
-    br_x509_trust_anchor *trust_anchors;
-    size_t trust_anchors_len;
+    x509_certificate *cert;
 } csr_sign_answer;
 
 void free_command_answer(command_answer *cmd_answer);

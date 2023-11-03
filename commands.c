@@ -237,28 +237,30 @@ csr_sign_answer *send_csrsign_command(unsigned char *csr)
             goto error;
         }
 
-        csr_sign_answer->trust_anchors_len = json_array_get_count(trust_anchors);
+        csr_sign_answer->cert = x509_certificate_init();
+
+        csr_sign_answer->cert->trust_anchors_len = json_array_get_count(trust_anchors);
         size_t srclen;
 
-        if (csr_sign_answer->trust_anchors_len > 0)
+        if (csr_sign_answer->cert->trust_anchors_len > 0)
         {
-            csr_sign_answer->trust_anchors = kmalloc(csr_sign_answer->trust_anchors_len * sizeof *csr_sign_answer->trust_anchors, GFP_KERNEL);
+            csr_sign_answer->cert->trust_anchors = kmalloc(csr_sign_answer->cert->trust_anchors_len * sizeof *csr_sign_answer->cert->trust_anchors, GFP_KERNEL);
 
             size_t u;
-            for (u = 0; u < csr_sign_answer->trust_anchors_len; u++)
+            for (u = 0; u < csr_sign_answer->cert->trust_anchors_len; u++)
             {
                 JSON_Object *ta = json_array_get_object(trust_anchors, u);
 
-                csr_sign_answer->trust_anchors[u].flags = BR_X509_TA_CA;
-                csr_sign_answer->trust_anchors[u].pkey.key_type = BR_KEYTYPE_RSA;
+                csr_sign_answer->cert->trust_anchors[u].flags = BR_X509_TA_CA;
+                csr_sign_answer->cert->trust_anchors[u].pkey.key_type = BR_KEYTYPE_RSA;
 
                 // RAW (DN)
                 const char *raw_subject = json_object_get_string(ta, "rawSubject");
                 if (raw_subject != NULL)
                 {
                     srclen = strlen(raw_subject);
-                    csr_sign_answer->trust_anchors[u].dn.data = kmalloc(srclen, GFP_KERNEL);
-                    csr_sign_answer->trust_anchors[u].dn.len = base64_decode(csr_sign_answer->trust_anchors[u].dn.data, srclen, raw_subject, srclen);
+                    csr_sign_answer->cert->trust_anchors[u].dn.data = kmalloc(srclen, GFP_KERNEL);
+                    csr_sign_answer->cert->trust_anchors[u].dn.len = base64_decode(csr_sign_answer->cert->trust_anchors[u].dn.data, srclen, raw_subject, srclen);
                 }
 
                 // RSA_N
@@ -266,8 +268,8 @@ csr_sign_answer *send_csrsign_command(unsigned char *csr)
                 if (rsa_n != NULL)
                 {
                     srclen = strlen(rsa_n);
-                    csr_sign_answer->trust_anchors[u].pkey.key.rsa.n = kmalloc(srclen, GFP_KERNEL);
-                    csr_sign_answer->trust_anchors[u].pkey.key.rsa.nlen = base64_decode(csr_sign_answer->trust_anchors[u].pkey.key.rsa.n, srclen, rsa_n, srclen);
+                    csr_sign_answer->cert->trust_anchors[u].pkey.key.rsa.n = kmalloc(srclen, GFP_KERNEL);
+                    csr_sign_answer->cert->trust_anchors[u].pkey.key.rsa.nlen = base64_decode(csr_sign_answer->cert->trust_anchors[u].pkey.key.rsa.n, srclen, rsa_n, srclen);
                 }
 
                 // RSA_E
@@ -275,8 +277,8 @@ csr_sign_answer *send_csrsign_command(unsigned char *csr)
                 if (rsa_e != NULL)
                 {
                     srclen = strlen(rsa_e);
-                    csr_sign_answer->trust_anchors[u].pkey.key.rsa.e = kmalloc(srclen, GFP_KERNEL);
-                    csr_sign_answer->trust_anchors[u].pkey.key.rsa.elen = base64_decode(csr_sign_answer->trust_anchors[u].pkey.key.rsa.e, srclen, rsa_e, srclen);
+                    csr_sign_answer->cert->trust_anchors[u].pkey.key.rsa.e = kmalloc(srclen, GFP_KERNEL);
+                    csr_sign_answer->cert->trust_anchors[u].pkey.key.rsa.elen = base64_decode(csr_sign_answer->cert->trust_anchors[u].pkey.key.rsa.e, srclen, rsa_e, srclen);
                 }
             }
         }
@@ -288,12 +290,19 @@ csr_sign_answer *send_csrsign_command(unsigned char *csr)
             goto error;
         }
 
-        csr_sign_answer->chain = kzalloc(1 * sizeof *csr_sign_answer->chain, GFP_KERNEL);
-        csr_sign_answer->chain_len = 1;
+        csr_sign_answer->cert->chain = kzalloc(1 * sizeof *csr_sign_answer->cert->chain, GFP_KERNEL);
+        csr_sign_answer->cert->chain_len = 1;
 
         srclen = strlen(raw);
-        csr_sign_answer->chain[0].data = kmalloc(srclen, GFP_KERNEL);
-        csr_sign_answer->chain[0].data_len = base64_decode(csr_sign_answer->chain[0].data, srclen, raw, srclen);
+        csr_sign_answer->cert->chain->data = kmalloc(srclen, GFP_KERNEL);
+        csr_sign_answer->cert->chain->data_len = base64_decode(csr_sign_answer->cert->chain->data, srclen, raw, srclen);
+
+        int result = set_cert_validity(csr_sign_answer->cert);
+        if (result < 0)
+        {
+            errormsg = "could not decode generated certificate";
+            goto error;
+        }
     }
 
     return csr_sign_answer;
