@@ -34,7 +34,7 @@ static void cert_cache_unlock(void)
     mutex_unlock(&certificate_cache_lock);
 }
 
-static size_t linkedlist_length(struct list_head *head)
+size_t linkedlist_length(struct list_head *head)
 {
     struct list_head *pos;
     int length = 0;
