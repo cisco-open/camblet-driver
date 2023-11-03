@@ -150,6 +150,11 @@ static void attest_response_cache_set(char *key, attest_response *response)
 
 static attest_response *attest_response_cache_get(char *key)
 {
+    if (!key)
+    {
+        return NULL;
+    }
+
     attest_response_cache_entry *entry;
 
     attest_cache_lock();
