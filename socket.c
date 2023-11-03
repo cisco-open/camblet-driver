@@ -993,6 +993,7 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 	if (response->error)
 	{
 		pr_err("nasp: accept failed to attest: %s", response->error);
+		kfree(response);
 	}
 	else
 	{
@@ -1126,6 +1127,7 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if (response->error)
 	{
 		pr_err("nasp: connect failed to attest: %s", response->error);
+		kfree(response);
 	}
 	else
 	{
