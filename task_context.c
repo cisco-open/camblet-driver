@@ -34,7 +34,7 @@ task_context *get_task_context(void)
     struct task_context *context = kmalloc(sizeof(struct task_context), GFP_KERNEL);
 
     strcpy(context->command_name, current->comm);
-    context->command_path = get_current_proc_path(context->command_path_buffer, COMMAND_PATH_BUFLEN);
+    context->command_path = get_current_proc_path(context->command_path_buffer, sizeof(context->command_path_buffer));
     current_uid_gid(&context->uid, &context->gid);
     context->pid = current->pid;
 
@@ -46,6 +46,9 @@ task_context *get_task_context(void)
     context->namespace_ids.net = current->nsproxy->net_ns->ns.inum;
     context->namespace_ids.time = current->nsproxy->time_ns->ns.inum;
     context->namespace_ids.cgroup = current->nsproxy->cgroup_ns->ns.inum;
+
+    struct css_set *cset = task_css_set(current);
+    cgroup_path(cset->dfl_cgrp, context->cgroup_path, sizeof(context->cgroup_path));
 
     return context;
 }

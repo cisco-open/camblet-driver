@@ -369,6 +369,7 @@ static char *serialize_command(struct command *cmd)
         json_object_set_number(context_object, "pid", cmd->context->pid);
         json_object_set_string(context_object, "command_path", cmd->context->command_path);
         json_object_set_string(context_object, "command_name", cmd->context->command_name);
+        json_object_set_string(context_object, "cgroup_path", cmd->context->cgroup_path);
 
         JSON_Value *namespace_ids_value = json_value_init_object();
         JSON_Object *namespace_ids_object = json_value_get_object(namespace_ids_value);
