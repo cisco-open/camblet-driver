@@ -14,7 +14,8 @@
 #include <linux/uaccess.h>
 #include <linux/sched/mm.h>
 
-#define COMMAND_PATH_BUFLEN 256
+#define MAX_PATH_LEN 256
+#define MAX_COMM_LEN 64
 
 char *get_current_proc_path(char *buf, int buflen);
 
@@ -31,13 +32,14 @@ struct namespace_ids
 
 typedef struct task_context
 {
-    char command_name[TASK_COMM_LEN];
-    char command_path_buffer[COMMAND_PATH_BUFLEN];
+    char command_name[MAX_COMM_LEN];
+    char command_path_buffer[MAX_PATH_LEN];
     char *command_path;
     kuid_t uid;
     kgid_t gid;
     pid_t pid;
     struct namespace_ids namespace_ids;
+    char cgroup_path[MAX_PATH_LEN];
 } task_context;
 
 task_context *get_task_context(void);
