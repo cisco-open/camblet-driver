@@ -54,4 +54,6 @@ void remove_unused_expired_certs_from_cache(void);
 bool validate_cert(x509_certificate_validity cert_validity);
 int set_cert_validity(x509_certificate *x509_cert);
 
+size_t linkedlist_length(struct list_head *head);
+
 #endif

@@ -29,6 +29,7 @@
 #include "tls.h"
 #include "string.h"
 #include "cert_tools.h"
+#include "attest.h"
 
 const char *ALPNs[] = {
 	"istio-peer-exchange",
@@ -771,7 +772,10 @@ int (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 struct sock *(*accept_v6)(struct sock *sk, int flags, int *err, bool kern);
 int (*connect_v6)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 
-static int handle_cert_gen(nasp_socket *sc)
+// lock cert generation
+static DEFINE_MUTEX(cert_gen_lock);
+
+static int handle_cert_gen_locked(nasp_socket *sc)
 {
 	// Generating certificate signing request
 	if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
@@ -870,6 +874,15 @@ static int handle_cert_gen(nasp_socket *sc)
 	}
 	kfree(csr_sign_answer);
 	return 0;
+}
+
+static int handle_cert_gen(nasp_socket *sc)
+{
+	mutex_lock(&cert_gen_lock);
+	int ret = handle_cert_gen_locked(sc);
+	mutex_unlock(&cert_gen_lock);
+
+	return ret;
 }
 
 static int cache_and_validate_cert(nasp_socket *sc, char *key)
@@ -975,20 +988,19 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		goto error;
 	}
 
-	// send attest command
-	command_answer *answer = send_attest_command(INPUT, client, port);
-
-	if (answer->error)
+	// attest workload connection
+	attest_response *response = attest_workload(INPUT, client, port);
+	if (response->error)
 	{
-		pr_err("nasp: accept failed to send attest command: %s", answer->error);
+		pr_err("nasp: accept failed to attest: %s", response->error);
 	}
 	else
 	{
-		pr_info("nasp: accept attest command answer: %s", answer->answer);
-		sc->opa_socket_ctx = socket_eval(answer->answer);
+		attest_response_get(response);
+		pr_info("nasp: accept attest response: %s", response->response);
+		sc->opa_socket_ctx = socket_eval(response->response);
+		attest_response_put(response);
 	}
-
-	free_command_answer(answer);
 
 	if (client && sc->opa_socket_ctx.allowed)
 	{
@@ -1109,21 +1121,19 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		goto error;
 	}
 
-	// send attest command
-	command_answer *answer = send_attest_command(OUTPUT, sk, port);
-
-	if (answer->error)
+	// attest workload connection
+	attest_response *response = attest_workload(OUTPUT, sk, port);
+	if (response->error)
 	{
-		pr_err("nasp: connect failed to send attest command: %s", answer->error);
+		pr_err("nasp: connect failed to attest: %s", response->error);
 	}
 	else
 	{
-		pr_info("nasp: connect attest command answer: %s", answer->answer);
-
-		sc->opa_socket_ctx = socket_eval(answer->answer);
+		attest_response_get(response);
+		pr_info("nasp: connect attest response: %s", response->response);
+		sc->opa_socket_ctx = socket_eval(response->response);
+		attest_response_put(response);
 	}
-
-	free_command_answer(answer);
 
 	if (err == 0 && sc->opa_socket_ctx.allowed)
 	{
