@@ -55,15 +55,14 @@ static void attest_response_cache_remove(attest_response_cache_entry *entry)
     }
 }
 
-static void housekeep_cache(void)
+static void housekeep_cache_locked(void)
 {
     if (linkedlist_length(&attest_cache) >= MAX_CACHE_LENGTH)
     {
         pr_warn("nasp: attests cache is full removing the oldest element");
         attest_response_cache_entry *last_entry = list_last_entry(&attest_cache, attest_response_cache_entry, list);
         pr_warn("nasp: removing key[%s] from the cache", last_entry->key);
-        attest_response_cache_remove(last_entry);
-        return;
+        attest_response_cache_remove_locked(last_entry);
     }
 }
 
@@ -121,7 +120,7 @@ static char *get_task_context_key(task_context *ctx)
     return key;
 }
 
-static void attest_response_cache_set(char *key, attest_response *response)
+static void attest_response_cache_set_locked(char *key, attest_response *response)
 {
     if (!key)
     {
@@ -129,7 +128,7 @@ static void attest_response_cache_set(char *key, attest_response *response)
         return;
     }
 
-    housekeep_cache();
+    housekeep_cache_locked();
 
     attest_response_cache_entry *new_entry = kzalloc(sizeof(attest_response_cache_entry), GFP_KERNEL);
     if (!new_entry)
@@ -141,14 +140,12 @@ static void attest_response_cache_set(char *key, attest_response *response)
     new_entry->key = strdup(key);
     new_entry->response = response;
 
-    attest_cache_lock();
     INIT_LIST_HEAD(&new_entry->list);
     pr_info("nasp: attest response cache set: key[%s]", new_entry->key);
     list_add(&new_entry->list, &attest_cache);
-    attest_cache_unlock();
 }
 
-static attest_response *attest_response_cache_get(char *key)
+static attest_response *attest_response_cache_get_locked(char *key)
 {
     if (!key)
     {
@@ -157,17 +154,14 @@ static attest_response *attest_response_cache_get(char *key)
 
     attest_response_cache_entry *entry;
 
-    attest_cache_lock();
     list_for_each_entry(entry, &attest_cache, list)
     {
         if (strncmp(entry->key, key, strlen(key)) == 0)
         {
             pr_info("nasp: attest response cache hit: key[%s]", key);
-            attest_cache_unlock();
             return entry->response;
         }
     }
-    attest_cache_unlock();
 
     return NULL;
 }
@@ -176,8 +170,10 @@ attest_response *attest_workload(direction direction, struct sock *s, u16 port)
 {
     attest_response *response;
 
+    attest_cache_lock();
+
     char *key = get_task_context_key(get_task_context());
-    response = attest_response_cache_get(key);
+    response = attest_response_cache_get_locked(key);
     if (response)
     {
         goto ret;
@@ -190,13 +186,15 @@ attest_response *attest_workload(direction direction, struct sock *s, u16 port)
     else
     {
         response->response = strdup(answer->answer);
-        attest_response_cache_set(key, response);
+        attest_response_cache_set_locked(key, response);
     }
 
     free_command_answer(answer);
 
 ret:
     kfree(key);
+
+    attest_cache_unlock();
 
     return response;
 }
