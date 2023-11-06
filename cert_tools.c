@@ -79,16 +79,18 @@ void remove_unused_expired_certs_from_cache()
 {
     cert_with_key *cert_bundle, *cert_bundle_tmp;
 
+    cert_cache_lock();
+
     if (linkedlist_length(&cert_cache) >= MAX_CACHE_LENGTH)
     {
         pr_warn("nasp: cache is full removing the oldest element");
         cert_with_key *last_entry = list_last_entry(&cert_cache, cert_with_key, list);
         pr_warn("nasp: removing key:%s from the cache", last_entry->key);
-        remove_cert_from_cache(last_entry);
+        remove_cert_from_cache_locked(last_entry);
+        cert_cache_unlock();
         return;
     }
 
-    cert_cache_lock();
     list_for_each_entry_safe_reverse(cert_bundle, cert_bundle_tmp, &cert_cache, list)
     {
         if (!validate_cert(cert_bundle->cert->validity))
