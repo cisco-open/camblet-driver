@@ -404,7 +404,7 @@ static JSON_Status json_object_init(JSON_Object *object, size_t capacity) {
 
     object->count = 0;
     object->cell_capacity = capacity;
-    object->item_capacity = (unsigned int)(capacity * 4 / 3);
+    object->item_capacity = (unsigned int)(capacity * 7/10);
 
     if (capacity == 0) {
         return JSONSuccess;
