@@ -10,6 +10,7 @@
 #include <linux/slab.h>
 #include <linux/uuid.h>
 #include <linux/inet.h>
+#include <linux/ipv6.h>
 
 #include "commands.h"
 #include "json.h"
@@ -99,15 +100,37 @@ command_answer *send_attest_command(direction direction, struct sock *s, u16 por
 
     if (direction == INPUT)
     {
-        snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
-        snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
+        if (s->sk_family == AF_INET6)
+        {
+            struct in6_addr *ipv6_saddr = &inet6_sk(s)->saddr;
+            struct in6_addr *ipv6_daddr = &s->sk_v6_daddr;
+            snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, ipv6_daddr);
+            snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, ipv6_saddr);
+        }
+        else
+        {
+            snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
+            snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
+        }
+
         source_port = s->sk_dport;
         destination_port = s->sk_num;
     }
     else
     {
-        snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
-        snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
+        if (s->sk_family == AF_INET6)
+        {
+            struct in6_addr *ipv6_saddr = &inet6_sk(s)->saddr;
+            struct in6_addr *ipv6_daddr = &s->sk_v6_daddr;
+            snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, ipv6_saddr);
+            snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, ipv6_daddr);
+        }
+        else
+        {
+            snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
+            snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
+        }
+
         source_port = s->sk_num;
         destination_port = port;
     }
