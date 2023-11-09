@@ -176,6 +176,7 @@ attest_response *attest_workload()
     response = attest_response_cache_get_locked(key);
     if (response)
     {
+        attest_response_get(response);
         goto ret;
     }
 
@@ -187,6 +188,7 @@ attest_response *attest_workload()
     {
         response->response = strdup(answer->answer);
         attest_response_cache_set_locked(key, response);
+        attest_response_get(response);
     }
 
     free_command_answer(answer);
