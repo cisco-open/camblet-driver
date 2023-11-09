@@ -84,77 +84,9 @@ command_answer *send_command(char *name, char *data, task_context *context)
     return cmd_answer;
 }
 
-command_answer *send_attest_command(direction direction, struct sock *s, u16 port)
+command_answer *send_attest_command()
 {
-    const char *ipformat = "%pI4";
-
-    if (s->sk_family == AF_INET6)
-    {
-        ipformat = "%pI6";
-    }
-
-    char source_ip[INET6_ADDRSTRLEN];
-    u16 source_port;
-    char destination_ip[INET6_ADDRSTRLEN];
-    u16 destination_port;
-
-    if (direction == INPUT)
-    {
-        if (s->sk_family == AF_INET6)
-        {
-            struct in6_addr *ipv6_saddr = &inet6_sk(s)->saddr;
-            struct in6_addr *ipv6_daddr = &s->sk_v6_daddr;
-            snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, ipv6_daddr);
-            snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, ipv6_saddr);
-        }
-        else
-        {
-            snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
-            snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
-        }
-
-        source_port = s->sk_dport;
-        destination_port = s->sk_num;
-    }
-    else
-    {
-        if (s->sk_family == AF_INET6)
-        {
-            struct in6_addr *ipv6_saddr = &inet6_sk(s)->saddr;
-            struct in6_addr *ipv6_daddr = &s->sk_v6_daddr;
-            snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, ipv6_saddr);
-            snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, ipv6_daddr);
-        }
-        else
-        {
-            snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
-            snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
-        }
-
-        source_port = s->sk_num;
-        destination_port = port;
-    }
-
-    JSON_Value *root_value = json_value_init_object();
-    JSON_Object *root_object = json_value_get_object(root_value);
-
-    if (!root_object)
-    {
-        return answer_with_error("could not get root object");
-    }
-
-    json_object_set_number(root_object, "direction", direction);
-    json_object_set_string(root_object, "source_ip", source_ip);
-    json_object_set_number(root_object, "source_port", source_port);
-    json_object_set_string(root_object, "destination_ip", destination_ip);
-    json_object_set_number(root_object, "destination_port", destination_port);
-
-    char *serialized_string = json_serialize_to_string(root_value);
-
-    command_answer *answer = send_command("attest", serialized_string, get_task_context());
-
-    json_free_serialized_string(serialized_string);
-    json_value_free(root_value);
+    command_answer *answer = send_command("attest", "", get_task_context());
 
     return answer;
 }
