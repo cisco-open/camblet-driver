@@ -166,7 +166,7 @@ static attest_response *attest_response_cache_get_locked(char *key)
     return NULL;
 }
 
-attest_response *attest_workload(direction direction, struct sock *s, u16 port)
+attest_response *attest_workload()
 {
     attest_response *response;
 
@@ -180,7 +180,7 @@ attest_response *attest_workload(direction direction, struct sock *s, u16 port)
     }
 
     response = attest_response_init();
-    command_answer *answer = send_attest_command(direction, s, port);
+    command_answer *answer = send_attest_command();
     if (answer->error)
         response->error = strdup(answer->error);
     else

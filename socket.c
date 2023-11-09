@@ -17,6 +17,7 @@
 #include <net/tls.h>
 #include <net/sock.h>
 #include <net/ip.h>
+#include <linux/inet.h>
 
 #include "bearssl.h"
 #include "commands.h"
@@ -30,6 +31,7 @@
 #include "string.h"
 #include "cert_tools.h"
 #include "attest.h"
+#include "json.h"
 
 const char *ALPNs[] = {
 	"istio-peer-exchange",
@@ -925,6 +927,108 @@ static int cache_and_validate_cert(nasp_socket *sc, char *key)
 	return 0;
 }
 
+static command_answer *prepare_opa_input(direction direction, struct sock *s, u16 port, char *attest_response_json)
+{
+	const char *ipformat = "%pI4";
+
+	if (s->sk_family == AF_INET6)
+	{
+		ipformat = "%pI6";
+	}
+
+	char source_ip[INET6_ADDRSTRLEN];
+	u16 source_port;
+	char destination_ip[INET6_ADDRSTRLEN];
+	u16 destination_port;
+
+	if (direction == INPUT)
+	{
+		if (s->sk_family == AF_INET6)
+		{
+			struct in6_addr *ipv6_saddr = &inet6_sk(s)->saddr;
+			struct in6_addr *ipv6_daddr = &s->sk_v6_daddr;
+			snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, ipv6_daddr);
+			snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, ipv6_saddr);
+		}
+		else
+		{
+			snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
+			snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
+		}
+
+		source_port = s->sk_dport;
+		destination_port = s->sk_num;
+	}
+	else
+	{
+		if (s->sk_family == AF_INET6)
+		{
+			struct in6_addr *ipv6_saddr = &inet6_sk(s)->saddr;
+			struct in6_addr *ipv6_daddr = &s->sk_v6_daddr;
+			snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, ipv6_saddr);
+			snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, ipv6_daddr);
+		}
+		else
+		{
+			snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
+			snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
+		}
+
+		source_port = s->sk_num;
+		destination_port = port;
+	}
+
+	if (!attest_response_json)
+	{
+		return answer_with_error("nil attest response json");
+	}
+
+	JSON_Value *json = json_parse_string(attest_response_json);
+	if (!json)
+	{
+		return answer_with_error("could not parse json");
+	}
+
+	JSON_Object *root = json_value_get_object(json);
+	if (!root)
+	{
+		return answer_with_error("could not get root object");
+	}
+
+	char buff[256];
+
+	JSON_Object *selectors = json_object_get_object(root, "selectors");
+	if (!selectors)
+	{
+		return answer_with_error("could not find selectors in json");
+	}
+
+	if (direction == INPUT)
+		json_object_set_boolean(selectors, "direction:input", true);
+	else
+		json_object_set_boolean(selectors, "direction:output", true);
+
+	snprintf(buff, sizeof(buff), "source:ip:%s", source_ip);
+	json_object_set_boolean(selectors, buff, true);
+	snprintf(buff, sizeof(buff), "source:port:%d", source_port);
+	json_object_set_boolean(selectors, buff, true);
+
+	snprintf(buff, sizeof(buff), "destination:ip:%s", destination_ip);
+	json_object_set_boolean(selectors, buff, true);
+	snprintf(buff, sizeof(buff), "destination:port:%d", destination_port);
+	json_object_set_boolean(selectors, buff, true);
+
+	char *serialized_string = json_serialize_to_string(json);
+
+	command_answer *answer = kzalloc(sizeof(struct command_answer), GFP_KERNEL);
+	answer->answer = strdup(serialized_string);
+
+	json_free_serialized_string(serialized_string);
+	json_value_free(json);
+
+	return answer;
+}
+
 /*
  * Low-level data read callback for the simplified SSL I/O API.
  */
@@ -989,7 +1093,7 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 	}
 
 	// attest workload connection
-	attest_response *response = attest_workload(INPUT, client, port);
+	attest_response *response = attest_workload();
 	if (response->error)
 	{
 		pr_err("nasp: accept failed to attest: %s", response->error);
@@ -999,7 +1103,17 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 	{
 		attest_response_get(response);
 		pr_info("nasp: accept attest response: %s", response->response);
-		sc->opa_socket_ctx = socket_eval(response->response);
+		command_answer *answer = prepare_opa_input(INPUT, client, port, response->response);
+		if (answer->error)
+		{
+			pr_err("nasp: accept failed to attest: %s", answer->error);
+		}
+		else
+		{
+			pr_info("nasp: accept attest response: %s", answer->answer);
+			sc->opa_socket_ctx = socket_eval(answer->answer);
+		}
+		free_command_answer(answer);
 		attest_response_put(response);
 	}
 
@@ -1123,7 +1237,7 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	}
 
 	// attest workload connection
-	attest_response *response = attest_workload(OUTPUT, sk, port);
+	attest_response *response = attest_workload();
 	if (response->error)
 	{
 		pr_err("nasp: connect failed to attest: %s", response->error);
@@ -1132,8 +1246,17 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	else
 	{
 		attest_response_get(response);
-		pr_info("nasp: connect attest response: %s", response->response);
-		sc->opa_socket_ctx = socket_eval(response->response);
+		command_answer *answer = prepare_opa_input(OUTPUT, sk, port, response->response);
+		if (answer->error)
+		{
+			pr_err("nasp: connect failed to attest: %s", answer->error);
+		}
+		else
+		{
+			pr_info("nasp: connect attest response: %s", answer->answer);
+			sc->opa_socket_ctx = socket_eval(answer->answer);
+		}
+		free_command_answer(answer);
 		attest_response_put(response);
 	}
 
