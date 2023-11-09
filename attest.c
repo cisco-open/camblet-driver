@@ -140,7 +140,6 @@ static void attest_response_cache_set_locked(char *key, attest_response *respons
     new_entry->key = strdup(key);
     new_entry->response = response;
 
-    INIT_LIST_HEAD(&new_entry->list);
     pr_info("nasp: attest response cache set: key[%s]", new_entry->key);
     list_add(&new_entry->list, &attest_cache);
 }
