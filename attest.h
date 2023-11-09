@@ -29,6 +29,6 @@ typedef struct
 
 void attest_response_get(attest_response *response);
 void attest_response_put(attest_response *response);
-attest_response *attest_workload(direction direction, struct sock *s, u16 port);
+attest_response *attest_workload(void);
 
 #endif
