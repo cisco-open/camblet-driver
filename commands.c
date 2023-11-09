@@ -66,8 +66,7 @@ command_answer *send_command(char *name, char *data, task_context *context)
     {
         pr_err("nasp: command [%s] [%pUB] answer timeout", name, cmd->uuid.b);
 
-        cmd->answer = kzalloc(sizeof(struct command_answer), GFP_KERNEL);
-        cmd->answer->error = strdup("timeout");
+        cmd->answer = answer_with_error("timeout");
     }
 
     spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
