@@ -1101,7 +1101,6 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 	}
 	else
 	{
-		attest_response_get(response);
 		pr_info("nasp: accept attest response: %s", response->response);
 		command_answer *answer = prepare_opa_input(INPUT, client, port, response->response);
 		if (answer->error)
@@ -1245,7 +1244,6 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	}
 	else
 	{
-		attest_response_get(response);
 		command_answer *answer = prepare_opa_input(OUTPUT, sk, port, response->response);
 		if (answer->error)
 		{
