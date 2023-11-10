@@ -41,6 +41,7 @@ static void attest_response_cache_remove_locked(attest_response_cache_entry *ent
     {
         list_del(&entry->list);
         attest_response_put(entry->response);
+        kfree(entry->key);
         kfree(entry);
     }
 }
