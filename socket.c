@@ -1087,12 +1087,7 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	u16 port = (u16)(sk->sk_portpair >> 16);
 
-	sc = nasp_socket_accept(client);
-	if (!sc)
-	{
-		pr_err("nasp: nasp_socket_accept failed to create nasp_socket");
-		goto error;
-	}
+	opa_socket_context opa_socket_ctx = {};
 
 	// attest workload connection
 	attest_response *response = attest_workload();
@@ -1112,14 +1107,23 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		else
 		{
 			pr_info("nasp: accept attest response: %s", answer->answer);
-			sc->opa_socket_ctx = socket_eval(answer->answer);
+			opa_socket_ctx = socket_eval(answer->answer);
 		}
 		free_command_answer(answer);
 		attest_response_put(response);
 	}
 
-	if (client && sc->opa_socket_ctx.allowed)
+	if (opa_socket_ctx.allowed)
 	{
+		sc = nasp_socket_accept(client);
+		if (!sc)
+		{
+			pr_err("nasp: nasp_socket_accept failed to create nasp_socket");
+			goto error;
+		}
+
+		sc->opa_socket_ctx = opa_socket_ctx;
+
 		u16 client_port = (u16)(client->sk_portpair);
 		pr_info("nasp: nasp_accept uid: %d app: %s on ports: %d <- %d", current_uid().val, current->comm, port, client_port);
 
@@ -1230,12 +1234,7 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	pr_info("nasp: nasp_connect uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
 
-	sc = nasp_socket_connect(sk);
-	if (!sc)
-	{
-		pr_err("nasp: nasp_socket_connect failed to create nasp_socket");
-		goto error;
-	}
+	opa_socket_context opa_socket_ctx = {};
 
 	// attest workload connection
 	attest_response *response = attest_workload();
@@ -1254,14 +1253,23 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		else
 		{
 			pr_info("nasp: connect attest response: %s", answer->answer);
-			sc->opa_socket_ctx = socket_eval(answer->answer);
+			opa_socket_ctx = socket_eval(answer->answer);
 		}
 		free_command_answer(answer);
 		attest_response_put(response);
 	}
 
-	if (err == 0 && sc->opa_socket_ctx.allowed)
+	if (opa_socket_ctx.allowed)
 	{
+		sc = nasp_socket_connect(sk);
+		if (!sc)
+		{
+			pr_err("nasp: nasp_socket_connect failed to create nasp_socket");
+			goto error;
+		}
+
+		sc->opa_socket_ctx = opa_socket_ctx;
+
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
