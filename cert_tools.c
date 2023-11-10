@@ -106,7 +106,6 @@ void remove_unused_expired_certs_from_cache()
 // the function is thread safe
 cert_with_key *find_cert_from_cache(char *key)
 {
-
     remove_unused_expired_certs_from_cache();
 
     cert_with_key *cert_bundle;
@@ -115,6 +114,7 @@ cert_with_key *find_cert_from_cache(char *key)
     {
         if (strncmp(cert_bundle->key, key, strlen(key)) == 0)
         {
+            x509_certificate_get(cert_bundle->cert);
             cert_cache_unlock();
             return cert_bundle;
         }

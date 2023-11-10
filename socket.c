@@ -906,13 +906,13 @@ static int cache_and_validate_cert(nasp_socket *sc, char *key)
 	// Cert found in the cache use that
 	else
 	{
-		x509_certificate_get(cached_cert_bundle->cert);
 		sc->cert = cached_cert_bundle->cert;
 	}
 	// Validate the cached or the generated cert
 	if (!validate_cert(sc->cert->validity))
 	{
 		pr_warn("nasp: provided certificate is invalid");
+		x509_certificate_put(sc->cert);
 		remove_cert_from_cache(cached_cert_bundle);
 		cert_validation_err_no++;
 		if (cert_validation_err_no == 1)
