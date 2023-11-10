@@ -142,6 +142,7 @@ void remove_cert_from_cache_locked(cert_with_key *cert_bundle)
     {
         list_del(&cert_bundle->list);
         x509_certificate_put(cert_bundle->cert);
+        kfree(cert_bundle->key);
         kfree(cert_bundle);
     }
 }

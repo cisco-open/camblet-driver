@@ -983,6 +983,8 @@ static command_answer *prepare_opa_input(direction direction, struct sock *s, u1
 		return answer_with_error("nil attest response json");
 	}
 
+	command_answer *answer = NULL;
+
 	JSON_Value *json = json_parse_string(attest_response_json);
 	if (!json)
 	{
@@ -992,21 +994,23 @@ static command_answer *prepare_opa_input(direction direction, struct sock *s, u1
 	JSON_Object *root = json_value_get_object(json);
 	if (!root)
 	{
-		return answer_with_error("could not get root object");
+		answer = answer_with_error("could not get root object");
+		goto cleanup;
 	}
-
-	char buff[256];
 
 	JSON_Object *selectors = json_object_get_object(root, "selectors");
 	if (!selectors)
 	{
-		return answer_with_error("could not find selectors in json");
+		answer = answer_with_error("could not find selectors in json");
+		goto cleanup;
 	}
 
 	if (direction == INPUT)
 		json_object_set_boolean(selectors, "direction:input", true);
 	else
 		json_object_set_boolean(selectors, "direction:output", true);
+
+	char buff[256];
 
 	snprintf(buff, sizeof(buff), "source:ip:%s", source_ip);
 	json_object_set_boolean(selectors, buff, true);
@@ -1018,12 +1022,10 @@ static command_answer *prepare_opa_input(direction direction, struct sock *s, u1
 	snprintf(buff, sizeof(buff), "destination:port:%d", destination_port);
 	json_object_set_boolean(selectors, buff, true);
 
-	char *serialized_string = json_serialize_to_string(json);
+	answer = kzalloc(sizeof(struct command_answer), GFP_KERNEL);
+	answer->answer = json_serialize_to_string(json);
 
-	command_answer *answer = kzalloc(sizeof(struct command_answer), GFP_KERNEL);
-	answer->answer = strdup(serialized_string);
-
-	json_free_serialized_string(serialized_string);
+cleanup:
 	json_value_free(json);
 
 	return answer;
