@@ -26,6 +26,7 @@ typedef struct
     char *id;
     char *dns;
     char *uri;
+    char *ttl;
     char *allowed_spiffe_ids[MAX_ALLOWED_SPIFFE_ID];
     int allowed_spiffe_ids_length;
 } opa_socket_context;

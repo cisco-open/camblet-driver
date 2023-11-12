@@ -887,7 +887,7 @@ static int handle_cert_gen_locked(nasp_socket *sc)
 	csr_unlock(csr);
 
 	csr_sign_answer *csr_sign_answer;
-	csr_sign_answer = send_csrsign_command(csr_ptr);
+	csr_sign_answer = send_csrsign_command(csr_ptr, sc->opa_socket_ctx.ttl);
 	if (csr_sign_answer->error)
 	{
 		pr_err("nasp: generate_csr csr sign answer error: %s", csr_sign_answer->error);

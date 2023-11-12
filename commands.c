@@ -134,12 +134,19 @@ command_answer *send_connect_command(u16 port)
     return answer;
 }
 
-csr_sign_answer *send_csrsign_command(unsigned char *csr)
+csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
 {
     JSON_Value *json = NULL;
     const char *errormsg;
 
     csr_sign_answer *csr_sign_answer = kzalloc(sizeof(struct csr_sign_answer), GFP_KERNEL);
+
+    if (!csr)
+    {
+        csr_sign_answer->error = strdup("nil csr");
+
+        return csr_sign_answer;
+    }
 
     JSON_Value *root_value = json_value_init_object();
     JSON_Object *root_object = json_value_get_object(root_value);
@@ -151,6 +158,10 @@ csr_sign_answer *send_csrsign_command(unsigned char *csr)
     }
 
     json_object_set_string(root_object, "csr", csr);
+    if (ttl)
+    {
+        json_object_set_string(root_object, "ttl", ttl);
+    }
 
     char *serialized_string = json_serialize_to_string(root_value);
 
