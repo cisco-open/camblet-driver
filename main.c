@@ -14,6 +14,7 @@
 #include "opa.h"
 #include "socket.h"
 #include "wasm.h"
+#include "config.h"
 
 #include "static/filter_stats.h"
 #include "static/filter_tcp_metadata.h"
@@ -39,6 +40,8 @@ static int __init nasp_init(void)
         FATAL("wasm_vm_new_per_cpu: %s", result.err);
         return -1;
     }
+
+    nasp_config_init();
 
     int ret = 0;
 
@@ -84,6 +87,8 @@ static void __exit nasp_exit(void)
     socket_exit();
     chardev_exit();
     wasm_vm_destroy_per_cpu();
+
+    nasp_config_free();
 
     pr_info("%s: module unloaded from 0x%p", THIS_MODULE->name, nasp_exit);
 }
