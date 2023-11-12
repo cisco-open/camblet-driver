@@ -11,6 +11,7 @@
 #include "opa.h"
 #include "json.h"
 #include "string.h"
+#include "config.h"
 
 typedef struct opa_wrapper
 {
@@ -336,7 +337,12 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
         size_t id_len = json_object_dotget_string_len(matched_policy, "id");
         if (egress_id_len > 0 || id_len > 0)
         {
-            ret.id = kzalloc(egress_id_len + id_len + 1, GFP_KERNEL);
+            nasp_config_lock();
+            nasp_config *config = nasp_config_get_locked();
+            size_t trust_domain_len = strlen(config->trust_domain);
+            ret.id = kzalloc(trust_domain_len + egress_id_len + id_len + 1, GFP_KERNEL);
+            strcat(ret.id, config->trust_domain);
+            nasp_config_unlock();
             if (id_len > 0)
             {
                 strcat(ret.id, json_object_dotget_string(matched_policy, "id"));
@@ -385,9 +391,12 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             workload_id = json_object_dotget_string(matched_policy, "properties.workloadID");
         if (workload_id != NULL)
         {
-            int workload_id_len = strlen(workload_id) + 24;
+            nasp_config_lock();
+            nasp_config *config = nasp_config_get_locked();
+            int workload_id_len = snprintf(NULL, 0, "spiffe://%s/%s", config->trust_domain, workload_id);
             ret.uri = kzalloc(workload_id_len + 1, GFP_KERNEL);
-            snprintf(ret.uri, workload_id_len, "spiffe://cluster.local/%s", workload_id);
+            snprintf(ret.uri, workload_id_len + 1, "spiffe://%s/%s", config->trust_domain, workload_id);
+            nasp_config_unlock();
         }
 
         JSON_Array *dns = json_object_dotget_array(matched_policy, "egress.properties.dns");
