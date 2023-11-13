@@ -125,7 +125,7 @@ static void attest_response_cache_set_locked(char *key, attest_response *respons
 {
     if (!key)
     {
-        pr_err("attest response cache: provided key is null");
+        pr_err("nasp: attest response cache: provided key is null");
         return;
     }
 
@@ -134,7 +134,7 @@ static void attest_response_cache_set_locked(char *key, attest_response *respons
     attest_response_cache_entry *new_entry = kzalloc(sizeof(attest_response_cache_entry), GFP_KERNEL);
     if (!new_entry)
     {
-        pr_err("attest response cache: memory allocation error");
+        pr_err("nasp: attest response cache: memory allocation error");
         return;
     }
 
