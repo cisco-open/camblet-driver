@@ -78,6 +78,11 @@ static attest_response *attest_response_init(void)
 
 static void attest_response_free(attest_response *response)
 {
+    if (!response)
+    {
+        return;
+    }
+
     kfree(response->error);
     kfree(response->response);
     kfree(response);
