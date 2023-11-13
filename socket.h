@@ -12,6 +12,9 @@
 #define socket_h
 
 #include <net/sock.h>
+#include <linux/inet.h>
+
+#include "json.h"
 
 int socket_init(void);
 void socket_exit(void);
@@ -21,5 +24,16 @@ typedef enum
     INPUT,
     OUTPUT
 } direction;
+
+typedef struct
+{
+    direction direction;
+    char source_ip[INET6_ADDRSTRLEN];
+    u16 source_port;
+    char destination_ip[INET6_ADDRSTRLEN];
+    u16 destination_port;
+} net_conn_info;
+
+void add_net_conn_info_to_json(net_conn_info conn_info, JSON_Object *json_object);
 
 #endif

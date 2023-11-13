@@ -955,8 +955,9 @@ static int cache_and_validate_cert(nasp_socket *sc, char *key)
 	return 0;
 }
 
-static command_answer *prepare_opa_input(direction direction, struct sock *s, u16 port, char *attest_response_json)
+static net_conn_info get_net_conn_info(direction direction, struct sock *s, u16 port)
 {
+	net_conn_info info = {.direction = direction};
 	const char *ipformat = "%pI4";
 
 	if (s->sk_family == AF_INET6)
@@ -964,28 +965,23 @@ static command_answer *prepare_opa_input(direction direction, struct sock *s, u1
 		ipformat = "%pI6";
 	}
 
-	char source_ip[INET6_ADDRSTRLEN];
-	u16 source_port;
-	char destination_ip[INET6_ADDRSTRLEN];
-	u16 destination_port;
-
 	if (direction == INPUT)
 	{
 		if (s->sk_family == AF_INET6)
 		{
 			struct in6_addr *ipv6_saddr = &inet6_sk(s)->saddr;
 			struct in6_addr *ipv6_daddr = &s->sk_v6_daddr;
-			snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, ipv6_daddr);
-			snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, ipv6_saddr);
+			snprintf(info.source_ip, INET6_ADDRSTRLEN, ipformat, ipv6_daddr);
+			snprintf(info.destination_ip, INET6_ADDRSTRLEN, ipformat, ipv6_saddr);
 		}
 		else
 		{
-			snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
-			snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
+			snprintf(info.source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
+			snprintf(info.destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
 		}
 
-		source_port = s->sk_dport;
-		destination_port = s->sk_num;
+		info.source_port = s->sk_dport;
+		info.destination_port = s->sk_num;
 	}
 	else
 	{
@@ -993,19 +989,49 @@ static command_answer *prepare_opa_input(direction direction, struct sock *s, u1
 		{
 			struct in6_addr *ipv6_saddr = &inet6_sk(s)->saddr;
 			struct in6_addr *ipv6_daddr = &s->sk_v6_daddr;
-			snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, ipv6_saddr);
-			snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, ipv6_daddr);
+			snprintf(info.source_ip, INET6_ADDRSTRLEN, ipformat, ipv6_saddr);
+			snprintf(info.destination_ip, INET6_ADDRSTRLEN, ipformat, ipv6_daddr);
 		}
 		else
 		{
-			snprintf(source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
-			snprintf(destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
+			snprintf(info.source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
+			snprintf(info.destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
 		}
 
-		source_port = s->sk_num;
-		destination_port = port;
+		info.source_port = s->sk_num;
+		info.destination_port = port;
 	}
 
+	return info;
+}
+
+void add_net_conn_info_to_json(net_conn_info conn_info, JSON_Object *json_object)
+{
+	if (!json_object)
+	{
+		return;
+	}
+
+	if (conn_info.direction == INPUT)
+		json_object_set_boolean(json_object, "direction:input", true);
+	else
+		json_object_set_boolean(json_object, "direction:output", true);
+
+	char buff[256];
+
+	snprintf(buff, sizeof(buff), "source:ip:%s", conn_info.source_ip);
+	json_object_set_boolean(json_object, buff, true);
+	snprintf(buff, sizeof(buff), "source:port:%d", conn_info.source_port);
+	json_object_set_boolean(json_object, buff, true);
+
+	snprintf(buff, sizeof(buff), "destination:ip:%s", conn_info.destination_ip);
+	json_object_set_boolean(json_object, buff, true);
+	snprintf(buff, sizeof(buff), "destination:port:%d", conn_info.destination_port);
+	json_object_set_boolean(json_object, buff, true);
+}
+
+static command_answer *prepare_opa_input(net_conn_info conn_info, char *attest_response_json)
+{
 	if (!attest_response_json)
 	{
 		return answer_with_error("nil attest response json");
@@ -1033,22 +1059,7 @@ static command_answer *prepare_opa_input(direction direction, struct sock *s, u1
 		goto cleanup;
 	}
 
-	if (direction == INPUT)
-		json_object_set_boolean(selectors, "direction:input", true);
-	else
-		json_object_set_boolean(selectors, "direction:output", true);
-
-	char buff[256];
-
-	snprintf(buff, sizeof(buff), "source:ip:%s", source_ip);
-	json_object_set_boolean(selectors, buff, true);
-	snprintf(buff, sizeof(buff), "source:port:%d", source_port);
-	json_object_set_boolean(selectors, buff, true);
-
-	snprintf(buff, sizeof(buff), "destination:ip:%s", destination_ip);
-	json_object_set_boolean(selectors, buff, true);
-	snprintf(buff, sizeof(buff), "destination:port:%d", destination_port);
-	json_object_set_boolean(selectors, buff, true);
+	add_net_conn_info_to_json(conn_info, selectors);
 
 	answer = kzalloc(sizeof(struct command_answer), GFP_KERNEL);
 	answer->answer = json_serialize_to_string(json);
@@ -1088,6 +1099,7 @@ static int br_low_write(void *ctx, const unsigned char *buf, size_t len)
 opa_socket_context enriched_socket_eval(direction direction, struct sock *sk, int port)
 {
 	opa_socket_context opa_socket_ctx = {0};
+	net_conn_info conn_info = get_net_conn_info(direction, sk, port);
 
 	// attest workload connection
 	attest_response *response = attest_workload();
@@ -1099,7 +1111,7 @@ opa_socket_context enriched_socket_eval(direction direction, struct sock *sk, in
 	else
 	{
 		pr_info("nasp: eval attest response: %s", response->response);
-		command_answer *answer = prepare_opa_input(direction, sk, port, response->response);
+		command_answer *answer = prepare_opa_input(conn_info, response->response);
 		if (answer->error)
 		{
 			pr_err("nasp: eval failed to attest: %s", answer->error);
