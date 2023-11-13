@@ -15,6 +15,8 @@
 #include "socket.h"
 #include "wasm.h"
 #include "config.h"
+#include "sd.h"
+#include "string.h"
 
 #include "static/filter_stats.h"
 #include "static/filter_tcp_metadata.h"
@@ -42,6 +44,7 @@ static int __init nasp_init(void)
     }
 
     nasp_config_init();
+    sd_table_init();
 
     int ret = 0;
 
@@ -88,6 +91,7 @@ static void __exit nasp_exit(void)
     chardev_exit();
     wasm_vm_destroy_per_cpu();
 
+    sd_table_free();
     nasp_config_free();
 
     pr_info("%s: module unloaded from 0x%p", THIS_MODULE->name, nasp_exit);
