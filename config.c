@@ -8,8 +8,6 @@
  * modified, or distributed except according to those terms.
  */
 
-#include <linux/types.h>
-#include <linux/gfp_types.h>
 #include <linux/slab.h>
 
 #include "config.h"
@@ -32,8 +30,7 @@ void nasp_config_init()
 {
     nasp_config_lock();
     config = kzalloc(sizeof(nasp_config), GFP_KERNEL);
-    config->trust_domain = kzalloc(MAX_TRUST_DOMAIN_LEN + 1, GFP_KERNEL);
-    strncpy(config->trust_domain, "nasp", MAX_TRUST_DOMAIN_LEN);
+    strlcpy(config->trust_domain, "nasp", MAX_TRUST_DOMAIN_LEN);
     nasp_config_unlock();
 }
 
@@ -50,7 +47,6 @@ void nasp_config_free()
         return;
     }
 
-    kfree(config->trust_domain);
     kfree(config);
     nasp_config_unlock();
 }

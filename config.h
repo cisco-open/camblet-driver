@@ -15,7 +15,7 @@
 
 typedef struct nasp_config
 {
-    char *trust_domain;
+    char trust_domain[MAX_TRUST_DOMAIN_LEN];
 } nasp_config;
 
 nasp_config *nasp_config_get_locked(void);
