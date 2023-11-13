@@ -70,7 +70,8 @@ nasp-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  commands.o \
 			  string.o \
 			  attest.o \
-			  config.o
+			  config.o \
+			  sd.o
 
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
