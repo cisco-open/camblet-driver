@@ -52,7 +52,7 @@ struct nasp_socket;
 typedef struct nasp_socket nasp_socket;
 
 typedef int(nasp_send_msg)(nasp_socket *s, void *msg, size_t len);
-typedef int(nasp_recv_msg)(nasp_socket *s, void *buf, size_t len);
+typedef int(nasp_recv_msg)(nasp_socket *s, void *buf, size_t len, int flags);
 
 struct nasp_socket
 {
@@ -121,7 +121,7 @@ static int ktls_send_msg(nasp_socket *s, void *msg, size_t len)
 	return s->ktls_sendmsg(s->sock, &hdr, len);
 }
 
-static int ktls_recv_msg(nasp_socket *s, void *buf, size_t size)
+static int ktls_recv_msg(nasp_socket *s, void *buf, size_t size, int flags)
 {
 	int buf_len = get_read_buffer_capacity(s);
 	struct msghdr hdr = {0};
@@ -134,7 +134,7 @@ static int ktls_recv_msg(nasp_socket *s, void *buf, size_t size)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
 						   0,
 #endif
-						   0, &addr_len);
+						   flags, &addr_len);
 }
 
 static int bearssl_send_msg(nasp_socket *s, void *src, size_t len)
@@ -157,7 +157,7 @@ static int bearssl_send_msg(nasp_socket *s, void *src, size_t len)
 	return len;
 }
 
-static int bearssl_recv_msg(nasp_socket *s, void *dst, size_t len)
+static int bearssl_recv_msg(nasp_socket *s, void *dst, size_t len, int flags)
 {
 	int ret = br_sslio_read(&s->ioc, dst, len);
 	if (ret < 0)
@@ -185,7 +185,7 @@ static int plain_send_msg(nasp_socket *s, void *msg, size_t len)
 	return tcp_sendmsg(s->sock, &hdr, len);
 }
 
-static int plain_recv_msg(nasp_socket *s, void *buf, size_t size)
+static int plain_recv_msg(nasp_socket *s, void *buf, size_t size, int flags)
 {
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = buf, .iov_len = size};
@@ -197,12 +197,12 @@ static int plain_recv_msg(nasp_socket *s, void *buf, size_t size)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
 					   0,
 #endif
-					   0, &addr_len);
+					   flags, &addr_len);
 }
 
-static int nasp_socket_read(nasp_socket *s, void *dst, size_t len)
+static int nasp_socket_read(nasp_socket *s, void *dst, size_t len, int flags)
 {
-	return s->recv_msg(s, dst, len);
+	return s->recv_msg(s, dst, len, flags);
 }
 static int nasp_socket_write(nasp_socket *s, void *src, size_t len)
 {
@@ -534,7 +534,7 @@ int nasp_recvmsg(struct sock *sock,
 
 	while (action != Continue)
 	{
-		ret = nasp_socket_read(s, get_read_buffer_for_read(s, len), len);
+		ret = nasp_socket_read(s, get_read_buffer_for_read(s, len), len, flags);
 		if (ret < 0)
 		{
 			if (ret == -ERESTARTSYS)
@@ -1037,7 +1037,7 @@ cleanup:
 static int br_low_read(void *ctx, unsigned char *buf, size_t len)
 {
 	nasp_socket *s = (nasp_socket *)ctx;
-	int ret = plain_recv_msg(s, buf, len);
+	int ret = plain_recv_msg(s, buf, len, 0);
 	// BearSSL doesn't like 0 return value, but it's not an error
 	// so we return -1 instead and set sock_closed to true to
 	// indicate that the socket is closed without errors.
