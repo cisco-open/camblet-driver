@@ -227,8 +227,7 @@ static void load_nasp_config(const char *data)
         if (strcmp(config->trust_domain, trust_domain) != 0)
         {
             pr_info("nasp: change trust domain from [%s] to [%s]", config->trust_domain, trust_domain);
-            kfree(config->trust_domain);
-            config->trust_domain = strdup(trust_domain);
+            strlcpy(config->trust_domain, trust_domain, MAX_TRUST_DOMAIN_LEN);
         }
         nasp_config_unlock();
     }
