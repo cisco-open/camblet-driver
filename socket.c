@@ -157,9 +157,35 @@ static int bearssl_send_msg(nasp_socket *s, void *src, size_t len)
 	return len;
 }
 
+static int
+br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags)
+{
+	unsigned char *buf;
+	size_t alen;
+	bool is_peek = flags & MSG_PEEK;
+
+	if (len == 0)
+	{
+		return 0;
+	}
+	if (br_sslio_run_until(ctx, BR_SSL_RECVAPP) < 0)
+	{
+		return -1;
+	}
+	buf = br_ssl_engine_recvapp_buf(ctx->engine, &alen);
+	if (alen > len)
+	{
+		alen = len;
+	}
+	memcpy(dst, buf, alen);
+	if (!is_peek)
+		br_ssl_engine_recvapp_ack(ctx->engine, alen);
+	return (int)alen;
+}
+
 static int bearssl_recv_msg(nasp_socket *s, void *dst, size_t len, int flags)
 {
-	int ret = br_sslio_read(&s->ioc, dst, len);
+	int ret = br_sslio_read_with_flags(&s->ioc, dst, len, flags);
 	if (ret < 0)
 	{
 		const br_ssl_engine_context *ec = get_ssl_engine_context(s);
