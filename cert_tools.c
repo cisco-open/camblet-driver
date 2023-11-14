@@ -67,7 +67,6 @@ void add_cert_to_cache(char *key, x509_certificate *cert)
     new_entry->cert = cert;
 
     cert_cache_lock();
-    INIT_LIST_HEAD(&new_entry->list);
     list_add(&new_entry->list, &cert_cache);
     cert_cache_unlock();
 }
