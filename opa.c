@@ -335,7 +335,6 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
         pr_info("nasp: matched policy %s", json_serialize_to_string(json_object_get_wrapping_value(matched_policy)));
 
         const char *ttl = json_object_dotget_string(matched_policy, "egress.properties.ttl");
-        size_t ttl_len = json_object_dotget_string_len(matched_policy, "egress.properties.ttl");
         if (ttl == NULL)
             ttl = json_object_dotget_string(matched_policy, "properties.ttl");
         if (ttl != NULL)
@@ -350,7 +349,12 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             nasp_config_lock();
             nasp_config *config = nasp_config_get_locked();
             size_t trust_domain_len = strlen(config->trust_domain);
-            ret.id = kzalloc(trust_domain_len + egress_id_len + id_len + ttl_len + 1, GFP_KERNEL);
+            size_t ttl_len = 0;
+            if (ttl)
+            {
+                ttl_len = strlen(ttl);
+            }
+            ret.id = kzalloc(egress_id_len + id_len + trust_domain_len + ttl_len + 1, GFP_KERNEL);
             strcat(ret.id, config->trust_domain);
             if (ttl)
             {
