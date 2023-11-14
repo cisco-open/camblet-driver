@@ -22,6 +22,7 @@
 #include "wasm.h"
 #include "commands.h"
 #include "string.h"
+#include "config.h"
 
 /* Global variables are declared as static, so are global within the file. */
 
@@ -199,6 +200,41 @@ wasm_vm_result load_module(const char *name, const char *code, unsigned length, 
     return result;
 }
 
+static void load_nasp_config(const char *data)
+{
+    if (!data)
+    {
+        return;
+    }
+
+    JSON_Value *json = json_parse_string(data);
+    if (json == NULL)
+    {
+        pr_err("nasp: could not load nasp config: json is invalid");
+    }
+
+    JSON_Object *root = json_value_get_object(json);
+    if (root == NULL)
+    {
+        pr_err("nasp: could not load nasp config: json root is invalid");
+    }
+
+    const char *trust_domain = json_object_get_string(root, "trust_domain");
+    if (trust_domain)
+    {
+        nasp_config_lock();
+        nasp_config *config = nasp_config_get_locked();
+        if (strcmp(config->trust_domain, trust_domain) != 0)
+        {
+            pr_info("nasp: change trust domain from [%s] to [%s]", config->trust_domain, trust_domain);
+            strlcpy(config->trust_domain, trust_domain, MAX_TRUST_DOMAIN_LEN);
+        }
+        nasp_config_unlock();
+    }
+
+    json_value_free(json);
+}
+
 static int parse_command(const char *data)
 {
     int status = SUCCESS;
@@ -275,6 +311,27 @@ static int parse_command(const char *data)
 
             load_opa_data(decoded);
             kfree(decoded);
+        }
+        else if (strcmp("load_config", command) == 0)
+        {
+            const char *code = json_object_get_string(root, "code");
+            char *decoded = kzalloc(strlen(code) * 2, GFP_KERNEL);
+            int length = base64_decode(decoded, strlen(code) * 2, code, strlen(code));
+            if (length < 0)
+            {
+                pr_crit("base64_decode failed");
+                status = -1;
+                kfree(decoded);
+                goto cleanup;
+            }
+
+            if (decoded)
+            {
+                pr_info("nasp: config load [%s]", decoded);
+                load_nasp_config(decoded);
+                pr_info("nasp: config loaded [%s]", decoded);
+                kfree(decoded);
+            }
         }
         else if (strcmp("answer", command) == 0)
         {
