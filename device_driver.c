@@ -23,6 +23,7 @@
 #include "commands.h"
 #include "string.h"
 #include "config.h"
+#include "sd.h"
 
 /* Global variables are declared as static, so are global within the file. */
 
@@ -200,6 +201,60 @@ wasm_vm_result load_module(const char *name, const char *code, unsigned length, 
     return result;
 }
 
+static void load_sd_info(const char *data)
+{
+    if (!data)
+    {
+        return;
+    }
+
+    pr_info("nasp: sd info [%s]", data);
+
+    JSON_Value *json = json_parse_string(data);
+    if (json == NULL)
+    {
+        pr_err("nasp: could not load nasp config: json is invalid");
+    }
+
+    JSON_Object *root = json_value_get_object(json);
+    if (root == NULL)
+    {
+        pr_err("nasp: could not load nasp config: json root is invalid");
+    }
+
+    service_discovery_table *table = service_discovery_table_create();
+    service_discovery_entry *entry;
+
+    size_t i, k;
+    for (i = 0; i < json_object_get_count(root); i++)
+    {
+        const char *name = json_object_get_name(root, i);
+        JSON_Object *jentry = json_object_get_object(root, name);
+        JSON_Array *tags = json_object_get_array(jentry, "tags");
+
+        entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+        entry->address = strdup(name);
+
+        pr_info("nasp: create entry with address [%s]", entry->address);
+
+        entry->tags_len = json_array_get_count(tags);
+        entry->tags = kmalloc(entry->tags_len * sizeof(char *), GFP_KERNEL);
+
+        for (k = 0; k < entry->tags_len; k++)
+        {
+            const char *tag = json_array_get_string(tags, k);
+            entry->tags[k] = strdup(tag);
+            pr_info("nasp: add entry [%s] tag [%s]", entry->address, entry->tags[k]);
+        }
+
+        service_discovery_table_entry_add(table, entry);
+    }
+
+    sd_table_replace(table);
+
+    json_value_free(json);
+}
+
 static void load_nasp_config(const char *data)
 {
     if (!data)
@@ -330,6 +385,25 @@ static int parse_command(const char *data)
                 pr_info("nasp: config load [%s]", decoded);
                 load_nasp_config(decoded);
                 pr_info("nasp: config loaded [%s]", decoded);
+                kfree(decoded);
+            }
+        }
+        else if (strcmp("load_sd_info", command) == 0)
+        {
+            const char *code = json_object_get_string(root, "code");
+            char *decoded = kzalloc(strlen(code) * 2, GFP_KERNEL);
+            int length = base64_decode(decoded, strlen(code) * 2, code, strlen(code));
+            if (length < 0)
+            {
+                pr_crit("base64_decode failed");
+                status = -1;
+                kfree(decoded);
+                goto cleanup;
+            }
+
+            if (decoded)
+            {
+                load_sd_info(decoded);
                 kfree(decoded);
             }
         }

@@ -20,3 +20,20 @@ char *strdup(const char *str)
     int len = strlen(str);
     return strndup(str, len);
 }
+
+char *strnprintf(const char *fmt, ...)
+{
+    va_list args;
+
+    va_start(args, fmt);
+    int len = vsnprintf(NULL, 0, fmt, args) + 1;
+    va_end(args);
+
+    char *dst = kzalloc(len, GFP_KERNEL);
+
+    va_start(args, fmt);
+    vsnprintf(dst, len, fmt, args);
+    va_end(args);
+
+    return dst;
+}

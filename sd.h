@@ -17,20 +17,24 @@ typedef struct service_discovery_entry
 {
     struct hlist_node node;
     char *address;
+    char **tags;
+    char tags_len;
 } service_discovery_entry;
 
 typedef struct service_discovery_table
 {
+    struct mutex lock;
     DECLARE_HASHTABLE(htable, 8);
 } service_discovery_table;
 
 void sd_table_init(void);
 void sd_table_free(void);
-void sd_table_entry_add(service_discovery_entry *entry);
-void sd_table_entry_del(service_discovery_entry *entry);
 service_discovery_entry *sd_table_entry_get(const char *address);
-service_discovery_table *service_discovery_table_create(void);
-void service_discovery_table_free(service_discovery_table *table);
 void sd_table_replace(service_discovery_table *table);
+
+service_discovery_table *service_discovery_table_create(void);
+void service_discovery_table_entry_add(service_discovery_table *table, service_discovery_entry *entry);
+void service_discovery_table_entry_del(service_discovery_table *table, service_discovery_entry *entry);
+void service_discovery_table_free(service_discovery_table *table);
 
 #endif
