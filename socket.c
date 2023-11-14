@@ -32,6 +32,7 @@
 #include "cert_tools.h"
 #include "attest.h"
 #include "json.h"
+#include "sd.h"
 
 const char *ALPNs[] = {
 	"istio-peer-exchange",
@@ -934,6 +935,7 @@ static int cache_and_validate_cert(nasp_socket *sc, char *key)
 	// Cert found in the cache use that
 	else
 	{
+		pr_err("nasp: found cert for id[%s]", key);
 		sc->cert = cached_cert_bundle->cert;
 	}
 	// Validate the cached or the generated cert
@@ -1005,6 +1007,36 @@ static net_conn_info get_net_conn_info(direction direction, struct sock *s, u16 
 	return info;
 }
 
+void add_sd_entry_tags_to_json(service_discovery_entry *sd_entry, JSON_Value *json)
+{
+	if (!json_object)
+	{
+		return;
+	}
+
+	if (!sd_entry)
+	{
+		return;
+	}
+
+	JSON_Object *root = json_value_get_object(json);
+
+	JSON_Value *remoteval = json_value_init_object();
+	JSON_Object *remote = json_object(remoteval);
+
+	JSON_Value *selectorsval = json_value_init_object();
+	JSON_Object *selectors = json_object(selectorsval);
+
+	size_t i;
+	for (i = 0; i < sd_entry->tags_len; i++)
+	{
+		json_object_set_boolean(selectors, sd_entry->tags[i], true);
+	}
+
+	json_object_set_value(remote, "selectors", selectorsval);
+	json_object_set_value(root, "remote", remoteval);
+}
+
 void add_net_conn_info_to_json(net_conn_info conn_info, JSON_Object *json_object)
 {
 	if (!json_object)
@@ -1030,7 +1062,7 @@ void add_net_conn_info_to_json(net_conn_info conn_info, JSON_Object *json_object
 	json_object_set_boolean(json_object, buff, true);
 }
 
-static command_answer *prepare_opa_input(net_conn_info conn_info, char *attest_response_json)
+static command_answer *prepare_opa_input(net_conn_info conn_info, service_discovery_entry *sd_entry, char *attest_response_json)
 {
 	if (!attest_response_json)
 	{
@@ -1060,6 +1092,10 @@ static command_answer *prepare_opa_input(net_conn_info conn_info, char *attest_r
 	}
 
 	add_net_conn_info_to_json(conn_info, selectors);
+	if (sd_entry)
+	{
+		add_sd_entry_tags_to_json(sd_entry, json);
+	}
 
 	answer = kzalloc(sizeof(struct command_answer), GFP_KERNEL);
 	answer->answer = json_serialize_to_string(json);
@@ -1264,7 +1300,62 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	u16 port = (u16)(sk->sk_portpair >> 16);
 
+<<<<<<< HEAD
 	opa_socket_context opa_socket_ctx = enriched_socket_eval(INPUT, client_sk, port);
+||||||| parent of a7c417c (basic service discovery support)
+	opa_socket_context opa_socket_ctx = {};
+	net_conn_info conn_info = get_net_conn_info(INPUT, client, port);
+
+	// attest workload connection
+	attest_response *response = attest_workload();
+	if (response->error)
+	{
+		pr_err("nasp: accept failed to attest: %s", response->error);
+		attest_response_put(response);
+	}
+	else
+	{
+		pr_info("nasp: accept attest response: %s", response->response);
+		command_answer *answer = prepare_opa_input(conn_info, response->response);
+		if (answer->error)
+		{
+			pr_err("nasp: accept failed to attest: %s", answer->error);
+		}
+		else
+		{
+			pr_info("nasp: accept attest response: %s", answer->answer);
+			opa_socket_ctx = socket_eval(answer->answer);
+		}
+		free_command_answer(answer);
+		attest_response_put(response);
+	}
+=======
+	opa_socket_context opa_socket_ctx = {};
+	net_conn_info conn_info = get_net_conn_info(INPUT, client, port);
+
+	// attest workload connection
+	attest_response *response = attest_workload();
+	if (response->error)
+	{
+		pr_err("nasp: accept failed to attest: %s", response->error);
+		attest_response_put(response);
+	}
+	else
+	{
+		command_answer *answer = prepare_opa_input(conn_info, NULL, response->response);
+		if (answer->error)
+		{
+			pr_err("nasp: accept failed to prepare opa input: %s", answer->error);
+		}
+		else
+		{
+			pr_info("nasp: accept attest response: %s", answer->answer);
+			opa_socket_ctx = socket_eval(answer->answer);
+		}
+		free_command_answer(answer);
+		attest_response_put(response);
+	}
+>>>>>>> a7c417c (basic service discovery support)
 
 	if (opa_socket_ctx.allowed)
 	{
@@ -1338,7 +1429,77 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	pr_info("nasp: nasp_connect uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
 
+<<<<<<< HEAD
 	opa_socket_context opa_socket_ctx = enriched_socket_eval(OUTPUT, sk, port);
+||||||| parent of a7c417c (basic service discovery support)
+	opa_socket_context opa_socket_ctx = {};
+	net_conn_info conn_info = get_net_conn_info(OUTPUT, sk, port);
+
+	// attest workload connection
+	attest_response *response = attest_workload();
+	if (response->error)
+	{
+		pr_err("nasp: connect failed to attest: %s", response->error);
+		attest_response_put(response);
+	}
+	else
+	{
+		pr_info("nasp: connect attest response: %s", response->response);
+		command_answer *answer = prepare_opa_input(conn_info, response->response);
+		if (answer->error)
+		{
+			pr_err("nasp: connect failed to attest: %s", answer->error);
+		}
+		else
+		{
+			pr_info("nasp: connect attest response: %s", answer->answer);
+			opa_socket_ctx = socket_eval(answer->answer);
+		}
+		free_command_answer(answer);
+		attest_response_put(response);
+	}
+=======
+	opa_socket_context opa_socket_ctx = {};
+	net_conn_info conn_info = get_net_conn_info(OUTPUT, sk, port);
+
+	pr_info("nasp: look for sd entry by [%s]", conn_info.destination_ip);
+	service_discovery_entry *sd_entry = sd_table_entry_get(conn_info.destination_ip);
+	if (sd_entry == NULL)
+	{
+		char *address = strnprintf("%s:%d", conn_info.destination_ip, conn_info.destination_port);
+		pr_info("nasp: look for sd entry by [%s:%d] [%s]", conn_info.destination_ip, conn_info.destination_port, address);
+		sd_entry = sd_table_entry_get(address);
+		kfree(address);
+	}
+	if (!sd_entry)
+	{
+		pr_info("nasp: sd entry not found for [%s:%d]", conn_info.destination_ip, conn_info.destination_port);
+		return err;
+	}
+
+	// attest workload connection
+	attest_response *response = attest_workload();
+	if (response->error)
+	{
+		pr_err("nasp: connect failed to attest: %s", response->error);
+		attest_response_put(response);
+	}
+	else
+	{
+		command_answer *answer = prepare_opa_input(conn_info, sd_entry, response->response);
+		if (answer->error)
+		{
+			pr_err("nasp: connect failed to prepare opa input: %s", answer->error);
+		}
+		else
+		{
+			pr_info("nasp: connect attest response: %s", answer->answer);
+			opa_socket_ctx = socket_eval(answer->answer);
+		}
+		free_command_answer(answer);
+		attest_response_put(response);
+	}
+>>>>>>> a7c417c (basic service discovery support)
 
 	if (opa_socket_ctx.allowed)
 	{

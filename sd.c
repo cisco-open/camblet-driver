@@ -16,31 +16,28 @@
 
 service_discovery_table *sd_table;
 
-static DEFINE_MUTEX(sd_table_mutex_lock);
-
 static void sd_table_lock(void)
 {
-    mutex_lock(&sd_table_mutex_lock);
+    mutex_lock(&sd_table->lock);
 }
 
 static void sd_table_unlock(void)
 {
-    mutex_unlock(&sd_table_mutex_lock);
+    mutex_unlock(&sd_table->lock);
 }
 
 service_discovery_table *service_discovery_table_create()
 {
     service_discovery_table *table = kzalloc(sizeof(service_discovery_table), GFP_KERNEL);
     hash_init(table->htable);
+    mutex_init(&table->lock);
 
     return table;
 }
 
 void sd_table_init()
 {
-    sd_table_lock();
     sd_table = service_discovery_table_create();
-    sd_table_unlock();
 }
 
 void sd_table_replace(service_discovery_table *table)
@@ -56,23 +53,23 @@ static u64 sd_entry_hash(const char *name, int len)
     return crc32c((u32)~1, name, len);
 }
 
-static void sd_table_entry_add_locked(service_discovery_entry *entry)
+static void service_discovery_table_entry_add_locked(service_discovery_table *table, service_discovery_entry *entry)
 {
     u64 key = sd_entry_hash(entry->address, strlen(entry->address));
 
-    hash_add(sd_table->htable, &entry->node, key);
+    hash_add(table->htable, &entry->node, key);
 }
 
-void sd_table_entry_add(service_discovery_entry *entry)
+void service_discovery_table_entry_add(service_discovery_table *table, service_discovery_entry *entry)
 {
     if (!entry)
     {
         return;
     }
 
-    sd_table_lock();
-    sd_table_entry_add_locked(entry);
-    sd_table_unlock();
+    mutex_lock(&table->lock);
+    service_discovery_table_entry_add_locked(table, entry);
+    mutex_unlock(&table->lock);
 }
 
 static service_discovery_entry *sd_table_entry_get_locked(const char *address)
@@ -99,7 +96,7 @@ service_discovery_entry *sd_table_entry_get(const char *address)
     return entry;
 }
 
-static void sd_table_entry_del_locked(service_discovery_entry *entry)
+static void service_discovery_table_entry_del_locked(service_discovery_table *table, service_discovery_entry *entry)
 {
     if (!entry)
     {
@@ -111,14 +108,14 @@ static void sd_table_entry_del_locked(service_discovery_entry *entry)
     hash_del(&entry->node);
 }
 
-void sd_table_entry_del(service_discovery_entry *entry)
+void service_discovery_table_entry_del(service_discovery_table *table, service_discovery_entry *entry)
 {
-    sd_table_lock();
-    sd_table_entry_del_locked(entry);
-    sd_table_unlock();
+    mutex_lock(&table->lock);
+    service_discovery_table_entry_del_locked(table, entry);
+    mutex_unlock(&table->lock);
 }
 
-void sd_entry_free(service_discovery_entry *entry)
+static void service_discovery_entry_free(service_discovery_entry *entry)
 {
     if (!entry)
     {
@@ -126,6 +123,12 @@ void sd_entry_free(service_discovery_entry *entry)
     }
 
     kfree(entry->address);
+    size_t i;
+    for (i = 0; i < entry->tags_len; i++)
+    {
+        kfree(entry->tags[i]);
+    }
+    kfree(entry->tags);
     kfree(entry);
 }
 
@@ -137,18 +140,25 @@ void service_discovery_table_free(service_discovery_table *table)
     }
 
     service_discovery_entry *entry;
-    int i;
+    int i, k;
     hash_for_each(table->htable, i, entry, node)
     {
         pr_info("nasp: delete hashtable entry [%s]", entry->address);
-        sd_table_entry_del_locked(entry);
-        sd_entry_free(entry);
+
+        for (k = 0; k < entry->tags_len; k++)
+        {
+            pr_info("nasp: hash entry tag [%d] [%s]", k, entry->tags[k]);
+        }
+        service_discovery_table_entry_del_locked(table, entry);
+        service_discovery_entry_free(entry);
     }
 
     if (hash_empty(table->htable))
     {
         pr_info("nasp: hashtable empty!");
     }
+
+    mutex_destroy(&table->lock);
 
     kfree(table);
 }
