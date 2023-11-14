@@ -111,7 +111,7 @@ cert_with_key *find_cert_from_cache(char *key)
     cert_cache_lock();
     list_for_each_entry(cert_bundle, &cert_cache, list)
     {
-        if (strncmp(cert_bundle->key, key, strlen(key)) == 0)
+        if (strcmp(cert_bundle->key, key) == 0)
         {
             x509_certificate_get(cert_bundle->cert);
             cert_cache_unlock();
