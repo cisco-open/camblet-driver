@@ -8,6 +8,8 @@
  * modified, or distributed except according to those terms.
  */
 
+#define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
+
 #include <linux/list.h>
 #include <linux/slab.h>
 
@@ -56,13 +58,13 @@ static void attest_response_cache_remove(attest_response_cache_entry *entry)
     }
 }
 
-static void housekeep_cache_locked(void)
+static void housekeep_attest_cache_locked(void)
 {
     if (linkedlist_length(&attest_cache) >= MAX_CACHE_LENGTH)
     {
-        pr_warn("nasp: attests cache is full removing the oldest element");
+        pr_debug("cache is full: remove the oldest element");
         attest_response_cache_entry *last_entry = list_last_entry(&attest_cache, attest_response_cache_entry, list);
-        pr_warn("nasp: removing key[%s] from the cache", last_entry->key);
+        pr_debug("remove cache entry # key=[%s]", last_entry->key);
         attest_response_cache_remove_locked(last_entry);
     }
 }
@@ -91,8 +93,6 @@ static void attest_response_free(attest_response *response)
 static void attest_response_release(struct kref *kref)
 {
     attest_response *response = container_of(kref, attest_response, kref);
-
-    pr_info("nasp: release attest response");
 
     attest_response_free(response);
 }
@@ -130,23 +130,23 @@ static void attest_response_cache_set_locked(char *key, attest_response *respons
 {
     if (!key)
     {
-        pr_err("nasp: attest response cache: provided key is null");
+        pr_err("invalid key");
         return;
     }
 
-    housekeep_cache_locked();
+    housekeep_attest_cache_locked();
 
     attest_response_cache_entry *new_entry = kzalloc(sizeof(attest_response_cache_entry), GFP_KERNEL);
     if (!new_entry)
     {
-        pr_err("nasp: attest response cache: memory allocation error");
+        pr_err("memory allocation error");
         return;
     }
 
     new_entry->key = strdup(key);
     new_entry->response = response;
 
-    pr_info("nasp: attest response cache set: key[%s]", new_entry->key);
+    pr_debug("add entry # key[%s]", new_entry->key);
     list_add(&new_entry->list, &attest_cache);
 }
 
@@ -163,7 +163,7 @@ static attest_response *attest_response_cache_get_locked(char *key)
     {
         if (strncmp(entry->key, key, strlen(key)) == 0)
         {
-            pr_info("nasp: attest response cache hit: key[%s]", key);
+            pr_debug("cache hit # key[%s]", key);
             return entry->response;
         }
     }

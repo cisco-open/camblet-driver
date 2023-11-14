@@ -8,6 +8,8 @@
  * modified, or distributed except according to those terms.
  */
 
+#define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
+
 #include <linux/list.h>
 #include <linux/slab.h>
 
@@ -53,14 +55,14 @@ void add_cert_to_cache(char *key, x509_certificate *cert)
 {
     if (!key)
     {
-        pr_err("nasp: provided key is null");
+        pr_err("invalid key");
         return;
     }
 
     cert_with_key *new_entry = kzalloc(sizeof(cert_with_key), GFP_KERNEL);
     if (!new_entry)
     {
-        pr_err("nasp: memory allocation error");
+        pr_err("memory allocation error");
         return;
     }
     new_entry->key = strdup(key);
@@ -82,9 +84,9 @@ void remove_unused_expired_certs_from_cache()
 
     if (linkedlist_length(&cert_cache) >= MAX_CACHE_LENGTH)
     {
-        pr_warn("nasp: cache is full removing the oldest element");
+        pr_debug("cache is full: remove the oldest element");
         cert_with_key *last_entry = list_last_entry(&cert_cache, cert_with_key, list);
-        pr_warn("nasp: removing key:%s from the cache", last_entry->key);
+        pr_debug("remove cache entry # key=[%s]", last_entry->key);
         remove_cert_from_cache_locked(last_entry);
         cert_cache_unlock();
         return;
@@ -157,7 +159,7 @@ int set_cert_validity(x509_certificate *x509_cert)
     int err = br_x509_decoder_last_error(&dc);
     if (err != 0)
     {
-        pr_err("nasp: cert decode faild during setting cert validity: %d", err);
+        pr_err("cert decode failed during setting cert validity # err[%d]", err);
         return -1;
     }
     x509_cert->validity.notbefore_seconds = dc.notbefore_seconds;
@@ -180,11 +182,11 @@ bool validate_cert(x509_certificate_validity cert_validity)
 
     if (vd < cert_validity.notbefore_days || (vd == cert_validity.notbefore_days && vs < cert_validity.notbefore_seconds))
     {
-        pr_warn("nasp: cert expired");
+        pr_debug("cert expired");
     }
     else if (vd > cert_validity.notafter_days || (vd == cert_validity.notafter_days && vs > cert_validity.notafter_seconds))
     {
-        pr_warn("nasp: cert not valid yet");
+        pr_debug("cert not valid yet");
     }
     else
     {
@@ -205,8 +207,6 @@ x509_certificate *x509_certificate_init(void)
 
 static void x509_certificate_free(x509_certificate *cert)
 {
-    pr_info("nasp: x509_certificate_free");
-
     if (!cert)
     {
         return;

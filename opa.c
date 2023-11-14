@@ -8,6 +8,8 @@
  * modified, or distributed except according to those terms.
  */
 
+#define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
+
 #include "opa.h"
 #include "json.h"
 #include "string.h"
@@ -78,7 +80,7 @@ static i32 opa_set_data_from_json(opa_wrapper *opa, const char *data, bool free)
     wasm_vm_result result = opa_malloc(opa, dataLen);
     if (result.err)
     {
-        pr_crit("nasp: opa_set_data_from_json: opa_malloc: %s", result.err);
+        pr_crit("wasm malloc error # err[%s]", result.err);
         return -1;
     }
 
@@ -88,7 +90,7 @@ static i32 opa_set_data_from_json(opa_wrapper *opa, const char *data, bool free)
     result = opa_json_parse(opa, dataAddr, dataLen);
     if (result.err)
     {
-        pr_crit("nasp: opa_set_data_from_json: opa_json_parse: %s", result.err);
+        pr_crit("wasm json parse error # err[%s]", result.err);
         goto cleanup;
     }
 
@@ -100,7 +102,7 @@ cleanup:
         result = opa_free(opa, dataAddr);
         if (result.err)
         {
-            pr_crit("nasp: opa_set_data_from_json: opa_free: %s", result.err);
+            pr_crit("wasm free error # err[%s]", result.err);
             return -1;
         }
     }
@@ -113,14 +115,14 @@ static int opa_set_data(opa_wrapper *opa, const char *data)
     wasm_vm_result result = opa_heap_stash_clear(opa);
     if (result.err)
     {
-        pr_crit("nasp: opa_set_data: opa_heap_stash_clear: %s", result.err);
+        pr_crit("wasm opa_heap_stash_clear error # err[%s]", result.err);
         return -1;
     }
 
     result = opa_heap_ptr_set(opa, opa->baseHeapAddr);
     if (result.err)
     {
-        pr_crit("nasp: opa_set_data: opa_heap_ptr_set: %s", result.err);
+        pr_crit("wasm opa_heap_ptr_set error # err[%s]", result.err);
         return -1;
     }
 
@@ -135,14 +137,14 @@ static int opa_set_data(opa_wrapper *opa, const char *data)
     result = opa_heap_block_stash(opa);
     if (result.err)
     {
-        pr_crit("nasp: opa_set_data: opa_heap_block_stash: %s", result.err);
+        pr_crit("wasm opa_heap_block_stash error # err[%s]", result.err);
         return -1;
     }
 
     result = opa_heap_ptr_get(opa);
     if (result.err)
     {
-        pr_crit("nasp: opa_set_data: opa_heap_ptr_get: %s", result.err);
+        pr_crit("wasm opa_heap_ptr_get error # err[%s]", result.err);
         return -1;
     }
 
@@ -173,7 +175,7 @@ static i32 time_now_ns(opa_wrapper *opa, i32 _ctx)
     wasm_vm_result result = opa_malloc(opa, sizeof(now));
     if (result.err)
     {
-        pr_crit("opa wasm_vm_opa_malloc error: %s", result.err);
+        pr_crit("wasm malloc error # err[%s]", result.err);
         return 0;
     }
 
@@ -192,16 +194,16 @@ static i32 trace(opa_wrapper *opa, i32 _ctx, i32 arg1)
     wasm_vm_result result = wasm_vm_call_direct(opa->vm, opa->value_dump, arg1);
     if (result.err)
     {
-        pr_crit("opa wasm_vm_value_dump error: %s", result.err);
+        pr_crit("wasm value_dump error # err[%s]", result.err);
         return 0;
     }
 
-    pr_info("nasp: opa: Note %s", (char *)(mem + result.data->i32));
+    pr_debug("opa note # note[%s]", (char *)(mem + result.data->i32));
 
     result = opa_malloc(opa, sizeof(true));
     if (result.err)
     {
-        pr_crit("opa wasm_vm_opa_malloc error: %s", result.err);
+        pr_crit("wasm malloc error # err[%s]", result.err);
         return 0;
     }
 
@@ -221,7 +223,7 @@ static int parse_opa_builtins(opa_wrapper *opa, char *json)
     {
         JSON_Object *object = json_object(root_value);
         int builtins = json_object_get_count(object);
-        pr_info("nasp: opa module builtins = %s", json);
+        pr_debug("builtins[%s]", json);
 
         // indexing starts from 1 for some reason, so we need one bigger array
         opa->builtins = kzalloc(builtins + 1 * sizeof(void *), GFP_KERNEL);
@@ -241,7 +243,7 @@ static int parse_opa_builtins(opa_wrapper *opa, char *json)
             }
             else
             {
-                pr_warn("nasp: this opa module uses an unsupported builtin function: %s", name);
+                pr_warn("unsupported builtin function # name[%s]", name);
             }
         }
 
@@ -331,8 +333,7 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             }
         }
 
-        pr_info("nasp: opa result policy_prio [%d], egress_prio [%d]\n", policy_prio, egress_prio);
-        pr_info("nasp: matched policy %s", json_serialize_to_string(json_object_get_wrapping_value(matched_policy)));
+        pr_debug("policy match # policy[%s] prio[%d] egress_prio[%d]", json_serialize_to_string(json_object_get_wrapping_value(matched_policy)), policy_prio, egress_prio);
 
         const char *ttl = json_object_dotget_string(matched_policy, "egress.properties.ttl");
         if (ttl == NULL)
@@ -465,7 +466,7 @@ static size_t get_memory_page_count(size_t size)
 m3ApiRawFunction(opa_abort)
 {
     m3ApiGetArgMem(char *, addr);
-    pr_err("nasp: opa_abort: %s", addr);
+    pr_err("opa abort # addr[%s]", addr);
     m3ApiTrap(m3Err_trapAbort);
 }
 
@@ -485,13 +486,13 @@ m3ApiRawFunction(opa_builtin0)
 
     opa_wrapper *opa = (opa_wrapper *)_ctx->userdata;
 
-    pr_info("nasp: calling opa_builtin0 %d", builtin_id);
+    pr_debug("call opa_builtin0 # id[%d]", builtin_id);
 
     i32 (*builtin)(opa_wrapper *, i32) = opa->builtins[builtin_id];
 
     if (!builtin)
     {
-        pr_err("nasp: opa_builtin0 %d not found", builtin_id);
+        pr_err("opa_builtin0 not found # id[%d]", builtin_id);
         m3ApiTrap(m3Err_trapAbort);
     }
 
@@ -508,13 +509,13 @@ m3ApiRawFunction(opa_builtin1)
 
     opa_wrapper *opa = (opa_wrapper *)_ctx->userdata;
 
-    pr_info("nasp: calling opa_builtin1 %d", builtin_id);
+    pr_debug("call opa_builtin1 # id[%d]", builtin_id);
 
     i32 (*builtin)(opa_wrapper *, i32, i32) = opa->builtins[builtin_id];
 
     if (!builtin)
     {
-        pr_err("nasp: opa_builtin1 %d not found", builtin_id);
+        pr_err("opa_builtin1 not found # id[%d]", builtin_id);
         m3ApiTrap(m3Err_trapAbort);
     }
 
@@ -614,12 +615,12 @@ opa_socket_context this_cpu_opa_socket_eval(const char *input)
 
     if (!opa)
     {
-        pr_warn("nasp: opa socket policy module not loaded, eval always evaluates to NULL");
+        pr_warn("opa socket policy module not loaded: eval always evaluates to NULL");
 
         return ret;
     }
 
-    printk("nasp: opa %s.eval input: %s", opa->eval->module->name, input);
+    pr_debug("opa eval # name[%s] input[%s]", opa->eval->module->name, input);
 
     wasm_vm_lock(opa->vm);
 
@@ -634,7 +635,7 @@ opa_socket_context this_cpu_opa_socket_eval(const char *input)
         M3Result m3result = ResizeMemory(opa->eval->module->runtime, get_memory_page_count(memorySize + rest));
         if (m3result)
         {
-            pr_crit("wasm_vm_opa_eval error: could not grow wasm module memory");
+            pr_crit("could not grow wasm module memory");
             goto cleanup;
         }
     }
@@ -645,14 +646,14 @@ opa_socket_context this_cpu_opa_socket_eval(const char *input)
     result = opa_eval(opa, inputAddr, inputLen, opa->dataValueAddr, heapAddr);
     if (result.err)
     {
-        pr_crit("nasp: opa %s.eval error: %s", opa->eval->module->name, result.err);
+        pr_crit("opa eval error # name[%s] err[%s]", opa->eval->module->name, result.err);
         goto cleanup;
     }
 
     char *json = (char *)(wasm_vm_memory(opa->eval->module) + result.data->i32);
     ret = parse_opa_socket_eval_result(json);
 
-    pr_info("nasp: opa %s.eval result: id[%s] allowed[%d] mtls[%d]", opa->eval->module->name, ret.id, ret.allowed, ret.mtls);
+    pr_debug("opa eval result # name[%s] id[%s] allowed[%d] mtls[%d] uri[%s] ttl[%s]", opa->eval->module->name, ret.id, ret.allowed, ret.mtls, ret.uri, ret.ttl);
 
 cleanup:
     wasm_vm_unlock(opa->vm);
@@ -672,7 +673,7 @@ void load_opa_data(const char *data)
         wasm_vm_unlock(opa->vm);
         if (ret < 0)
         {
-            printk("nasp: load_opa_data: could not set data");
+            pr_err("could not set opa data");
         }
     }
 }

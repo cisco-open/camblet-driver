@@ -8,8 +8,9 @@
  * modified, or distributed except according to those terms.
  */
 
-#include "rsa_tools.h"
+#define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
 
+#include "rsa_tools.h"
 #include "linux/kernel.h"
 #include "linux/slab.h"
 
@@ -27,7 +28,7 @@ int init_rnd_gen()
     br_hmac_drbg_init(&hmac_drbg_ctx, &br_sha256_vtable, NULL, 0);
     if (!seeder(&hmac_drbg_ctx.vtable))
     {
-        pr_err("rsa_tools: system source of randomness failed");
+        pr_err("system source of randomness failed");
         return -1;
     }
     return 0;
@@ -94,14 +95,14 @@ int encode_rsa_priv_key_to_der(unsigned char *der, br_rsa_private_key *rsa_priv,
     size_t priv_exponent_size = rsa_priv_exp_comp(NULL, rsa_priv, RSA_PUB_EXP);
     if (priv_exponent_size == 0)
     {
-        pr_err("rsa_tools: error happened during priv_exponent length calculation");
+        pr_err("could not calculate priv_exponent length");
         return -1;
     }
     unsigned char priv_exponent[priv_exponent_size];
     size_t pexp = rsa_priv_exp_comp(priv_exponent, rsa_priv, RSA_PUB_EXP);
     if (pexp != priv_exponent_size)
     {
-        pr_err("rsa_tools: error happened during priv_exponent generation");
+        pr_err("could not generate priv_exponent");
         return -1;
     }
     return br_encode_rsa_pkcs8_der(der, rsa_priv, rsa_pub, priv_exponent, priv_exponent_size);

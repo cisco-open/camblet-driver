@@ -8,6 +8,8 @@
  * modified, or distributed except according to those terms.
  */
 
+#define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
+
 #include <linux/tcp.h>
 #include <linux/version.h>
 #include <linux/uaccess.h>
@@ -35,8 +37,7 @@
 #include "sd.h"
 
 const char *ALPNs[] = {
-	"istio-peer-exchange",
-	"istio",
+	"nasp",
 };
 
 const size_t ALPNs_NUM = sizeof(ALPNs) / sizeof(ALPNs[0]);
@@ -144,14 +145,14 @@ static int bearssl_send_msg(nasp_socket *s, void *src, size_t len)
 	if (err < 0)
 	{
 		const br_ssl_engine_context *ec = get_ssl_engine_context(s);
-		pr_err("nasp: socket_write: %s br_sslio_write_all error %d", current->comm, br_ssl_engine_last_error(ec));
+		pr_err("br_sslio_write_all error # command[%s] br_last_err[%d]", current->comm, br_ssl_engine_last_error(ec));
 		return err;
 	}
 
 	err = br_sslio_flush(&s->ioc);
 	if (err < 0)
 	{
-		pr_err("nasp: socket_write: %s br_sslio_flush returned an error %d", current->comm, err);
+		pr_err("br_sslio_flush error # command[%s] err[%d]", current->comm, err);
 		return err;
 	}
 
@@ -197,7 +198,7 @@ static int bearssl_recv_msg(nasp_socket *s, void *dst, size_t len, int flags)
 			return 0;
 		if (last_error == BR_ERR_IO)
 			return -EIO;
-		pr_err("nasp: %s br_sslio_read error %d", current->comm, last_error);
+		pr_err("br_sslio_read error # command[%s] err[%d]", current->comm, last_error);
 	}
 	return ret;
 }
@@ -285,7 +286,7 @@ static void nasp_socket_free(nasp_socket *s)
 {
 	if (s)
 	{
-		pr_info("nasp: freeing nasp_socket of %s", current->comm);
+		pr_debug("free nasp socket # command[%s]", current->comm);
 
 		if (s->p)
 		{
@@ -302,11 +303,11 @@ static void nasp_socket_free(nasp_socket *s)
 				const br_ssl_engine_context *ec = get_ssl_engine_context(s);
 				int err = br_ssl_engine_last_error(ec);
 				if (err != 0 && err != BR_ERR_IO)
-					pr_err("nasp: %s br_sslio_close returned an error: %d", current->comm, err);
+					pr_err("br_sslio_close error # command[%s] err[%d]", current->comm, err);
 			}
 			else
 			{
-				pr_info("nasp: %s br_sslio SSL closed", current->comm);
+				pr_debug("br_sslio SSL closed # command[%s]", current->comm);
 			}
 		}
 
@@ -339,7 +340,7 @@ int proxywasm_attach(proxywasm *p, nasp_socket *s, ListenerDirection direction, 
 	wasm_vm_result res = proxywasm_create_context(p, upstream_buffer, downstream_buffer);
 	if (res.err)
 	{
-		pr_err("nasp: proxywasm_attach failed to create context: %s", res.err);
+		pr_err("could not create proxywasm context # err[%s]", res.err);
 		return -1;
 	}
 
@@ -353,7 +354,7 @@ int proxywasm_attach(proxywasm *p, nasp_socket *s, ListenerDirection direction, 
 	res = proxy_on_new_connection(p);
 	if (res.err)
 	{
-		pr_err("nasp: proxywasm_attach failed to create connection: %s", res.err);
+		pr_err("error during proxy_on_new_connection # err[%s]", res.err);
 		return -1;
 	}
 
@@ -461,12 +462,12 @@ static int ensure_tls_handshake(nasp_socket *s)
 		ret = br_sslio_flush(&s->ioc);
 		if (ret == 0)
 		{
-			printk("nasp: %s TLS handshake done, sk: %p", current->comm, s->sock);
+			pr_debug("TLS handshake done # command[%s] sk[%p]", current->comm, s->sock);
 		}
 		else
 		{
 			const br_ssl_engine_context *ec = get_ssl_engine_context(s);
-			pr_err("nasp: %s TLS handshake error %d", current->comm, br_ssl_engine_last_error(ec));
+			pr_err("TLS handshake error # command[%s] err[%d]", current->comm, br_ssl_engine_last_error(ec));
 			goto bail;
 		}
 
@@ -474,7 +475,7 @@ static int ensure_tls_handshake(nasp_socket *s)
 
 		if (protocol)
 		{
-			pr_info("nasp: %s protocol name: %s", current->comm, protocol);
+			pr_debug("selected ALPN # command[%s] alpn[%s]", current->comm, protocol);
 			if (nasp_socket_proxywasm_enabled(s))
 				set_property_v(s->pc, "upstream.negotiated_protocol", protocol, strlen(protocol));
 		}
@@ -483,7 +484,7 @@ static int ensure_tls_handshake(nasp_socket *s)
 
 		if (s->opa_socket_ctx.passthrough)
 		{
-			printk("nasp: socket %s enabling TLS passthrough", current->comm);
+			pr_debug("enable TLS passthrough # command[%s]", current->comm);
 			s->send_msg = plain_send_msg;
 			s->recv_msg = plain_recv_msg;
 		}
@@ -492,7 +493,7 @@ static int ensure_tls_handshake(nasp_socket *s)
 			ret = configure_ktls_sock(s);
 			if (ret != 0)
 			{
-				pr_err("nasp: socket %s configure_ktls_sock failed %d", current->comm, ret);
+				pr_err("configure_ktls_sock failed # command[%s] err[%d]", current->comm, ret);
 				goto bail;
 			}
 		}
@@ -518,7 +519,7 @@ static int nasp_socket_proxywasm_on_data(nasp_socket *s, int data_size, bool end
 
 	if (result.err)
 	{
-		pr_err("nasp: proxy_on_upstream/downstream_data returned an error: %s", result.err);
+		pr_err("proxy_on_upstream/downstream_data returned an error # err[%s]", result.err);
 		action = -1;
 		goto bail;
 	}
@@ -598,7 +599,7 @@ int nasp_recvmsg(struct sock *sock,
 	len = copy_to_iter(get_read_buffer(s), read_buffer_size, &msg->msg_iter);
 	if (len < read_buffer_size)
 	{
-		pr_warn("nasp: recvmsg copy_to_iter copied less than requested");
+		pr_warn("recvmsg copy_to_iter copied less than requested");
 	}
 
 	set_read_buffer_size(s, read_buffer_size - len);
@@ -659,7 +660,7 @@ void nasp_close(struct sock *sk, long timeout)
 	nasp_socket *s = READ_ONCE(sk->sk_user_data);
 	if (s)
 	{
-		pr_info("nasp: close %s running for sk %p ", current->comm, sk);
+		pr_debug("free nasp socket # command[%s] sk[%p]", current->comm, sk);
 		nasp_socket_free(s);
 		WRITE_ONCE(sk->sk_user_data, NULL);
 	}
@@ -711,14 +712,14 @@ static int configure_ktls_sock(nasp_socket *s)
 
 	if (params->cipher_suite != BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256)
 	{
-		pr_warn("nasp: configure_ktls: only ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 cipher suite is supported, got %x", params->cipher_suite);
+		pr_warn("configure kTLS error: only ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 cipher suite is supported # requested_suite[%x]", params->cipher_suite);
 		s->send_msg = bearssl_send_msg;
 		s->recv_msg = bearssl_recv_msg;
 		return 0;
 	}
 
-	pr_info("nasp: configure_ktls for %s cipher suite: %x version: %x, iv: %.*s", current->comm, params->cipher_suite, params->version, 12, eng->out.chapol.iv);
-	pr_info("nasp: configure_ktls for %s cipher suite: %x version: %x, iv: %.*s", current->comm, params->cipher_suite, params->version, 12, eng->in.chapol.iv);
+	pr_debug("configure kTLS for output # command[%s] cipher_suite[%x] version[%x] iv[%.*s]", current->comm, params->cipher_suite, params->version, 12, eng->out.chapol.iv);
+	pr_debug("configure kTLS for input # command[%s] cipher_suite[%x] version[%x] iv[%.*s]", current->comm, params->cipher_suite, params->version, 12, eng->in.chapol.iv);
 
 	struct tls12_crypto_info_chacha20_poly1305 crypto_info_tx;
 	crypto_info_tx.info.version = TLS_1_2_VERSION;
@@ -739,14 +740,14 @@ static int configure_ktls_sock(nasp_socket *s)
 	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TCP, TCP_ULP, KERNEL_SOCKPTR("tls"), sizeof("tls"));
 	if (ret != 0)
 	{
-		pr_err("nasp: %s setsockopt TCP_ULP ret: %d", current->comm, ret);
+		pr_err("could not set sockopt TCP_ULP # command[%s] err[%d]", current->comm, ret);
 		return ret;
 	}
 
 	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TLS, TLS_TX, KERNEL_SOCKPTR(&crypto_info_tx), sizeof(crypto_info_tx));
 	if (ret != 0)
 	{
-		pr_err("nasp: %s setsockopt TLS_TX ret: %d", current->comm, ret);
+		pr_err("could not set sockopt TLS_TX # command[%s] err[%d]", current->comm, ret);
 		return ret;
 	}
 
@@ -754,14 +755,14 @@ static int configure_ktls_sock(nasp_socket *s)
 	// ret = c->sock->sk_prot->setsockopt(c->sock, SOL_TLS, TLS_TX_ZEROCOPY_RO, KERNEL_SOCKPTR(&yes), sizeof(yes));
 	// if (ret != 0)
 	// {
-	// 	pr_err("nasp: %s setsockopt TLS_TX_ZEROCOPY_RO ret: %d", current->comm, ret);
+	// 	pr_err("could not set sockopt TLS_TX_ZEROCOPY_RO # command[%s] err[%d]", current->comm, ret);
 	// 	return ret;
 	// }
 
 	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TLS, TLS_RX, KERNEL_SOCKPTR(&crypto_info_rx), sizeof(crypto_info_rx));
 	if (ret != 0)
 	{
-		pr_err("nasp: %s setsockopt TLS_RX ret: %d", current->comm, ret);
+		pr_err("could not set sockopt TLS_RX # command[%s] err[%d]", current->comm, ret);
 		return ret;
 	}
 
@@ -814,7 +815,7 @@ static int handle_cert_gen_locked(nasp_socket *sc)
 		u_int32_t result = generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
 		if (result == 0)
 		{
-			pr_err("nasp: generate_csr error generating rsa keys");
+			pr_err("could not generate rsa keys");
 			return -1;
 		}
 	}
@@ -822,7 +823,7 @@ static int handle_cert_gen_locked(nasp_socket *sc)
 	int len = encode_rsa_priv_key_to_der(NULL, sc->rsa_priv, sc->rsa_pub);
 	if (len <= 0)
 	{
-		pr_err("nasp: generate_csr error during rsa private der key length calculation");
+		pr_err("could not encode RSA private key to DER");
 		return -1;
 	}
 
@@ -834,7 +835,7 @@ static int handle_cert_gen_locked(nasp_socket *sc)
 	wasm_vm_result malloc_result = csr_malloc(csr, len);
 	if (malloc_result.err)
 	{
-		pr_err("nasp: generate_csr wasm_vm_csr_malloc error: %s", malloc_result.err);
+		pr_err("wasm CSR malloc error # err[%s]", malloc_result.err);
 		csr_unlock(csr);
 		return -1;
 	}
@@ -847,7 +848,7 @@ static int handle_cert_gen_locked(nasp_socket *sc)
 	int error = encode_rsa_priv_key_to_der(der, sc->rsa_priv, sc->rsa_pub);
 	if (error <= 0)
 	{
-		pr_err("nasp: generate_csr error during rsa private key der encoding");
+		pr_err("could not encode RSA private key to DER");
 		csr_unlock(csr);
 		return -1;
 	}
@@ -866,7 +867,7 @@ static int handle_cert_gen_locked(nasp_socket *sc)
 	csr_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
 	if (generated_csr.err)
 	{
-		pr_err("nasp: generate_csr wasm_vm_csr_gen error: %s", generated_csr.err);
+		pr_err("wasm CSR gen error # err[%s]", generated_csr.err);
 		csr_unlock(csr);
 		return -1;
 	}
@@ -874,7 +875,7 @@ static int handle_cert_gen_locked(nasp_socket *sc)
 	wasm_vm_result free_result = csr_free(csr, addr);
 	if (free_result.err)
 	{
-		pr_err("nasp: generate_csr wasm_vm_csr_free error: %s", free_result.err);
+		pr_err("wasm free error # err[%s]", free_result.err);
 		csr_unlock(csr);
 		return -1;
 	}
@@ -883,7 +884,7 @@ static int handle_cert_gen_locked(nasp_socket *sc)
 	free_result = csr_free(csr, generated_csr.csr_ptr);
 	if (free_result.err)
 	{
-		pr_err("nasp: generate_csr wasm_vm_csr_free error: %s", free_result.err);
+		pr_err("wasm free error # err[%s]", free_result.err);
 		csr_unlock(csr);
 		return -1;
 	}
@@ -893,7 +894,7 @@ static int handle_cert_gen_locked(nasp_socket *sc)
 	csr_sign_answer = send_csrsign_command(csr_ptr, sc->opa_socket_ctx.ttl);
 	if (csr_sign_answer->error)
 	{
-		pr_err("nasp: generate_csr csr sign answer error: %s", csr_sign_answer->error);
+		pr_err("error during CSR signing # err[%s]", csr_sign_answer->error);
 		kfree(csr_sign_answer->error);
 		kfree(csr_sign_answer);
 		return -1;
@@ -935,13 +936,12 @@ static int cache_and_validate_cert(nasp_socket *sc, char *key)
 	// Cert found in the cache use that
 	else
 	{
-		pr_err("nasp: found cert for id[%s]", key);
 		sc->cert = cached_cert_bundle->cert;
 	}
 	// Validate the cached or the generated cert
 	if (!validate_cert(sc->cert->validity))
 	{
-		pr_warn("nasp: provided certificate is invalid");
+		pr_debug("remove invalid certificate from cache");
 		x509_certificate_put(sc->cert);
 		remove_cert_from_cache(cached_cert_bundle);
 		cert_validation_err_no++;
@@ -1141,18 +1141,18 @@ opa_socket_context enriched_socket_eval(direction direction, struct sock *sk, in
 
 	if (direction == OUTPUT)
 	{
-		pr_info("nasp: look for sd entry by [%s]", conn_info.destination_ip);
+		pr_debug("look for sd entry # command[%s] address[%s]", current->comm, conn_info.destination_ip);
 		sd_entry = sd_table_entry_get(conn_info.destination_ip);
 		if (sd_entry == NULL)
 		{
 			char *address = strnprintf("%s:%d", conn_info.destination_ip, conn_info.destination_port);
-			pr_info("nasp: look for sd entry by [%s:%d] [%s]", conn_info.destination_ip, conn_info.destination_port, address);
+			pr_debug("look for sd entry # command[%s] address[%s:%d]", current->comm, conn_info.destination_ip, conn_info.destination_port);
 			sd_entry = sd_table_entry_get(address);
 			kfree(address);
 		}
 		if (!sd_entry)
 		{
-			pr_info("nasp: sd entry not found for [%s:%d]", conn_info.destination_ip, conn_info.destination_port);
+			pr_debug("sd entry not found # command[%s] address[%s:%d]", current->comm, conn_info.destination_ip, conn_info.destination_port);
 			return opa_socket_ctx;
 		}
 	}
@@ -1161,20 +1161,19 @@ opa_socket_context enriched_socket_eval(direction direction, struct sock *sk, in
 	attest_response *response = attest_workload();
 	if (response->error)
 	{
-		pr_err("nasp: eval failed to attest: %s", response->error);
+		pr_err("could not attest # err[%s]", response->error);
 		attest_response_put(response);
 	}
 	else
 	{
-		pr_info("nasp: eval attest response: %s", response->response);
 		command_answer *answer = prepare_opa_input(conn_info, sd_entry, response->response);
 		if (answer->error)
 		{
-			pr_err("nasp: eval failed to attest: %s", answer->error);
+			pr_err("could not prepare opa input # err[%s]", answer->error);
 		}
 		else
 		{
-			pr_info("nasp: eval attest response: %s", answer->answer);
+			pr_debug("attestation response # response[%s]", answer->answer);
 			opa_socket_ctx = socket_eval(answer->answer);
 		}
 		free_command_answer(answer);
@@ -1199,7 +1198,6 @@ void nasp_configure_server_tls(nasp_socket *sc)
 	 *   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
 	 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
 	 */
-	pr_info("nasp: accept use cert from agent");
 	br_ssl_server_init_full_rsa(sc->sc, sc->cert->chain, sc->cert->chain_len, sc->rsa_priv);
 
 	// mTLS enablement
@@ -1250,7 +1248,6 @@ void nasp_configure_client_tls(nasp_socket *sc, const char *server_name)
 	 *   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
 	 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
 	 */
-	pr_info("nasp: connect use cert from agent");
 	br_ssl_client_init_full(sc->cc, &sc->xc.ctx, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
 
 	br_x509_nasp_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx);
@@ -1280,7 +1277,7 @@ void nasp_configure_client_tls(nasp_socket *sc, const char *server_name)
 	 */
 	if (br_ssl_client_reset(sc->cc, server_name, false) != 1)
 	{
-		pr_err("nasp: connect br_ssl_client_reset returned an error");
+		pr_err("br_ssl_client_reset error");
 	}
 
 	/*
@@ -1327,12 +1324,12 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		sc = nasp_socket_accept(client_sk, opa_socket_ctx);
 		if (!sc)
 		{
-			pr_err("nasp: nasp_socket_accept failed to create nasp_socket");
+			pr_err("could not create nasp socket");
 			goto error;
 		}
 
 		u16 client_port = (u16)(client_sk->sk_portpair);
-		pr_info("nasp: nasp_accept uid: %d app: %s on ports: %d <- %d", current_uid().val, current->comm, port, client_port);
+		pr_debug("accept # command[%s] uid[%d] destination_port[%d] source_port[%d]", current->comm, current_uid().val, port, client_port);
 
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
@@ -1399,11 +1396,11 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		sc = nasp_socket_connect(sk, opa_socket_ctx);
 		if (!sc)
 		{
-			pr_err("nasp: nasp_socket_connect failed to create nasp_socket");
+			pr_err("could not create nasp socket");
 			goto error;
 		}
 
-		pr_info("nasp: nasp_connect uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
+		pr_debug("connect # command[%s] uid[%d] source_port[%d] destination_port[%d]", current->comm, current_uid().val, port);
 
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
@@ -1481,11 +1478,11 @@ int socket_init(void)
 	u_int32_t result = generate_rsa_keys(rsa_priv, rsa_pub);
 	if (result == 0)
 	{
-		pr_err("nasp: socket_init error generating rsa keys");
+		pr_err("could not generate rsa keys");
 		return -1;
 	}
 
-	pr_info("nasp: socket support loaded.");
+	pr_info("socket support loaded");
 
 	return 0;
 }
@@ -1502,5 +1499,5 @@ void socket_exit(void)
 	free_rsa_private_key(rsa_priv);
 	free_rsa_public_key(rsa_pub);
 
-	pr_info("nasp: socket support unloaded.");
+	pr_info("socket support unloaded");
 }

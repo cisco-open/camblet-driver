@@ -8,6 +8,8 @@
  * modified, or distributed except according to those terms.
  */
 
+#define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
+
 #include "csr.h"
 
 typedef struct csr_module
@@ -61,7 +63,7 @@ wasm_vm_result init_csr_for(wasm_vm *vm, wasm_vm_module *module)
 error:
     if (result.err)
     {
-        pr_crit("csr_module function lookups failed for module %s failed: %s -> %s", module->name, result.err, wasm_vm_last_error(module));
+        pr_crit("csr module function lookups failed # module[%s] result_err[%s] wasm_last_err[%s]", module->name, result.err, wasm_vm_last_error(module));
         return result;
     }
 
@@ -85,7 +87,7 @@ static i32 alloc_and_copy_parameter(char *str, i32 str_length, csr_module *csr)
     i32 addr;
     if (malloc_result.err)
     {
-        pr_err("nasp: malloc_result error: %s", malloc_result.err);
+        pr_err("wasm malloc error # err[%s]", malloc_result.err);
         addr = -1;
         goto bail;
     }
@@ -101,19 +103,19 @@ csr_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len
     csr_result result;
 // We do not want to concern ourselves with how variadic parameters are handled in wasm; instead,
 // we initialize all parameters that are NULL with an empty string.
-#define ALLOCATE_AND_CHECK(field)                                                     \
-    i32 field##_ptr = 0;                                                              \
-    i32 field##_len = 0;                                                              \
-    if (parameters->field)                                                            \
-    {                                                                                 \
-        field##_len = strlen(parameters->field);                                      \
-        field##_ptr = alloc_and_copy_parameter(parameters->field, field##_len, csr);  \
-        if (field##_ptr == -1)                                                        \
-        {                                                                             \
-            result.err = "nasp: error during allocating ptr with length for " #field; \
-            goto bail;                                                                \
-        }                                                                             \
-    }                                                                                 \
+#define ALLOCATE_AND_CHECK(field)                                                    \
+    i32 field##_ptr = 0;                                                             \
+    i32 field##_len = 0;                                                             \
+    if (parameters->field)                                                           \
+    {                                                                                \
+        field##_len = strlen(parameters->field);                                     \
+        field##_ptr = alloc_and_copy_parameter(parameters->field, field##_len, csr); \
+        if (field##_ptr == -1)                                                       \
+        {                                                                            \
+            result.err = "error during allocating ptr with length for " #field;      \
+            goto bail;                                                               \
+        }                                                                            \
+    }
 
     ALLOCATE_AND_CHECK(subject);
     ALLOCATE_AND_CHECK(dns);
@@ -130,15 +132,16 @@ csr_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len
                                                    ip_ptr, ip_len);
     if (vm_result.err != NULL)
     {
-        pr_err("nasp: calling csr_gen errored %s\n", vm_result.err);
+        pr_err("could not generate csr # err[%s]", vm_result.err);
         result.err = vm_result.err;
         goto bail;
     }
-    pr_info("nasp: result of calling csr_gen %lld\n", vm_result.data->i64);
+
+    pr_debug("csr generated successfully # mem[%lld]", vm_result.data->i64);
 
     if (vm_result.data->i64 == 0)
     {
-        result.err = "csr_gen wasm module returned empty value";
+        result.err = "could not generate csr: empty value";
         goto bail;
     }
     result.csr_len = (i32)(vm_result.data->i64);

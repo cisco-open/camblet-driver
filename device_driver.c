@@ -8,6 +8,8 @@
  * modified, or distributed except according to those terms.
  */
 
+#define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
+
 #include <linux/uaccess.h>
 #include <linux/version.h>
 #include <linux/wait.h>
@@ -57,11 +59,11 @@ int chardev_init(void)
 
     if (major < 0)
     {
-        pr_alert("nasp: Registering char device failed with %d", major);
+        pr_alert("could not register char device # err[%d]", major);
         return major;
     }
 
-    pr_info("nasp: I was assigned major number %d.", major);
+    pr_info("char device registered # major[%d]", major);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
     cls = class_create(THIS_MODULE, DEVICE_NAME);
@@ -71,7 +73,7 @@ int chardev_init(void)
 
     device_create(cls, NULL, MKDEV(major, 0), NULL, DEVICE_NAME);
 
-    pr_info("nasp: Device created on /dev/%s", DEVICE_NAME);
+    pr_info("device created # device[/dev/%s]", DEVICE_NAME);
 
     return SUCCESS;
 }
@@ -97,7 +99,7 @@ static int device_open(struct inode *inode, struct file *file)
 
     try_module_get(THIS_MODULE);
 
-    pr_info("nasp: [%s] opened the communication device", current->comm);
+    pr_info("communication device opened # command[%s]", current->comm);
 
     return SUCCESS;
 }
@@ -108,14 +110,14 @@ static wasm_vm_result reset_vms(void)
     result = wasm_vm_destroy_per_cpu();
     if (result.err)
     {
-        pr_crit("wasm_vm_destroy_per_cpu: %s", result.err);
+        pr_crit("could not destroy wasm vm # err[%s]", result.err);
         return result;
     }
 
     result = wasm_vm_new_per_cpu();
     if (result.err)
     {
-        pr_crit("wasm_vm_new_per_cpu: %s", result.err);
+        pr_crit("could not create wasm vm # err[%s]", result.err);
         return result;
     }
 
@@ -134,7 +136,7 @@ wasm_vm_result load_module(const char *name, const char *code, unsigned length, 
         result = wasm_vm_load_module(vm, name, code, length);
         if (result.err)
         {
-            pr_crit("wasm_vm_load_module: %s", result.err);
+            pr_crit("could not load wasm module # err[%s]", result.err);
             wasm_vm_unlock(vm);
             return result;
         }
@@ -143,52 +145,52 @@ wasm_vm_result load_module(const char *name, const char *code, unsigned length, 
 
         if (entrypoint)
         {
-            pr_info("nasp: calling module entrypoint: %s", entrypoint);
+            pr_debug("call module entrypoint # entrypoint[%s]", entrypoint);
 
             result = wasm_vm_call(vm, name, entrypoint);
             // if we can't find the implicit main entrypoint, that is not an issue
             if (result.err &&
                 !(result.err == m3Err_functionLookupFailed && strcmp(entrypoint, DEFAULT_MODULE_ENTRYPOINT) == 0))
             {
-                pr_crit("wasm_vm_call: %s error: %s", result.err, wasm_vm_last_error(module));
+                pr_crit("wasm vm call failed # err[%s] wasm_last_error[%s]", result.err, wasm_vm_last_error(module));
                 wasm_vm_unlock(vm);
                 return result;
             }
 
-            pr_info("nasp: module entrypoint finished");
+            pr_debug("module entrypoint finished # entrypoint[%s]", entrypoint);
 
             result.err = NULL;
         }
 
         if (strstr(name, OPA_MODULE) != NULL)
         {
-            pr_info("nasp: initializing opa for %s", name);
+            pr_info("initializing opa # name[%s]", name);
             result = init_opa_for(vm, module);
             if (result.err)
             {
-                pr_crit("init_opa_for: %s", result.err);
+                pr_crit("could not init opa module # err[%s]", result.err);
                 wasm_vm_unlock(vm);
                 return result;
             }
         }
         else if (strstr(name, PROXY_WASM) != NULL)
         {
-            pr_info("nasp: initializing proxywasm for %s", name);
+            pr_info("initializing proxywasm # name[%s]", name);
             result = init_proxywasm_for(vm, module);
             if (result.err)
             {
-                pr_crit("init_proxywasm_for: %s", result.err);
+                pr_crit("could not init proxywasm module # err[%s]", result.err);
                 wasm_vm_unlock(vm);
                 return result;
             }
         }
         else if (strstr(name, CSR_MODULE) != NULL)
         {
-            pr_info("nasp: initializing csr module for %s", name);
+            pr_info("initializing csr module # name[%s]", name);
             result = init_csr_for(vm, module);
             if (result.err)
             {
-                pr_crit("init_csr_for: %s", result.err);
+                pr_crit("could not init csr module # err[%s]", result.err);
                 wasm_vm_unlock(vm);
                 return result;
             }
@@ -208,18 +210,18 @@ static void load_sd_info(const char *data)
         return;
     }
 
-    pr_info("nasp: sd info [%s]", data);
+    pr_info("load service discovery info # data[%s]", data);
 
     JSON_Value *json = json_parse_string(data);
     if (json == NULL)
     {
-        pr_err("nasp: could not load sd info: json is invalid");
+        pr_err("could not load sd info: invalid json");
     }
 
     JSON_Object *root = json_value_get_object(json);
     if (root == NULL)
     {
-        pr_err("nasp: could not load sd info: json root is invalid");
+        pr_err("could not load sd info: invalid json root");
     }
 
     service_discovery_table *table = service_discovery_table_create();
@@ -235,7 +237,7 @@ static void load_sd_info(const char *data)
         entry = kzalloc(sizeof(*entry), GFP_KERNEL);
         entry->address = strdup(name);
 
-        pr_info("nasp: create entry with address [%s]", entry->address);
+        pr_debug("create sd entry # address[%s]", entry->address);
 
         entry->tags_len = json_array_get_count(tags);
         entry->tags = kmalloc(entry->tags_len * sizeof(char *), GFP_KERNEL);
@@ -244,7 +246,7 @@ static void load_sd_info(const char *data)
         {
             const char *tag = json_array_get_string(tags, k);
             entry->tags[k] = strdup(tag);
-            pr_info("nasp: add entry [%s] tag [%s]", entry->address, entry->tags[k]);
+            pr_debug("set sd entry tag # address[%s] tag[%s]", entry->address, entry->tags[k]);
         }
 
         service_discovery_table_entry_add(table, entry);
@@ -265,13 +267,13 @@ static void load_nasp_config(const char *data)
     JSON_Value *json = json_parse_string(data);
     if (json == NULL)
     {
-        pr_err("nasp: could not load nasp config: json is invalid");
+        pr_err("could not load nasp config: invalid json");
     }
 
     JSON_Object *root = json_value_get_object(json);
     if (root == NULL)
     {
-        pr_err("nasp: could not load nasp config: json root is invalid");
+        pr_err("could not load nasp config: invalid json root");
     }
 
     const char *trust_domain = json_object_get_string(root, "trust_domain");
@@ -281,7 +283,7 @@ static void load_nasp_config(const char *data)
         nasp_config *config = nasp_config_get_locked();
         if (strcmp(config->trust_domain, trust_domain) != 0)
         {
-            pr_info("nasp: change trust domain from [%s] to [%s]", config->trust_domain, trust_domain);
+            pr_info("change trust domain # old[%s] new[%s]", config->trust_domain, trust_domain);
             strlcpy(config->trust_domain, trust_domain, MAX_TRUST_DOMAIN_LEN);
         }
         nasp_config_unlock();
@@ -301,19 +303,19 @@ static int parse_command(const char *data)
         JSON_Object *root = json_value_get_object(json);
         const char *command = json_object_get_string(root, "command");
 
-        pr_info("nasp: command %s", command);
+        pr_debug("incoming command # command[%s]", command);
 
         if (strcmp("load", command) == 0)
         {
             const char *name = json_object_get_string(root, "name");
-            pr_info("nasp: loading module: %s", name);
+            pr_info("load module # name[%s]", name);
 
             const char *code = json_object_get_string(root, "code");
             char *decoded = kzalloc(strlen(code) * 2, GFP_KERNEL);
             int length = base64_decode(decoded, strlen(code) * 2, code, strlen(code));
             if (length < 0)
             {
-                pr_crit("base64_decode failed");
+                pr_crit("base64 decode failed");
                 status = -1;
                 kfree(decoded);
                 goto cleanup;
@@ -322,14 +324,14 @@ static int parse_command(const char *data)
             const char *entrypoint = json_object_get_string(root, "entrypoint");
             if (entrypoint == NULL)
             {
-                pr_info("nasp: setting default module entrypoint \"%s\"", DEFAULT_MODULE_ENTRYPOINT);
+                pr_info("setting default module entrypoint # entrypoint[%s]", DEFAULT_MODULE_ENTRYPOINT);
                 entrypoint = DEFAULT_MODULE_ENTRYPOINT;
             }
 
             wasm_vm_result result = load_module(name, decoded, length, entrypoint);
             if (result.err)
             {
-                pr_crit("load_module: %s", result.err);
+                pr_crit("could not load module # err[%s]", result.err);
                 status = -1;
                 kfree(decoded);
                 goto cleanup;
@@ -339,42 +341,44 @@ static int parse_command(const char *data)
         }
         if (strcmp("reset", command) == 0)
         {
-            pr_info("nasp: reseting vm");
+            pr_info("reseting vm");
 
             wasm_vm_result result = reset_vms();
             if (result.err)
             {
-                pr_crit("reset_vms: %s", result.err);
+                pr_crit("could not reset vm # err[%s]", result.err);
                 status = -1;
                 goto cleanup;
             }
         }
         else if (strcmp("load_rules", command) == 0)
         {
+            pr_info("load rules");
+
             const char *code = json_object_get_string(root, "code");
             char *decoded = kzalloc(strlen(code) * 2, GFP_KERNEL);
             int length = base64_decode(decoded, strlen(code) * 2, code, strlen(code));
             if (length < 0)
             {
-                pr_crit("base64_decode failed");
+                pr_crit("base64 decode failed");
                 status = -1;
                 kfree(decoded);
                 goto cleanup;
             }
-
-            pr_info("nasp: loading rules");
 
             load_opa_data(decoded);
             kfree(decoded);
         }
         else if (strcmp("load_config", command) == 0)
         {
+            pr_info("load config");
+
             const char *code = json_object_get_string(root, "code");
             char *decoded = kzalloc(strlen(code) * 2, GFP_KERNEL);
             int length = base64_decode(decoded, strlen(code) * 2, code, strlen(code));
             if (length < 0)
             {
-                pr_crit("base64_decode failed");
+                pr_crit("base64 decode failed");
                 status = -1;
                 kfree(decoded);
                 goto cleanup;
@@ -382,20 +386,20 @@ static int parse_command(const char *data)
 
             if (decoded)
             {
-                pr_info("nasp: config load [%s]", decoded);
                 load_nasp_config(decoded);
-                pr_info("nasp: config loaded [%s]", decoded);
                 kfree(decoded);
             }
         }
         else if (strcmp("load_sd_info", command) == 0)
         {
+            pr_info("load sd info");
+
             const char *code = json_object_get_string(root, "code");
             char *decoded = kzalloc(strlen(code) * 2, GFP_KERNEL);
             int length = base64_decode(decoded, strlen(code) * 2, code, strlen(code));
             if (length < 0)
             {
-                pr_crit("base64_decode failed");
+                pr_crit("base64 decode failed");
                 status = -1;
                 kfree(decoded);
                 goto cleanup;
@@ -411,7 +415,7 @@ static int parse_command(const char *data)
         {
             const char *command_id = json_object_get_string(root, "id");
 
-            pr_info("nasp: command answer parsing, id: %s", command_id);
+            pr_debug("command answer # uuid[%s]", command_id);
 
             uuid_t uuid;
             uuid_parse(command_id, &uuid);
@@ -419,7 +423,7 @@ static int parse_command(const char *data)
 
             if (cmd == NULL)
             {
-                pr_err("nasp: command %s not found", command_id);
+                pr_err("command not found # uuid[%s]", command_id);
                 status = -1;
                 goto cleanup;
             }
@@ -444,7 +448,7 @@ static int parse_command(const char *data)
         }
         else
         {
-            pr_err("nasp: command not implemented: %s", command);
+            pr_err("invalid command # command[%s]", command);
             status = -1;
             goto cleanup;
         }
@@ -462,7 +466,7 @@ cleanup:
 /* Called when a process closes the device file. */
 static int device_release(struct inode *inode, struct file *file)
 {
-    pr_info("nasp: [%s] closed the communcation device", current->comm);
+    pr_info("communcation device closed # command[%s]", current->comm);
 
     device_buffer_size = 0;
 
@@ -484,7 +488,7 @@ static char *serialize_command(struct command *cmd)
     int length = snprintf(uuid, UUID_STRING_LEN + 1, "%pUB", cmd->uuid.b);
     if (length < 0)
     {
-        pr_crit("nasp: uuid stringify failed");
+        pr_crit("could not stringify uuid");
         goto cleanup;
     }
 
@@ -537,7 +541,7 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
                            size_t length,       /* length of the buffer     */
                            loff_t *offset)
 {
-    pr_info("nasp: device_read: length: %lu offset: %llu", length, *offset);
+    pr_debug("read from userspace # length[%lu] offset[%llu]", length, *offset);
 
     command *c = get_next_command();
     if (c == NULL)
@@ -551,14 +555,14 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
         return -EFAULT;
     }
 
-    pr_info("nasp: the command json is done: %s", command_json);
+    pr_debug("arrived command # command[%s]", command_json);
 
     int bytes_read = 0;
     int bytes_to_read = strlen(command_json); // min(length, c->size - *offset);
 
     if (bytes_to_read >= length)
     {
-        pr_err("nasp: user buffer too small: %d", bytes_to_read);
+        pr_err("read buffer too small # bytes_to_read[%d]", bytes_to_read);
     }
 
     if (bytes_to_read > 0)
@@ -593,7 +597,7 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
         bytes_to_write = maxbytes;
 
     bytes_writen = bytes_to_write - copy_from_user(device_buffer + device_buffer_size, buffer, bytes_to_write);
-    pr_info("nasp: device has been written %d", bytes_writen);
+    pr_debug("write to userspace # bytes[%d]", bytes_writen);
     *offset += bytes_writen;
     device_buffer_size += bytes_writen;
 
@@ -619,7 +623,7 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
         int status = parse_command(device_buffer);
         if (status != 0)
         {
-            pr_err("nasp: parse_command failed: %d", status);
+            pr_err("could not parse command # err[%d]", status);
         }
 
         memmove(device_buffer, device_buffer + i, device_buffer_size - i);

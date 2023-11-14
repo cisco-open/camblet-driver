@@ -7,6 +7,9 @@
  * <LICENSE.GPL or https://opensource.org/license/gpl-2-0>, at your option. This file may not be copied,
  * modified, or distributed except according to those terms.
  */
+
+#define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
+
 #include <linux/slab.h>
 #include <linux/uuid.h>
 #include <linux/inet.h>
@@ -51,7 +54,7 @@ command_answer *send_command(char *name, char *data, task_context *context)
     wake_up_interruptible(&command_wait_queue);
 
     // wait until the command is processed
-    pr_info("nasp: waiting for command [%s] [%pUB] to be processed", name, cmd->uuid.b);
+    pr_debug("waiting for command to be processed # name[%s] uuid[%pUB] ", name, cmd->uuid.b);
 
     // wait for the command to be processed
     DEFINE_WAIT(wait);
@@ -64,7 +67,7 @@ command_answer *send_command(char *name, char *data, task_context *context)
 
     if (cmd->answer == NULL)
     {
-        pr_err("nasp: command [%s] [%pUB] answer timeout", name, cmd->uuid.b);
+        pr_err("command timeout # name[%s] uuid[%pUB] ", name, cmd->uuid.b);
 
         cmd->answer = answer_with_error("timeout");
     }

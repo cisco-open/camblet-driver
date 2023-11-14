@@ -2,11 +2,13 @@
  * Copyright (c) 2023 Cisco and/or its affiliates. All rights reserved.
  *
  * SPDX-License-Identifier: MIT OR GPL-2.0-only
- * 
+ *
  * Licensed under the MIT license <LICENSE.MIT or https://opensource.org/licenses/MIT> or the GPLv2 license
- * <LICENSE.GPL or https://opensource.org/license/gpl-2-0>, at your option. This file may not be copied, 
+ * <LICENSE.GPL or https://opensource.org/license/gpl-2-0>, at your option. This file may not be copied,
  * modified, or distributed except according to those terms.
  */
+
+#define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
 
 #include <linux/slab.h>
 
@@ -102,7 +104,7 @@ wasm_vm_result wasm_vm_new_per_cpu(void)
     int cpu = 0;
     for_each_possible_cpu(cpu)
     {
-        pr_info("nasp: creating vm for cpu %d", cpu);
+        pr_info("create vm # cpu[%d]", cpu);
         vms[cpu] = wasm_vm_new(cpu);
     }
     return wasm_vm_result_ok;
@@ -115,7 +117,7 @@ wasm_vm_result wasm_vm_destroy_per_cpu(void)
         int cpu = 0;
         for_each_possible_cpu(cpu)
         {
-            pr_info("nasp: destroying vm for cpu %d", cpu);
+            pr_info("destroy vm # cpu[%d]", cpu);
             wasm_vm_destroy(vms[cpu]);
         }
     }
@@ -131,7 +133,7 @@ static void wasm_vm_print_backtrace(wasm_vm_function *func)
         return;
     }
 
-    pr_err("nasp: backtrace:");
+    pr_err("backtrace:");
 
     int frameCount = 0;
     IM3BacktraceFrame curr = info->frames;
@@ -346,20 +348,20 @@ wasm_vm_result wasm_vm_free(wasm_vm *vm, const char *module, i32 ptr, unsigned s
 
 m3ApiRawFunction(m3_wasi_generic_environ_get)
 {
-    m3ApiReturnType  (uint32_t)
-    m3ApiGetArgMem   (uint32_t *           , env)
-    m3ApiGetArgMem   (char *               , env_buf)
+    m3ApiReturnType(uint32_t)
+        m3ApiGetArgMem(uint32_t *, env)
+            m3ApiGetArgMem(char *, env_buf)
 
-    m3ApiReturn(0);
+                m3ApiReturn(0);
 }
 
 m3ApiRawFunction(m3_wasi_generic_environ_sizes_get)
 {
-    m3ApiReturnType  (uint32_t)
-    m3ApiGetArgMem   (uint32_t *      , env_count)
-    m3ApiGetArgMem   (uint32_t *      , env_buf_size)
+    m3ApiReturnType(uint32_t)
+        m3ApiGetArgMem(uint32_t *, env_count)
+            m3ApiGetArgMem(uint32_t *, env_buf_size)
 
-    m3ApiCheckMem(env_count,    sizeof(uint32_t));
+                m3ApiCheckMem(env_count, sizeof(uint32_t));
     m3ApiCheckMem(env_buf_size, sizeof(uint32_t));
 
     *env_count = 0;
@@ -370,8 +372,8 @@ m3ApiRawFunction(m3_wasi_generic_environ_sizes_get)
 
 m3ApiRawFunction(m3_wasi_generic_proc_exit)
 {
-    m3ApiGetArg   (i32, code)
-    m3ApiSuccess();
+    m3ApiGetArg(i32, code)
+        m3ApiSuccess();
 }
 
 M3Result SuppressLookupFailure(M3Result i_result)
@@ -389,9 +391,9 @@ static M3Result m3_LinkWASIMocks(IM3Module module)
 
     const char *wasi = "wasi_snapshot_preview1";
 
-    _(SuppressLookupFailure (m3_LinkRawFunction (module, wasi, "environ_get",       "i(**)", m3_wasi_generic_environ_get)));
-    _(SuppressLookupFailure (m3_LinkRawFunction (module, wasi, "environ_sizes_get", "i(**)", m3_wasi_generic_environ_sizes_get)));
-    _(SuppressLookupFailure (m3_LinkRawFunction (module, wasi, "proc_exit",           "(i)", m3_wasi_generic_proc_exit)));
+    _(SuppressLookupFailure(m3_LinkRawFunction(module, wasi, "environ_get", "i(**)", m3_wasi_generic_environ_get)));
+    _(SuppressLookupFailure(m3_LinkRawFunction(module, wasi, "environ_sizes_get", "i(**)", m3_wasi_generic_environ_sizes_get)));
+    _(SuppressLookupFailure(m3_LinkRawFunction(module, wasi, "proc_exit", "(i)", m3_wasi_generic_proc_exit)));
 
 _catch:
     return result;
@@ -430,22 +432,22 @@ static M3Result m3_link_all(IM3Module module)
     return res;
 }
 
-static void *print_module_symbols(IM3Module module, void * i_info)
+static void *print_module_symbols(IM3Module module, void *i_info)
 {
-    pr_info("nasp:   module = %s\n", module->name);
+    pr_debug("\tmodule = %s\n", module->name);
     int i;
     for (i = 0; i < module->numGlobals; i++)
     {
-        pr_info("nasp:     global -> %s", module->globals[i].name);
+        pr_debug("\t\tglobal -> %s", module->globals[i].name);
     }
     for (i = 0; i < module->numFunctions; i++)
     {
-        IM3Function f = & module->functions [i];
+        IM3Function f = &module->functions[i];
 
         bool isImported = f->import.moduleUtf8 || f->import.fieldUtf8;
 
         if (isImported)
-            pr_info("nasp:     import -> %s.%s", f->import.moduleUtf8, f->names[0]);
+            pr_debug("\t\timport -> %s.%s", f->import.moduleUtf8, f->names[0]);
     }
     for (i = 0; i < module->numFunctions; i++)
     {
@@ -453,7 +455,7 @@ static void *print_module_symbols(IM3Module module, void * i_info)
 
         if (f->export_name != NULL)
         {
-            pr_info("nasp:     function -> %s(%d) -> %d", f->export_name, f->funcType->numArgs, f->funcType->numRets);
+            pr_debug("\t\tfunction -> %s(%d) -> %d", f->export_name, f->funcType->numArgs, f->funcType->numRets);
         }
     }
 
@@ -462,7 +464,7 @@ static void *print_module_symbols(IM3Module module, void * i_info)
 
 void wasm_vm_dump_symbols(wasm_vm *vm)
 {
-    pr_info("nasp: vm for cpu = %d\n", vm->cpu);
+    pr_debug("vm # cpu[%d]", vm->cpu);
     int i;
     for (i = 0; i < vm->_num_runtimes; i++)
         ForEachModule(vm->_runtimes[i], print_module_symbols, NULL);
