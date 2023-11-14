@@ -89,10 +89,16 @@ jobs:
         echo "Test bearssl with non-bearssl compatibility"
         python3 -m http.server 7000 >/tmp/python.log &
         sleep 1
+        echo "testing with curl..."
         curl -k -v https://localhost:7000/
+        echo "testing with wget..."
+        wget --no-check-certificate https://localhost:7000/
 
-        echo "Test sendfile with NGiNX"
+        echo "Test sendfile with NGiNX using curl"
         curl -v http://localhost:8080
+
+        echo "Test sendfile with NGiNX using wget"
+        wget -v http://localhost:8000
 
         echo "Stop processes"
         sudo kill -9 $(jobs -p)
