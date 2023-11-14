@@ -1,0 +1,5 @@
+nasp-kernel-module (1.0.0-1) UNRELEASED; urgency=medium
+
+  * Initial release. (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+
+ -- unknown <nandork@unknown>  Tue, 14 Nov 2023 12:29:29 +0000

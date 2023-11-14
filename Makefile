@@ -97,6 +97,7 @@ opa-test:
 
 clean:
 	$(MAKE) -C $(KBUILD) M=$(PWD) clean
+	rm -rf target/
 
 help:
 	$(MAKE) -C $(KBUILD) M=$(PWD) help
@@ -162,3 +163,6 @@ setup-dev-env:
 # Usage: make debug LINE=get_command+0x88/0x130
 debug:
 	sudo addr2line -e nasp.ko $(LINE)
+
+debian-package:
+	dpkg-buildpackage -us -uc -b
