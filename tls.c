@@ -8,6 +8,8 @@
  * modified, or distributed except according to those terms.
  */
 
+#define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
+
 #include "tls.h"
 
 #include <linux/slab.h>
@@ -69,11 +71,11 @@ xwc_end_chain(const br_x509_class **ctx)
         allowed = false;
     }
 
-    pr_info("nasp: allowed spiffe id len[%d]", nasp_cc->socket_context->allowed_spiffe_ids_length);
+    pr_debug("allowed spiffe id # len[%d]", nasp_cc->socket_context->allowed_spiffe_ids_length);
 
     for (i = 0; i < mini_cc->num_name_elts; i++)
     {
-        pr_info("nasp: peer certificate name_elts[%d]: status: %d, value: %s (len: %ld)", i, mini_cc->name_elts[i].status, mini_cc->name_elts[i].buf, mini_cc->name_elts[i].len);
+        pr_debug("peer certificate # name_elts[%d] status[%d] value[%s] len[%ld]", i, mini_cc->name_elts[i].status, mini_cc->name_elts[i].buf, mini_cc->name_elts[i].len);
 
         if (mini_cc->name_elts[i].oid == OID_uniformResourceIdentifier)
         {
@@ -81,7 +83,7 @@ xwc_end_chain(const br_x509_class **ctx)
             {
                 if (strncmp(nasp_cc->socket_context->allowed_spiffe_ids[k], mini_cc->name_elts[i].buf, strlen(nasp_cc->socket_context->allowed_spiffe_ids[k])) == 0)
                 {
-                    pr_info("nasp: %s == ^%s", mini_cc->name_elts[i].buf, nasp_cc->socket_context->allowed_spiffe_ids[k]);
+                    pr_debug("spiffe id match # cert_uri[%s] policy_uri[%s]", mini_cc->name_elts[i].buf, nasp_cc->socket_context->allowed_spiffe_ids[k]);
                     allowed = true;
                     break;
                 }
@@ -91,7 +93,7 @@ xwc_end_chain(const br_x509_class **ctx)
 
     if (!allowed)
     {
-        pr_info("nasp: peer certificate is not allowed!");
+        pr_debug("peer certificate is denied");
 
         return BR_ERR_X509_NOT_TRUSTED;
     }

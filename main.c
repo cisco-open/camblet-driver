@@ -8,6 +8,8 @@
  * modified, or distributed except according to those terms.
  */
 
+#define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
+
 #include <linux/module.h>
 
 #include "device_driver.h"
@@ -34,7 +36,7 @@ MODULE_PARM_DESC(proxywasm_modules, "Enable/disable the proxywasm modules");
 
 static int __init nasp_init(void)
 {
-    pr_info("%s: module loaded at 0x%p running on %d CPUs", THIS_MODULE->name, nasp_init, nr_cpu_ids);
+    pr_info("module loaded at 0x%p running on %d CPUs", nasp_init, nr_cpu_ids);
 
     wasm_vm_result result = wasm_vm_new_per_cpu();
     if (result.err)

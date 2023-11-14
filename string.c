@@ -7,6 +7,7 @@
  * <LICENSE.GPL or https://opensource.org/license/gpl-2-0>, at your option. This file may not be copied,
  * modified, or distributed except according to those terms.
  */
+
 #include <linux/slab.h>
 
 char *strndup(const char *str, size_t size)

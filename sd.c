@@ -8,6 +8,8 @@
  * modified, or distributed except according to those terms.
  */
 
+#define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
+
 #include <linux/slab.h>
 #include <linux/hashtable.h>
 #include <linux/crc32c.h>
@@ -87,7 +89,7 @@ static void sd_table_entry_del_locked(service_discovery_entry *entry)
         return;
     }
 
-    pr_info("nasp: hashtable remove entry locked [%s]", entry->address);
+    pr_debug("remove entry # address[%s]", entry->address);
 
     hash_del(&entry->node);
 }
@@ -127,21 +129,10 @@ static void service_discovery_table_free_locked(service_discovery_table *table)
     int i, k;
     hash_for_each(table->htable, i, entry, node)
     {
-        pr_info("nasp: delete hashtable entry [%s]", entry->address);
-
-        for (k = 0; k < entry->tags_len; k++)
-        {
-            pr_info("nasp: hash entry tag [%d] [%s]", k, entry->tags[k]);
-        }
+        pr_debug("delete entry # address[%s]", entry->address);
         sd_table_entry_del_locked(entry);
         service_discovery_entry_free(entry);
     }
-
-    if (hash_empty(table->htable))
-    {
-        pr_info("nasp: hashtable empty!");
-    }
-
     kfree(table);
 }
 

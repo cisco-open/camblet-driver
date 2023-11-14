@@ -113,7 +113,7 @@ insmod-bearssl: insmod-tls
 	sudo insmod third-party/BearSSL/bearssl.ko
 
 insmod: insmod-bearssl
-	sudo insmod nasp.ko
+	sudo insmod nasp.ko dyndbg==_
 
 insmod-with-proxywasm: insmod-bearssl
 	sudo insmod nasp.ko proxywasm_modules=1
