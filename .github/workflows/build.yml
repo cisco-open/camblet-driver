@@ -72,7 +72,7 @@ jobs:
       run: |
         touch /tmp/nasp.log /tmp/file-server.log /tmp/python.log
         echo "Run processes"
-        sudo ../nasp/build/nasp agent --config ../nasp/config.yaml --rules-path $(pwd)/../nasp/rules.d > /tmp/nasp.log &
+        sudo ../nasp/build/nasp agent --config ../nasp/config.yaml --rules-path $(pwd)/../nasp/rules.d --sd-path $(pwd)/../nasp/sd.d > /tmp/nasp.log &
         go run test/file-server.go >/tmp/file-server.log &
         docker run -d --rm -p 8080:80 nginx
         sleep 2
