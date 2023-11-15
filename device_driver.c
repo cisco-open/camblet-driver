@@ -247,7 +247,7 @@ static void load_sd_info(const char *data)
             pr_info("nasp: add entry [%s] tag [%s]", entry->address, entry->tags[k]);
         }
 
-        service_discovery_table_entry_add_locked(table, entry);
+        service_discovery_table_entry_add(table, entry);
     }
 
     sd_table_replace(table);
