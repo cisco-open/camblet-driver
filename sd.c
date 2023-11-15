@@ -133,7 +133,7 @@ static void service_discovery_table_free_locked(service_discovery_table *table)
         {
             pr_info("nasp: hash entry tag [%d] [%s]", k, entry->tags[k]);
         }
-        sd_entry_del_locked(entry);
+        sd_table_entry_del_locked(entry);
         service_discovery_entry_free(entry);
     }
 
