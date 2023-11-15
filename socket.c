@@ -1009,7 +1009,7 @@ static net_conn_info get_net_conn_info(direction direction, struct sock *s, u16 
 
 void add_sd_entry_tags_to_json(service_discovery_entry *sd_entry, JSON_Value *json)
 {
-	if (!json_object)
+	if (!json)
 	{
 		return;
 	}
