@@ -18,6 +18,10 @@
 %:
 	dh $@
 
+override_dh_auto_install:
+	dh_auto_install
+	mkdir -p debian/nasp-kernel-module/usr/src/nasp-1.0.0/
+	cp -r *.c *h Makefile static/ third-party debian/nasp-kernel-module/usr/src/nasp-1.0.0/
 
 # dh_make generated override targets.
 # This is an example for Cmake (see <https://bugs.debian.org/641051>).

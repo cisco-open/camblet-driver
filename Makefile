@@ -165,5 +165,7 @@ debug:
 	sudo addr2line -e nasp.ko $(LINE)
 
 debian-package:
+	make clean
+	rm -f ../nasp-kernel-module_1.0.0.orig.tar.xz
 	tar --exclude='./.git' --exclude='linux' -cvJf ../nasp-kernel-module_1.0.0.orig.tar.xz .
 	dpkg-buildpackage
