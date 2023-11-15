@@ -13,14 +13,8 @@ set -e
 # for details, see https://www.debian.org/doc/debian-policy/ or
 # the debian-policy package.
 
-
 case "$1" in
     install|upgrade)
-    # Add the kernel module to the DKMS source control
-    dkms add -m nasp -v 1.0.0
-
-    # Build and install the kernel module against the current kernel version
-    dkms install -m nasp -v 1.0.0
     ;;
 
     abort-upgrade)

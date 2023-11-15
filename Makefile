@@ -75,7 +75,7 @@ nasp-objs :=  third-party/wasm3/source/m3_api_libc.o \
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
 
-default: static/socket_wasm.h bearssl
+default: bearssl
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) modules
 
 bearssl:
@@ -168,4 +168,4 @@ debian-package:
 	make clean
 	rm -f ../nasp-kernel-module_1.0.0.orig.tar.xz
 	tar --exclude='./.git' --exclude='linux' -cvJf ../nasp-kernel-module_1.0.0.orig.tar.xz .
-	dpkg-buildpackage
+	dpkg-buildpackage -tc
