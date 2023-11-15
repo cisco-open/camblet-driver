@@ -126,7 +126,7 @@ Then follow the instructions [here](https://github.com/cisco-open/nasp#cli).
 
 The kernel module can terminate TLS connections for ordinary TCP sockets (IPv4 or IPv6), and forward the plaintext traffic to a user space application. This is useful for example if you want to run a proxy-wasm filter on a TCP connection.
 
-Between two applications - both of them intercepted by this module - the traffic is always encrypted by [kTLS](https://docs.kernel.org/networking/tls-offload.html). If one of them is not intercepted by the module but supports the ChaCha20-Poly1305 AEAD - kTLS is used. Otherwise the traffic is encrypted by BearSSL.
+Between two applications - both of them intercepted by this module - the traffic is always encrypted by [kTLS](https://docs.kernel.org/networking/tls-offload.html). If one of them is not intercepted by the module but supports the ChaCha20-Poly1305 AEAD - kTLS is used. Otherwise, the traffic is encrypted by BearSSL.
 
 ### Test mTLS
 
