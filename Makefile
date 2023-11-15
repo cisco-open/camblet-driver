@@ -156,13 +156,14 @@ setup-dev-env:
 	test -f .vscode/c_cpp_properties.json || cp .vscode/c_cpp_properties.json.orig .vscode/c_cpp_properties.json
 	brew tap messense/macos-cross-toolchains
 	brew install $(shell lima uname -m)-unknown-linux-gnu
-	test -d linux || git clone --depth=1 --branch v6.2 https://github.com/torvalds/linux.git
-	cd linux && lima make tinyconfig
-	cd linux && lima make -j
+	test -d ..linux || git clone --depth=1 --branch v6.2 https://github.com/torvalds/linux.git ../linux
+	cd ../linux && lima make tinyconfig
+	cd ../linux && lima make -j
 
 # Usage: make debug LINE=get_command+0x88/0x130
 debug:
 	sudo addr2line -e nasp.ko $(LINE)
 
 debian-package:
-	dpkg-buildpackage -us -uc -b
+	tar --exclude='./.git' --exclude='linux' -cvJf ../nasp-kernel-module_1.0.0.orig.tar.xz .
+	dpkg-buildpackage

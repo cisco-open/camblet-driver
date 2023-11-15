@@ -1,5 +1,5 @@
 Source: nasp-kernel-module
-Section: Cisco NASP
+Section: kernel
 Priority: optional
 Maintainer: Nandor Kracser <nandork@cisco.com>
 Rules-Requires-Root: no
@@ -12,7 +12,7 @@ Homepage: https://github.com/cisco-open/nasp
 
 Package: nasp-kernel-module
 Architecture: any
-Depends:
+Pre-Depends:
  ${misc:Depends},
  dkms
 Description: <insert up to 60 chars description>
