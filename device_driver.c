@@ -213,13 +213,13 @@ static void load_sd_info(const char *data)
     JSON_Value *json = json_parse_string(data);
     if (json == NULL)
     {
-        pr_err("nasp: could not load nasp config: json is invalid");
+        pr_err("nasp: could not load sd info: json is invalid");
     }
 
     JSON_Object *root = json_value_get_object(json);
     if (root == NULL)
     {
-        pr_err("nasp: could not load nasp config: json root is invalid");
+        pr_err("nasp: could not load sd info: json root is invalid");
     }
 
     service_discovery_table *table = service_discovery_table_create();
