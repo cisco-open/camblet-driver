@@ -72,7 +72,7 @@ jobs:
       run: |
         touch /tmp/nasp.log /tmp/file-server.log /tmp/python.log
         echo "Run processes"
-        sudo ../nasp/build/nasp agent --config ../nasp/config.yaml --rules-path $(pwd)/../nasp/rules.d --sd-path $(pwd)/../nasp/sd.d > /tmp/nasp.log &
+        sudo ../nasp/build/nasp agent --config ../nasp/config.yaml --rules-path $(pwd)/../nasp/nasp.d/rules --sd-path $(pwd)/../nasp/nasp.d/services > /tmp/nasp.log &
         go run test/file-server.go >/tmp/file-server.log &
         docker run -d --rm -p 8080:80 nginx
         sleep 2
@@ -103,11 +103,25 @@ jobs:
         sudo kill -9 $(jobs -p)
         sudo pkill -9 nasp
 
-    - name: Print logs
+    - name: kernel log
       if: always()
       run: |
-        cat /tmp/nasp.log /tmp/file-server.log /tmp/python.log
         sudo dmesg -T
+
+    - name: Nasp agent log
+      if: always()
+      run: |
+        cat /tmp/nasp.log
+
+    - name: File server log
+      if: always()
+      run: |
+        cat /tmp/file-server.log
+
+    - name: Python log
+      if: always()
+      run: |
+        cat /tmp/python.log
 
     - name: Cleanup module
       run: sudo modprobe -r nasp
