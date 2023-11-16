@@ -203,3 +203,31 @@ sudo modprobe -r nasp
 sudo dkms uninstall -m nasp -v 0.1.0
 sudo dkms remove -m nasp -v 0.1.0
 ```
+
+### Debian package
+
+The kernel module can be packaged into a Debian package with DKMS support. 
+
+Prepare the build environment:
+
+```bash
+sudo apt install debhelper
+```
+
+The package can be built with the following command:
+
+```bash
+make deb
+```
+
+The package can be installed with the following command:
+
+```bash
+sudo apt install ../nasp-kernel-module_1.0.0-1_all.deb
+```
+
+And removed with the following command:
+
+```bash
+sudo apt remove nasp-kernel-module
+```

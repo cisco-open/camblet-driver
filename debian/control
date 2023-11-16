@@ -6,14 +6,13 @@ Rules-Requires-Root: no
 Build-Depends:
  debhelper-compat (= 13),
 Standards-Version: 4.6.2
-Homepage: https://github.com/cisco-open/nasp
-#Vcs-Browser: https://salsa.debian.org/debian/nasp-kernel-module
-#Vcs-Git: https://salsa.debian.org/debian/nasp-kernel-module.git
+Homepage: https://github.com/cisco-open/nasp-kernel-module
+Vcs-Browser: https://github.com/cisco-open/nasp-kernel-module
+Vcs-Git: https://github.com/cisco-open/nasp-kernel-module.git
 
 Package: nasp-kernel-module
-Architecture: any
+Architecture: all
 Pre-Depends:
  ${misc:Depends},
  dkms
-Description: <insert up to 60 chars description>
- <Insert long description, indented with spaces.>
+Description: Kernel module for the NASP project.
