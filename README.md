@@ -4,23 +4,23 @@
 
 ## Introduction
 
-The *nasp-kernel-module* is the supporting Linux kernel-module for the [Nasp](https://github.com/cisco-open/nasp) system. It is capable of enhancing plain old TCP sockets in a frictionless way, so that application developers can focus on their business logic instead of dealing with the complexity of TLS, mTLS, and other security-related concerns. It is doing this seamlessly, no code changes or re-compilations or re-deployments are required. 
+The *nasp-kernel-module* is the supporting Linux kernel module for the [Nasp](https://github.com/cisco-open/nasp) system. It is capable of enhancing plain old TCP sockets in a frictionless way so that application developers can focus on their business logic instead of dealing with the complexity of TLS, mTLS, and other security-related concerns. It is doing this seamlessly, no code changes or re-compilations or re-deployments are required. 
 The features are the following:
 - providing zero-trust identity for UNIX TCP sockets through mTLS
 - access control, authorization and authentication (through OPA)
 - providing frictionless TLS termination for those TCP sockets
 - run [proxy-wasm](https://github.com/proxy-wasm/spec) filters for every app
-- supporting every Linux based machine (bare-metal, vanilla VM, Kubernetes, etc... you name it)
+supporting every Linux-based machine (bare-metal, vanilla VM, Kubernetes, etc... you name it)
 
-The kernel module is capable of running proxy-wasm filters on your application data, this way it opens up a lot of oppurtunities to write custom logic for all (or a selected set of) your applications in your environment. This allows basically an infinite number of possibilites of monitoring and changing the way how applications talk to each other in your system.
+The kernel module is capable of running proxy-wasm filters on your application data, this way it opens up a lot of opportunities to write custom logic for all (or a selected set of) your applications in your environment. This allows an infinite number of possibilities for monitoring and changing the way applications talk to each other in your system.
 
 ### Presentations
 
-The eaerly incarnation of this project was presented on KubeCon 2023 Amsterdam, Wasm Day, you can find the recording [here](https://www.youtube.com/watch?v=JSKNch6piyY). By that time the module was capable of running OPA -> Wasm compiled policies in the Kernel and those were exposed as an eBPF function from the kernel module.
+The early incarnation of this project was presented on KubeCon 2023 Amsterdam, Wasm Day, you can find the recording [here](https://www.youtube.com/watch?v=JSKNch6piyY). By that time the module was capable of running OPA -> Wasm compiled policies in the Kernel and those were exposed as an eBPF function from the kernel module.
 
 ## Which Wasm runtime?
 
-The [wasm3](https://github.com/wasm3/wasm3) runtime got chosen since it is written in C and has minimal dependencies (except a C library) and it is extremely portable. In kernel space, there is no libc, but we maintain a fork of wasm3 which can run in kernel space as well (check the `third-party/wasm3/` submodule).
+The [wasm3](https://github.com/wasm3/wasm3) runtime was chosen since it is written in C and has minimal dependencies (except a C library) and it is extremely portable. In kernel space, there is no libc, but we maintain a fork of wasm3 which can run in kernel space as well (check the `third-party/wasm3/` submodule).
 
 Current restrictions for kernel-space wasm3:
 - no floating point support [can be soft-emulated if needed]
@@ -39,7 +39,7 @@ cd nasp-kernel-module
 
 Our primary development environment is [Lima](https://lima-vm.io) since it supports x86_64 and ARM as well. The module was tested on Ubuntu and Arch Linux and requires kernel version 5.15 and upwards.
 
-Install Lima itself, for example on macOS using brew:
+Install Lima itself, for example on macOS using `brew`:
 ```bash
 brew install lima
 ```
@@ -62,7 +62,7 @@ make setup-vm
 
 ### Coding
 
-We are using VSCode for development and the project ships with a `c_cpp_properties.json` file which contains the required include paths for the kernel headers. The file is ARM specific from include path point-of-view so if you happen to run on x86_64 please replace the paths accordingly (arm64 -> x86, aarch64 -> x86_64).
+We are using VSCode for development and the project ships with a `c_cpp_properties.json` file which contains the required paths for the kernel headers. The file is ARM specific from include path point-of-view so if you happen to run on x86_64 please replace the paths accordingly (arm64 -> x86, aarch64 -> x86_64).
 
 We are respecting your `c_cpp_properties.json` file by not overriding it. Please copy the required parts to your file, if it is already present. 
 
