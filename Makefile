@@ -125,7 +125,7 @@ _debian_deps:
 	sudo apt update
 	sudo apt install -y dkms dwarves
 ifndef GITHUB_ACTION
-	sudo apt install -y golang flex bison iperf socat
+	sudo apt install -y golang flex bison iperf socat debhelper
 endif
 
 _archlinux_deps:
