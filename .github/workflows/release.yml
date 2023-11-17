@@ -3,8 +3,10 @@
 
 name: Release
 
-on:
-    pull_request:
+on: 
+    push:
+      tags:
+      - '*'
 
 jobs:
     release:
