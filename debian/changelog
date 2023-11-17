@@ -1,5 +1,5 @@
-nasp-kernel-module (1.0.0-1) UNRELEASED; urgency=medium
+nasp-kernel-module (0.1.0-1) unstable; urgency=medium
 
-  * Initial release. (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+  * Initial release.
 
  -- Nandor Kracser <nandork@cisco.com>  Tue, 14 Nov 2023 12:29:29 +0000

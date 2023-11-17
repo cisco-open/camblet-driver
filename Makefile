@@ -164,8 +164,10 @@ setup-dev-env:
 debug:
 	sudo addr2line -e nasp.ko $(LINE)
 
+export PACKAGE_VERSION = $(shell dpkg-parsechangelog -S Version | cut -d'-' -f1)
+
 deb:
 	make clean
-	rm -f ../nasp-kernel-module_1.0.0.orig.tar.xz
-	tar --exclude='./.git' --exclude='linux' -cvJf ../nasp-kernel-module_1.0.0.orig.tar.xz .
+	rm -f ../nasp-kernel-module_${PACKAGE_VERSION}.orig.tar.xz
+	tar --exclude='./.git' --exclude='linux' -cvJf ../nasp-kernel-module_${PACKAGE_VERSION}.orig.tar.xz .
 	dpkg-buildpackage -tc

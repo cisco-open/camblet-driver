@@ -19,9 +19,19 @@ set -e
 echo "prerem called with params: $@"
 
 case "$1" in
-    remove|upgrade|deconfigure)
-    dkms uninstall -m nasp -v 1.0.0 --all
-    dkms remove -m nasp -v 1.0.0 --all
+    remove)
+        PACKAGE_VERSION=$(dpkg-query --showformat='${Version}' --show nasp-kernel-module | grep -oP '\b\d+\.\d+\.\d+\b')
+
+        if dkms status | grep nasp | grep "$PACKAGE_VERSION" ; then
+            echo "Removing nasp-kernel-module version $PACKAGE_VERSION"
+            # dkms uninstall -m nasp -v $PACKAGE_VERSION --all
+            dkms remove -m nasp -v $PACKAGE_VERSION --all
+        else
+            echo "nasp-kernel-module version $PACKAGE_VERSION not found in DKMS"
+        fi
+    ;;
+
+    upgrade|deconfigure)
     ;;
 
     failed-upgrade)

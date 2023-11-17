@@ -21,11 +21,19 @@ echo "postinst called with params: $@"
 
 case "$1" in
     configure)
-    # Add the kernel module to the DKMS source control
-    dkms add -m nasp -v 1.0.0
+        PACKAGE_VERSION=$(dpkg-query --showformat='${Version}' --show nasp-kernel-module | grep -oP '\b\d+\.\d+\.\d+\b')
 
-    # Build and install the kernel module against the current kernel version
-    dkms install -m nasp -v 1.0.0
+        if dkms status | grep nasp | grep "$PACKAGE_VERSION" ; then
+            OLD_VERSION=$(echo "$2" | grep -oP '\b\d+\.\d+\.\d+\b')
+            echo "Upgrading nasp-kernel-module from version $OLD_VERSION to $PACKAGE_VERSION"
+            dkms remove -m nasp -v $OLD_VERSION --all
+        fi
+
+        # Add the kernel module to the DKMS source control
+        dkms add -m nasp -v ${PACKAGE_VERSION}
+
+        # Build and install the kernel module against the current kernel version
+        dkms install -m nasp -v ${PACKAGE_VERSION}
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

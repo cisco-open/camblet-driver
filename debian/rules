@@ -14,6 +14,7 @@
 # Package maintainers to append LDFLAGS.
 #export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
 
+export PACKAGE_VERSION = $(shell dpkg-parsechangelog -S Version | cut -d'-' -f1)
 
 %:
 	dh $@
@@ -23,8 +24,8 @@ override_dh_auto_build:
 
 override_dh_auto_install:
 	dh_auto_install
-	mkdir -p debian/nasp-kernel-module/usr/src/nasp-1.0.0/
-	cp -r *.c *.h dkms.conf Makefile static/ third-party/ debian/nasp-kernel-module/usr/src/nasp-1.0.0/
+	mkdir -p debian/nasp-kernel-module/usr/src/nasp-${PACKAGE_VERSION}/
+	cp -r *.c *.h dkms.conf Makefile static/ third-party/ debian/nasp-kernel-module/usr/src/nasp-${PACKAGE_VERSION}/
 
 # dh_make generated override targets.
 # This is an example for Cmake (see <https://bugs.debian.org/641051>).

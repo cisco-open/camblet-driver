@@ -223,7 +223,7 @@ make deb
 The package can be installed with the following command:
 
 ```bash
-sudo apt install ../nasp-kernel-module_1.0.0-1_all.deb
+sudo apt install ../nasp-kernel-module_0.1.0-1_all.deb
 ```
 
 And removed with the following command:
