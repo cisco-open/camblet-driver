@@ -8,15 +8,14 @@ on:
       tags:
       - '*'
 
-permissions:
-  contents: read
-  packages: write
-
 jobs:
     release:
 
         runs-on: ubuntu-latest
     
+        permissions:
+          contents: write
+
         steps:
         - uses: actions/checkout@v4
           name: Checkout nasp-kernel-module
