@@ -1,43 +1,39 @@
-# debian release github action workflow
-#
-
 name: Release
 
-on: 
-    push:
-      tags:
-      - '*'
+on:
+  push:
+    tags:
+      - "*"
 
 jobs:
-    release:
+  release:
+    runs-on: ubuntu-latest
 
-        runs-on: ubuntu-latest
-    
-        permissions:
-          contents: write
+    permissions:
+      contents: write
 
-        steps:
-        - uses: actions/checkout@v4
-          name: Checkout nasp-kernel-module
-          with:
-            submodules: recursive
-    
-        - name: Install/setup prerequisites
-          run: sudo apt install debhelper
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout nasp-kernel-module
+        with:
+          submodules: recursive
 
-        - name: Build nasp-kernel-module Debian package
-          run: make deb
+      - name: Install/setup prerequisites
+        run: sudo apt install debhelper
 
-        - name: Release
-          uses: ncipollo/release-action@v1
-          with:
-            artifacts: "../nasp-kernel-module_*.deb"
-            prerelease: true
-        #   uses: softprops/action-gh-release@v1
-        # #   if: startsWith(github.ref, 'refs/tags/')
-        #   with:
-        #     files: |
-        #       ../nasp-kernel-module_*.deb
-            # tag_name: ${{ github.ref }}
-            # draft: ${{ ! startsWith(github.ref, 'refs/tags/') }}
-            # prerelease: ${{ ! startsWith(github.ref, 'refs/tags/') }}
+      - name: Build nasp-kernel-module Debian package
+        run: make deb
+
+      - name: Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "../nasp-kernel-module_*.deb"
+          prerelease: true
+    #   uses: softprops/action-gh-release@v1
+    # #   if: startsWith(github.ref, 'refs/tags/')
+    #   with:
+    #     files: |
+    #       ../nasp-kernel-module_*.deb
+    # tag_name: ${{ github.ref }}
+    # draft: ${{ ! startsWith(github.ref, 'refs/tags/') }}
+    # prerelease: ${{ ! startsWith(github.ref, 'refs/tags/') }}
