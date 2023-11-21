@@ -1083,6 +1083,37 @@ static int br_low_write(void *ctx, const unsigned char *buf, size_t len)
 	return plain_send_msg((nasp_socket *)ctx, buf, len);
 }
 
+opa_socket_context enriched_socket_eval(direction direction, struct sock *sk, int port)
+{
+	opa_socket_context opa_socket_ctx = {0};
+
+	// attest workload connection
+	attest_response *response = attest_workload();
+	if (response->error)
+	{
+		pr_err("nasp: eval failed to attest: %s", response->error);
+		attest_response_put(response);
+	}
+	else
+	{
+		pr_info("nasp: eval attest response: %s", response->response);
+		command_answer *answer = prepare_opa_input(direction, sk, port, response->response);
+		if (answer->error)
+		{
+			pr_err("nasp: eval failed to attest: %s", answer->error);
+		}
+		else
+		{
+			pr_info("nasp: eval attest response: %s", answer->answer);
+			opa_socket_ctx = socket_eval(answer->answer);
+		}
+		free_command_answer(answer);
+		attest_response_put(response);
+	}
+
+	return opa_socket_ctx;
+}
+
 struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 {
 	struct sock *client = NULL;
@@ -1113,31 +1144,7 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	u16 port = (u16)(sk->sk_portpair >> 16);
 
-	opa_socket_context opa_socket_ctx = {};
-
-	// attest workload connection
-	attest_response *response = attest_workload();
-	if (response->error)
-	{
-		pr_err("nasp: accept failed to attest: %s", response->error);
-		attest_response_put(response);
-	}
-	else
-	{
-		pr_info("nasp: accept attest response: %s", response->response);
-		command_answer *answer = prepare_opa_input(INPUT, client, port, response->response);
-		if (answer->error)
-		{
-			pr_err("nasp: accept failed to attest: %s", answer->error);
-		}
-		else
-		{
-			pr_info("nasp: accept attest response: %s", answer->answer);
-			opa_socket_ctx = socket_eval(answer->answer);
-		}
-		free_command_answer(answer);
-		attest_response_put(response);
-	}
+	opa_socket_context opa_socket_ctx = enriched_socket_eval(INPUT, client, port);
 
 	if (opa_socket_ctx.allowed)
 	{
@@ -1260,30 +1267,7 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	pr_info("nasp: nasp_connect uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
 
-	opa_socket_context opa_socket_ctx = {};
-
-	// attest workload connection
-	attest_response *response = attest_workload();
-	if (response->error)
-	{
-		pr_err("nasp: connect failed to attest: %s", response->error);
-		attest_response_put(response);
-	}
-	else
-	{
-		command_answer *answer = prepare_opa_input(OUTPUT, sk, port, response->response);
-		if (answer->error)
-		{
-			pr_err("nasp: connect failed to attest: %s", answer->error);
-		}
-		else
-		{
-			pr_info("nasp: connect attest response: %s", answer->answer);
-			opa_socket_ctx = socket_eval(answer->answer);
-		}
-		free_command_answer(answer);
-		attest_response_put(response);
-	}
+	opa_socket_context opa_socket_ctx = enriched_socket_eval(OUTPUT, sk, port);
 
 	if (opa_socket_ctx.allowed)
 	{
