@@ -359,7 +359,7 @@ int proxywasm_attach(proxywasm *p, nasp_socket *s, ListenerDirection direction, 
 	return 0;
 }
 
-static nasp_socket *nasp_socket_accept(struct sock *sock)
+static nasp_socket *nasp_socket_accept(struct sock *sock, opa_socket_context opa_socket_ctx)
 {
 	nasp_socket *s = kzalloc(sizeof(nasp_socket), GFP_KERNEL);
 	s->sc = kzalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
@@ -370,6 +370,7 @@ static nasp_socket *nasp_socket_accept(struct sock *sock)
 	s->write_buffer = buffer_new(16 * 1024);
 
 	s->sock = sock;
+	s->opa_socket_ctx = opa_socket_ctx;
 
 	mutex_init(&s->lock);
 
@@ -391,7 +392,7 @@ static nasp_socket *nasp_socket_accept(struct sock *sock)
 	return s;
 }
 
-static nasp_socket *nasp_socket_connect(struct sock *sock)
+static nasp_socket *nasp_socket_connect(struct sock *sock, opa_socket_context opa_socket_ctx)
 {
 	nasp_socket *s = kzalloc(sizeof(nasp_socket), GFP_KERNEL);
 	s->cc = kzalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
@@ -402,6 +403,7 @@ static nasp_socket *nasp_socket_connect(struct sock *sock)
 	s->write_buffer = buffer_new(16 * 1024);
 
 	s->sock = sock;
+	s->opa_socket_ctx = opa_socket_ctx;
 
 	mutex_init(&s->lock);
 
@@ -1114,24 +1116,130 @@ opa_socket_context enriched_socket_eval(direction direction, struct sock *sk, in
 	return opa_socket_ctx;
 }
 
+void nasp_configure_server_tls(nasp_socket *sc)
+{
+	/*
+	 * Initialise the context with the cipher suites and
+	 * algorithms. This depends on the server key type
+	 * (and, for EC keys, the signature algorithm used by
+	 * the CA to sign the server's certificate).
+	 *
+	 * Depending on the defined macros, we may select one of
+	 * the "minimal" profiles. Key exchange algorithm depends
+	 * on the key type:
+	 *   RSA key: RSA or ECDHE_RSA
+	 *   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
+	 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
+	 */
+	pr_info("nasp: accept use cert from agent");
+	br_ssl_server_init_full_rsa(sc->sc, sc->cert->chain, sc->cert->chain_len, sc->rsa_priv);
+
+	// mTLS enablement
+	if (sc->opa_socket_ctx.mtls)
+	{
+		br_x509_minimal_init_full(&sc->xc.ctx, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
+		br_ssl_server_set_trust_anchor_names_alt(sc->sc, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
+
+		br_x509_nasp_init(&sc->xc, &sc->sc->eng, &sc->opa_socket_ctx);
+		br_ssl_engine_set_default_rsavrfy(&sc->sc->eng);
+	}
+
+	/*
+	 * Set the I/O buffer to the provided array. We
+	 * allocated a buffer large enough for full-duplex
+	 * behaviour with all allowed sizes of SSL records,
+	 * hence we set the last argument to 1 (which means
+	 * "split the buffer into separate input and output
+	 * areas").
+	 */
+	br_ssl_engine_set_buffer(&sc->sc->eng, &sc->iobuf, BR_SSL_BUFSIZE_BIDI, true);
+
+	br_ssl_engine_set_protocol_names(&sc->sc->eng, ALPNs, ALPNs_NUM);
+
+	/*
+	 * Reset the server context, for a new handshake.
+	 */
+	br_ssl_server_reset(sc->sc);
+
+	/*
+	 * Initialise the simplified I/O wrapper context.
+	 */
+	br_sslio_init(&sc->ioc, &sc->sc->eng, br_low_read, sc, br_low_write, sc);
+}
+
+void nasp_configure_client_tls(nasp_socket *sc, const char *server_name)
+{
+	/*
+	 * Initialise the context with the cipher suites and
+	 * algorithms. This depends on the server key type
+	 * (and, for EC keys, the signature algorithm used by
+	 * the CA to sign the server's certificate).
+	 *
+	 * Depending on the defined macros, we may select one of
+	 * the "minimal" profiles. Key exchange algorithm depends
+	 * on the key type:
+	 *   RSA key: RSA or ECDHE_RSA
+	 *   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
+	 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
+	 */
+	pr_info("nasp: connect use cert from agent");
+	br_ssl_client_init_full(sc->cc, &sc->xc.ctx, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
+
+	br_x509_nasp_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx);
+
+	// mTLS enablement
+	if (sc->opa_socket_ctx.mtls)
+	{
+		br_ssl_client_set_single_rsa(sc->cc, sc->cert->chain, sc->cert->chain_len, sc->rsa_priv, br_rsa_pkcs1_sign_get_default());
+	}
+
+	/*
+	 * Set the I/O buffer to the provided array. We
+	 * allocated a buffer large enough for full-duplex
+	 * behaviour with all allowed sizes of SSL records,
+	 * hence we set the last argument to 1 (which means
+	 * "split the buffer into separate input and output
+	 * areas").
+	 */
+	br_ssl_engine_set_buffer(&sc->cc->eng, &sc->iobuf, BR_SSL_BUFSIZE_BIDI, true);
+
+	br_ssl_engine_set_protocol_names(&sc->cc->eng, ALPNs, ALPNs_NUM);
+
+	/*
+	 * Reset the client context, for a new handshake. We provide the
+	 * target host name: it will be used for the SNI extension. The
+	 * last parameter is 0: we are not trying to resume a session.
+	 */
+	if (br_ssl_client_reset(sc->cc, server_name, false) != 1)
+	{
+		pr_err("nasp: connect br_ssl_client_reset returned an error");
+	}
+
+	/*
+	 * Initialise the simplified I/O wrapper context, to use our
+	 * SSL client context, and the two callbacks for socket I/O.
+	 */
+	br_sslio_init(&sc->ioc, &sc->cc->eng, br_low_read, sc, br_low_write, sc);
+}
+
 struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 {
-	struct sock *client = NULL;
+	struct sock *client_sk = NULL;
 	struct proto *prot;
 	nasp_socket *sc = NULL;
 
 	if (sk->sk_family == AF_INET)
 	{
-		client = accept(sk, flags, err, kern);
+		client_sk = accept(sk, flags, err, kern);
 		prot = &nasp_prot;
 	}
 	else
 	{
-		client = accept_v6(sk, flags, err, kern);
+		client_sk = accept_v6(sk, flags, err, kern);
 		prot = &nasp_v6_prot;
 	}
 
-	if (!client && *err != 0)
+	if (!client_sk && *err != 0)
 	{
 		goto error;
 	}
@@ -1139,25 +1247,23 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 	// return if the agent is not running
 	if (atomic_read(&already_open) == CDEV_NOT_USED)
 	{
-		return client;
+		return client_sk;
 	}
 
 	u16 port = (u16)(sk->sk_portpair >> 16);
 
-	opa_socket_context opa_socket_ctx = enriched_socket_eval(INPUT, client, port);
+	opa_socket_context opa_socket_ctx = enriched_socket_eval(INPUT, client_sk, port);
 
 	if (opa_socket_ctx.allowed)
 	{
-		sc = nasp_socket_accept(client);
+		sc = nasp_socket_accept(client_sk, opa_socket_ctx);
 		if (!sc)
 		{
 			pr_err("nasp: nasp_socket_accept failed to create nasp_socket");
 			goto error;
 		}
 
-		sc->opa_socket_ctx = opa_socket_ctx;
-
-		u16 client_port = (u16)(client->sk_portpair);
+		u16 client_port = (u16)(client_sk->sk_portpair);
 		pr_info("nasp: nasp_accept uid: %d app: %s on ports: %d <- %d", current_uid().val, current->comm, port, client_port);
 
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
@@ -1169,67 +1275,20 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 			goto error;
 		}
 
-		/*
-		 * Initialise the context with the cipher suites and
-		 * algorithms. This depends on the server key type
-		 * (and, for EC keys, the signature algorithm used by
-		 * the CA to sign the server's certificate).
-		 *
-		 * Depending on the defined macros, we may select one of
-		 * the "minimal" profiles. Key exchange algorithm depends
-		 * on the key type:
-		 *   RSA key: RSA or ECDHE_RSA
-		 *   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
-		 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
-		 */
-		pr_info("nasp: accept use cert from agent");
-		br_ssl_server_init_full_rsa(sc->sc, sc->cert->chain, sc->cert->chain_len, sc->rsa_priv);
+		nasp_configure_server_tls(sc);
 
-		// mTLS enablement
-		if (sc->opa_socket_ctx.mtls)
-		{
-			br_x509_minimal_init_full(&sc->xc.ctx, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
-			br_ssl_server_set_trust_anchor_names_alt(sc->sc, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
-
-			br_x509_nasp_init(&sc->xc, &sc->sc->eng, &sc->opa_socket_ctx);
-			br_ssl_engine_set_default_rsavrfy(&sc->sc->eng);
-		}
-
-		/*
-		 * Set the I/O buffer to the provided array. We
-		 * allocated a buffer large enough for full-duplex
-		 * behaviour with all allowed sizes of SSL records,
-		 * hence we set the last argument to 1 (which means
-		 * "split the buffer into separate input and output
-		 * areas").
-		 */
-		br_ssl_engine_set_buffer(&sc->sc->eng, &sc->iobuf, BR_SSL_BUFSIZE_BIDI, true);
-
-		br_ssl_engine_set_protocol_names(&sc->sc->eng, ALPNs, ALPNs_NUM);
-
-		/*
-		 * Reset the server context, for a new handshake.
-		 */
-		br_ssl_server_reset(sc->sc);
-
-		/*
-		 * Initialise the simplified I/O wrapper context.
-		 */
-		br_sslio_init(&sc->ioc, &sc->sc->eng, br_low_read, sc, br_low_write, sc);
-
-		// // We should save the ssl context here to the socket
-		client->sk_user_data = sc;
-
+		// We should save the ssl context here to the socket
 		// and overwrite the socket protocol with our own
-		client->sk_prot = prot;
+		client_sk->sk_user_data = sc;
+		client_sk->sk_prot = prot;
 	}
 
-	return client;
+	return client_sk;
 
 error:
 	nasp_socket_free(sc);
-	if (client)
-		client->sk_prot->close(client, 0);
+	if (client_sk)
+		client_sk->sk_prot->close(client_sk, 0);
 
 	return NULL;
 }
@@ -1271,14 +1330,12 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	if (opa_socket_ctx.allowed)
 	{
-		sc = nasp_socket_connect(sk);
+		sc = nasp_socket_connect(sk, opa_socket_ctx);
 		if (!sc)
 		{
 			pr_err("nasp: nasp_socket_connect failed to create nasp_socket");
 			goto error;
 		}
-
-		sc->opa_socket_ctx = opa_socket_ctx;
 
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
@@ -1290,59 +1347,11 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		{
 			goto error;
 		}
-		/*
-		 * Initialise the context with the cipher suites and
-		 * algorithms. This depends on the server key type
-		 * (and, for EC keys, the signature algorithm used by
-		 * the CA to sign the server's certificate).
-		 *
-		 * Depending on the defined macros, we may select one of
-		 * the "minimal" profiles. Key exchange algorithm depends
-		 * on the key type:
-		 *   RSA key: RSA or ECDHE_RSA
-		 *   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
-		 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
-		 */
-		pr_info("nasp: connect use cert from agent");
-		br_ssl_client_init_full(sc->cc, &sc->xc.ctx, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
 
-		br_x509_nasp_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx);
-
-		// mTLS enablement
-		if (sc->opa_socket_ctx.mtls)
-		{
-			br_ssl_client_set_single_rsa(sc->cc, sc->cert->chain, sc->cert->chain_len, sc->rsa_priv, br_rsa_pkcs1_sign_get_default());
-		}
-
-		/*
-		 * Set the I/O buffer to the provided array. We
-		 * allocated a buffer large enough for full-duplex
-		 * behaviour with all allowed sizes of SSL records,
-		 * hence we set the last argument to 1 (which means
-		 * "split the buffer into separate input and output
-		 * areas").
-		 */
-		br_ssl_engine_set_buffer(&sc->cc->eng, &sc->iobuf, BR_SSL_BUFSIZE_BIDI, true);
-
-		br_ssl_engine_set_protocol_names(&sc->cc->eng, ALPNs, ALPNs_NUM);
-
-		/*
-		 * Reset the client context, for a new handshake. We provide the
-		 * target host name: it will be used for the SNI extension. The
-		 * last parameter is 0: we are not trying to resume a session.
-		 */
-		if (br_ssl_client_reset(sc->cc, server_name, false) != 1)
-		{
-			pr_err("nasp: connect br_ssl_client_reset returned an error");
-		}
-
-		/*
-		 * Initialise the simplified I/O wrapper context, to use our
-		 * SSL client context, and the two callbacks for socket I/O.
-		 */
-		br_sslio_init(&sc->ioc, &sc->cc->eng, br_low_read, sc, br_low_write, sc);
+		nasp_configure_client_tls(sc, server_name);
 
 		// We should save the ssl context here to the socket
+		// and overwrite the socket protocol with our own
 		sk->sk_user_data = sc;
 		sk->sk_prot = prot;
 	}
