@@ -208,7 +208,7 @@ sudo dkms remove -m nasp -v 0.1.0
 
 The kernel module can be packaged into a Debian package with DKMS support, so kernel module re-builds are handled automatically.
 
-#### When building the package for yourself
+#### Building the package for yourself
 
 Prepare the build environment, if you want to build the package on your workstation:
 
@@ -228,7 +228,7 @@ The package can be installed with the following command:
 sudo apt install ../nasp-kernel-module_0.1.0-1_all.deb
 ```
 
-#### When installing the package from the repository
+#### Installing the package from the repository
 
 Add the Nasp Repository GPG key:
 
