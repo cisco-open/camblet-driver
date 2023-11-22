@@ -156,7 +156,7 @@ setup-dev-env:
 	test -f .vscode/c_cpp_properties.json || cp .vscode/c_cpp_properties.json.orig .vscode/c_cpp_properties.json
 	brew tap messense/macos-cross-toolchains
 	brew install $(shell lima uname -m)-unknown-linux-gnu
-	test -d ..linux || git clone --depth=1 --branch v6.2 https://github.com/torvalds/linux.git ../linux
+	test -d ../linux || git clone --depth=1 --branch v6.2 https://github.com/torvalds/linux.git ../linux
 	cd ../linux && lima make tinyconfig
 	cd ../linux && lima make -j
 
