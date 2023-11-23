@@ -75,7 +75,7 @@ nasp-objs :=  third-party/wasm3/source/m3_api_libc.o \
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
 
-default: static/socket_wasm.h bearssl
+default: bearssl
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) modules
 
 bearssl:
@@ -97,6 +97,7 @@ opa-test:
 
 clean:
 	$(MAKE) -C $(KBUILD) M=$(PWD) clean
+	rm -rf target/
 
 help:
 	$(MAKE) -C $(KBUILD) M=$(PWD) help
@@ -124,7 +125,7 @@ _debian_deps:
 	sudo apt update
 	sudo apt install -y dkms dwarves
 ifndef GITHUB_ACTION
-	sudo apt install -y golang flex bison iperf socat
+	sudo apt install -y golang flex bison iperf socat debhelper
 endif
 
 _archlinux_deps:
@@ -155,10 +156,18 @@ setup-dev-env:
 	test -f .vscode/c_cpp_properties.json || cp .vscode/c_cpp_properties.json.orig .vscode/c_cpp_properties.json
 	brew tap messense/macos-cross-toolchains
 	brew install $(shell lima uname -m)-unknown-linux-gnu
-	test -d linux || git clone --depth=1 --branch v6.2 https://github.com/torvalds/linux.git
-	cd linux && lima make tinyconfig
-	cd linux && lima make -j
+	test -d ../linux || git clone --depth=1 --branch v6.2 https://github.com/torvalds/linux.git ../linux
+	cd ../linux && lima make tinyconfig
+	cd ../linux && lima make -j
 
 # Usage: make debug LINE=get_command+0x88/0x130
 debug:
 	sudo addr2line -e nasp.ko $(LINE)
+
+export PACKAGE_VERSION = $(shell dpkg-parsechangelog -S Version | cut -d'-' -f1)
+
+deb:
+	make clean
+	rm -f ../nasp-kernel-module_${PACKAGE_VERSION}.orig.tar.xz
+	tar --exclude='./.git' --exclude='linux' -cvJf ../nasp-kernel-module_${PACKAGE_VERSION}.orig.tar.xz .
+	dpkg-buildpackage -tc
