@@ -11,6 +11,7 @@
 #ifndef commands_h
 #define commands_h
 
+#include <linux/uuid.h>
 #include "task_context.h"
 #include "bearssl.h"
 #include "socket.h"
