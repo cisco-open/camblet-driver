@@ -1134,8 +1134,28 @@ static int br_low_write(void *ctx, const unsigned char *buf, size_t len)
 
 opa_socket_context enriched_socket_eval(direction direction, struct sock *sk, int port)
 {
+	service_discovery_entry *sd_entry = NULL;
 	opa_socket_context opa_socket_ctx = {0};
+
 	net_conn_info conn_info = get_net_conn_info(direction, sk, port);
+
+	if (direction == OUTPUT)
+	{
+		pr_info("nasp: look for sd entry by [%s]", conn_info.destination_ip);
+		sd_entry = sd_table_entry_get(conn_info.destination_ip);
+		if (sd_entry == NULL)
+		{
+			char *address = strnprintf("%s:%d", conn_info.destination_ip, conn_info.destination_port);
+			pr_info("nasp: look for sd entry by [%s:%d] [%s]", conn_info.destination_ip, conn_info.destination_port, address);
+			sd_entry = sd_table_entry_get(address);
+			kfree(address);
+		}
+		if (!sd_entry)
+		{
+			pr_info("nasp: sd entry not found for [%s:%d]", conn_info.destination_ip, conn_info.destination_port);
+			return opa_socket_ctx;
+		}
+	}
 
 	// attest workload connection
 	attest_response *response = attest_workload();
@@ -1147,7 +1167,7 @@ opa_socket_context enriched_socket_eval(direction direction, struct sock *sk, in
 	else
 	{
 		pr_info("nasp: eval attest response: %s", response->response);
-		command_answer *answer = prepare_opa_input(conn_info, response->response);
+		command_answer *answer = prepare_opa_input(conn_info, sd_entry, response->response);
 		if (answer->error)
 		{
 			pr_err("nasp: eval failed to attest: %s", answer->error);
@@ -1300,62 +1320,7 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	u16 port = (u16)(sk->sk_portpair >> 16);
 
-<<<<<<< HEAD
 	opa_socket_context opa_socket_ctx = enriched_socket_eval(INPUT, client_sk, port);
-||||||| parent of a7c417c (basic service discovery support)
-	opa_socket_context opa_socket_ctx = {};
-	net_conn_info conn_info = get_net_conn_info(INPUT, client, port);
-
-	// attest workload connection
-	attest_response *response = attest_workload();
-	if (response->error)
-	{
-		pr_err("nasp: accept failed to attest: %s", response->error);
-		attest_response_put(response);
-	}
-	else
-	{
-		pr_info("nasp: accept attest response: %s", response->response);
-		command_answer *answer = prepare_opa_input(conn_info, response->response);
-		if (answer->error)
-		{
-			pr_err("nasp: accept failed to attest: %s", answer->error);
-		}
-		else
-		{
-			pr_info("nasp: accept attest response: %s", answer->answer);
-			opa_socket_ctx = socket_eval(answer->answer);
-		}
-		free_command_answer(answer);
-		attest_response_put(response);
-	}
-=======
-	opa_socket_context opa_socket_ctx = {};
-	net_conn_info conn_info = get_net_conn_info(INPUT, client, port);
-
-	// attest workload connection
-	attest_response *response = attest_workload();
-	if (response->error)
-	{
-		pr_err("nasp: accept failed to attest: %s", response->error);
-		attest_response_put(response);
-	}
-	else
-	{
-		command_answer *answer = prepare_opa_input(conn_info, NULL, response->response);
-		if (answer->error)
-		{
-			pr_err("nasp: accept failed to prepare opa input: %s", answer->error);
-		}
-		else
-		{
-			pr_info("nasp: accept attest response: %s", answer->answer);
-			opa_socket_ctx = socket_eval(answer->answer);
-		}
-		free_command_answer(answer);
-		attest_response_put(response);
-	}
->>>>>>> a7c417c (basic service discovery support)
 
 	if (opa_socket_ctx.allowed)
 	{
@@ -1427,79 +1392,7 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		return err;
 	}
 
-	pr_info("nasp: nasp_connect uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
-
-<<<<<<< HEAD
 	opa_socket_context opa_socket_ctx = enriched_socket_eval(OUTPUT, sk, port);
-||||||| parent of a7c417c (basic service discovery support)
-	opa_socket_context opa_socket_ctx = {};
-	net_conn_info conn_info = get_net_conn_info(OUTPUT, sk, port);
-
-	// attest workload connection
-	attest_response *response = attest_workload();
-	if (response->error)
-	{
-		pr_err("nasp: connect failed to attest: %s", response->error);
-		attest_response_put(response);
-	}
-	else
-	{
-		pr_info("nasp: connect attest response: %s", response->response);
-		command_answer *answer = prepare_opa_input(conn_info, response->response);
-		if (answer->error)
-		{
-			pr_err("nasp: connect failed to attest: %s", answer->error);
-		}
-		else
-		{
-			pr_info("nasp: connect attest response: %s", answer->answer);
-			opa_socket_ctx = socket_eval(answer->answer);
-		}
-		free_command_answer(answer);
-		attest_response_put(response);
-	}
-=======
-	opa_socket_context opa_socket_ctx = {};
-	net_conn_info conn_info = get_net_conn_info(OUTPUT, sk, port);
-
-	pr_info("nasp: look for sd entry by [%s]", conn_info.destination_ip);
-	service_discovery_entry *sd_entry = sd_table_entry_get(conn_info.destination_ip);
-	if (sd_entry == NULL)
-	{
-		char *address = strnprintf("%s:%d", conn_info.destination_ip, conn_info.destination_port);
-		pr_info("nasp: look for sd entry by [%s:%d] [%s]", conn_info.destination_ip, conn_info.destination_port, address);
-		sd_entry = sd_table_entry_get(address);
-		kfree(address);
-	}
-	if (!sd_entry)
-	{
-		pr_info("nasp: sd entry not found for [%s:%d]", conn_info.destination_ip, conn_info.destination_port);
-		return err;
-	}
-
-	// attest workload connection
-	attest_response *response = attest_workload();
-	if (response->error)
-	{
-		pr_err("nasp: connect failed to attest: %s", response->error);
-		attest_response_put(response);
-	}
-	else
-	{
-		command_answer *answer = prepare_opa_input(conn_info, sd_entry, response->response);
-		if (answer->error)
-		{
-			pr_err("nasp: connect failed to prepare opa input: %s", answer->error);
-		}
-		else
-		{
-			pr_info("nasp: connect attest response: %s", answer->answer);
-			opa_socket_ctx = socket_eval(answer->answer);
-		}
-		free_command_answer(answer);
-		attest_response_put(response);
-	}
->>>>>>> a7c417c (basic service discovery support)
 
 	if (opa_socket_ctx.allowed)
 	{
@@ -1509,6 +1402,8 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			pr_err("nasp: nasp_socket_connect failed to create nasp_socket");
 			goto error;
 		}
+
+		pr_info("nasp: nasp_connect uid: %d app: %s to port: %d", current_uid().val, current->comm, port);
 
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
