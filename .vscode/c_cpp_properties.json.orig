@@ -8,7 +8,8 @@
             "defines": [
                 "MODULE",
                 "__KERNEL__",
-                "KBUILD_MODNAME='wasm'"
+                "KBUILD_MODNAME='wasm'",
+                "CONFIG_IPV6=1"
             ],
             "includePath": [
                 "${linux-src}/include/",
