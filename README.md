@@ -4,15 +4,14 @@
 
 ## Introduction
 
-The *nasp-kernel-module* is the supporting Linux kernel module for the [Nasp](https://github.com/cisco-open/nasp) system. It is capable of enhancing plain old TCP sockets in a frictionless way so that application developers can focus on their business logic instead of dealing with the complexity of TLS, mTLS, and other security-related concerns. It is doing this seamlessly, no code changes or re-compilations or re-deployments are required. 
+The *nasp-kernel-module* is the supporting Linux kernel module for the [Nasp](https://github.com/cisco-open/nasp) system. It is capable of enhancing plain old TCP sockets in a frictionless way so that application developers can focus on their business logic instead of dealing with the complexity of TLS, mTLS, and other security-related concerns. It is doing this seamlessly, no code changes or re-compilations or re-deployments are required.
+
 The features are the following:
+
 - providing zero-trust identity for UNIX TCP sockets through mTLS
 - access control, authorization and authentication (through OPA)
 - providing frictionless TLS termination for those TCP sockets
-- run [proxy-wasm](https://github.com/proxy-wasm/spec) filters for every app
-supporting every Linux-based machine (bare-metal, vanilla VM, Kubernetes, etc... you name it)
-
-The kernel module is capable of running proxy-wasm filters on your application data, this way it opens up a lot of opportunities to write custom logic for all (or a selected set of) your applications in your environment. This allows an infinite number of possibilities for monitoring and changing the way applications talk to each other in your system.
+- supporting every Linux-based machine (bare-metal, vanilla VM, Kubernetes, etc... you name it)
 
 ### Presentations
 
@@ -23,6 +22,7 @@ The early incarnation of this project was presented on KubeCon 2023 Amsterdam, W
 The [wasm3](https://github.com/wasm3/wasm3) runtime was chosen since it is written in C and has minimal dependencies (except a C library) and it is extremely portable. In kernel space, there is no libc, but we maintain a fork of wasm3 which can run in kernel space as well (check the `third-party/wasm3/` submodule).
 
 Current restrictions for kernel-space wasm3:
+
 - no floating point support [can be soft-emulated if needed]
 - no WASI support
 
@@ -40,11 +40,13 @@ cd nasp-kernel-module
 Our primary development environment is [Lima](https://lima-vm.io) since it supports x86_64 and ARM as well. The module was tested on Ubuntu and Arch Linux and requires kernel version 5.15 and upwards.
 
 Install Lima itself, for example on macOS using `brew`:
+
 ```bash
 brew install lima
 ```
 
 Launch the default VM which is an Ubuntu and matches the host's architecture by default:
+
 ```bash
 limactl start
 
@@ -64,7 +66,7 @@ make setup-vm
 
 We are using VSCode for development and the project ships with a `c_cpp_properties.json` file which contains the required paths for the kernel headers. The file is ARM specific from include path point-of-view so if you happen to run on x86_64 please replace the paths accordingly (arm64 -> x86, aarch64 -> x86_64).
 
-We are respecting your `c_cpp_properties.json` file by not overriding it. Please copy the required parts to your file, if it is already present. 
+We are respecting your `c_cpp_properties.json` file by not overriding it. Please copy the required parts to your file, if it is already present.
 
 You will also need a Linux source bundle, to have full navigation in the source code. The easiest way is to run the `setup-dev-env` target after you already have created a working and configured VM in Lima (with `lima make setup-vm`). This target installs the necessary GCC cross-compilers for IntelliSense, clones the Linux repo, and configures the VSCode workspace accordingly:
 
@@ -124,9 +126,20 @@ Then follow the instructions [here](https://github.com/cisco-open/nasp#cli).
 
 ## TLS Termination
 
-The kernel module can terminate TLS connections for ordinary TCP sockets (IPv4 or IPv6), and forward the plaintext traffic to a user space application. This is useful for example if you want to run a proxy-wasm filter on a TCP connection.
+The kernel module can terminate TLS connections for ordinary TCP sockets (IPv4 or IPv6), and forward the plaintext traffic to a user space application.
 
 Between two applications - both of them intercepted by this module - the traffic is always encrypted by [kTLS](https://docs.kernel.org/networking/tls-offload.html). If one of them is not intercepted by the module but supports the ChaCha20-Poly1305 AEAD - kTLS is used. Otherwise, the traffic is encrypted by BearSSL.
+
+## Debugging
+
+Most of the logs of this module are on debug level and can be shown using [dynamic debug](https://www.kernel.org/doc/html/latest/admin-guide/dynamic-debug-howto.html) feature of the Linux kernel.
+
+Use the following command to turn on debug level logging for the module:
+
+```bash
+sudo su -
+echo -n '-p; module nasp file opa.c  +pftl' > /proc/dynamic_debug/control
+```
 
 ### Test mTLS
 
