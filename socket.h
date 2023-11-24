@@ -11,7 +11,6 @@
 #ifndef socket_h
 #define socket_h
 
-#include <net/sock.h>
 #include <linux/inet.h>
 
 #include "json.h"
