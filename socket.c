@@ -1400,7 +1400,7 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			goto error;
 		}
 
-		pr_debug("connect # command[%s] uid[%d] source_port[%d] destination_port[%d]", current->comm, current_uid().val, port);
+		pr_debug("connect # command[%s] uid[%d] destination_port[%d]", current->comm, current_uid().val, port);
 
 		const char *server_name = NULL; // TODO, this needs to be sourced down here
 
