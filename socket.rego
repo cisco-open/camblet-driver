@@ -16,7 +16,7 @@ is_subset(super, sub) if {
 matching_policies contains policy if {
 	some p in data.policies
 	some selectorset in p.selectors
-	is_subset(input.selectors, selectorset)
+	is_subset(input.labels, selectorset)
 
 	policy := object.remove(object.union(p, {"matched_selectors": selectorset}), ["selectors"])
 }
@@ -26,23 +26,11 @@ matching_policies_wo_egresses contains policy if {
 	policy := object.remove(p, ["egress"])
 }
 
-# egresses contains result if {
-# 	some p in matching_policies
-# 	not p.egress
-# 	result := {"policy": object.remove(p, ["egress", "selectors"])}
-# }
-
-# egresses contains result if {
-# 	some p in matching_policies
-# 	count(p.egress) == 0
-# 	result := {"policy": object.remove(p, ["egress", "selectors"])}
-# }
-
 egresses contains result if {
 	some p in matching_policies
 	some k, egress in p.egress
 	some selectorset in egress.selectors
-	is_subset(input.remote.selectors, selectorset)
+	is_subset(input.remote.labels, selectorset)
 
 	e := object.union(object.remove(egress, ["selectors"]), {"matched_selectors": selectorset})
 	result := object.union(object.remove(p, ["egress", "selectors"]), {"egress": e})
