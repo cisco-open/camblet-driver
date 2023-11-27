@@ -110,11 +110,11 @@ static void service_discovery_entry_free(service_discovery_entry *entry)
 
     kfree(entry->address);
     size_t i;
-    for (i = 0; i < entry->tags_len; i++)
+    for (i = 0; i < entry->labels_len; i++)
     {
-        kfree(entry->tags[i]);
+        kfree(entry->labels[i]);
     }
-    kfree(entry->tags);
+    kfree(entry->labels);
     kfree(entry);
 }
 
@@ -139,7 +139,9 @@ static void service_discovery_table_free_locked(service_discovery_table *table)
 void sd_table_replace(service_discovery_table *table)
 {
     sd_table_lock();
+    pr_debug("cleanup current sd table entries");
     service_discovery_table_free_locked(sd_table);
+    pr_debug("replace sd table");
     sd_table = table;
     sd_table_unlock();
 }

@@ -17,8 +17,8 @@ typedef struct service_discovery_entry
 {
     struct hlist_node node;
     char *address;
-    char **tags;
-    char tags_len;
+    char **labels;
+    char labels_len;
 } service_discovery_entry;
 
 typedef struct service_discovery_table

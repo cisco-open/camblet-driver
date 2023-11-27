@@ -1007,7 +1007,7 @@ static net_conn_info get_net_conn_info(direction direction, struct sock *s, u16 
 	return info;
 }
 
-void add_sd_entry_tags_to_json(service_discovery_entry *sd_entry, JSON_Value *json)
+void add_sd_entry_labels_to_json(service_discovery_entry *sd_entry, JSON_Value *json)
 {
 	if (!json)
 	{
@@ -1021,20 +1021,20 @@ void add_sd_entry_tags_to_json(service_discovery_entry *sd_entry, JSON_Value *js
 
 	JSON_Object *root = json_value_get_object(json);
 
-	JSON_Value *remoteval = json_value_init_object();
-	JSON_Object *remote = json_object(remoteval);
+	JSON_Value *remote_value = json_value_init_object();
+	JSON_Object *remote = json_object(remote_value);
 
-	JSON_Value *selectorsval = json_value_init_object();
-	JSON_Object *selectors = json_object(selectorsval);
+	JSON_Value *labels_value = json_value_init_object();
+	JSON_Object *labels = json_object(labels_value);
 
 	size_t i;
-	for (i = 0; i < sd_entry->tags_len; i++)
+	for (i = 0; i < sd_entry->labels_len; i++)
 	{
-		json_object_set_boolean(selectors, sd_entry->tags[i], true);
+		json_object_set_boolean(labels, sd_entry->labels[i], true);
 	}
 
-	json_object_set_value(remote, "selectors", selectorsval);
-	json_object_set_value(root, "remote", remoteval);
+	json_object_set_value(remote, "labels", labels_value);
+	json_object_set_value(root, "remote", remote_value);
 }
 
 void add_net_conn_info_to_json(net_conn_info conn_info, JSON_Object *json_object)
@@ -1084,17 +1084,17 @@ static command_answer *prepare_opa_input(net_conn_info conn_info, service_discov
 		goto cleanup;
 	}
 
-	JSON_Object *selectors = json_object_get_object(root, "selectors");
-	if (!selectors)
+	JSON_Object *labels = json_object_get_object(root, "labels");
+	if (!labels)
 	{
-		answer = answer_with_error("could not find selectors in json");
+		answer = answer_with_error("could not find labels in json");
 		goto cleanup;
 	}
 
-	add_net_conn_info_to_json(conn_info, selectors);
+	add_net_conn_info_to_json(conn_info, labels);
 	if (sd_entry)
 	{
-		add_sd_entry_tags_to_json(sd_entry, json);
+		add_sd_entry_labels_to_json(sd_entry, json);
 	}
 
 	answer = kzalloc(sizeof(struct command_answer), GFP_KERNEL);

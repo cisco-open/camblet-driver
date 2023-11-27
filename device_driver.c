@@ -231,22 +231,22 @@ static void load_sd_info(const char *data)
     for (i = 0; i < json_object_get_count(root); i++)
     {
         const char *name = json_object_get_name(root, i);
-        JSON_Object *jentry = json_object_get_object(root, name);
-        JSON_Array *tags = json_object_get_array(jentry, "tags");
+        JSON_Object *json_entry = json_object_get_object(root, name);
+        JSON_Array *labels = json_object_get_array(json_entry, "labels");
 
         entry = kzalloc(sizeof(*entry), GFP_KERNEL);
         entry->address = strdup(name);
 
         pr_debug("create sd entry # address[%s]", entry->address);
 
-        entry->tags_len = json_array_get_count(tags);
-        entry->tags = kmalloc(entry->tags_len * sizeof(char *), GFP_KERNEL);
+        entry->labels_len = json_array_get_count(labels);
+        entry->labels = kmalloc(entry->labels_len * sizeof(char *), GFP_KERNEL);
 
-        for (k = 0; k < entry->tags_len; k++)
+        for (k = 0; k < entry->labels_len; k++)
         {
-            const char *tag = json_array_get_string(tags, k);
-            entry->tags[k] = strdup(tag);
-            pr_debug("set sd entry tag # address[%s] tag[%s]", entry->address, entry->tags[k]);
+            const char *label = json_array_get_string(labels, k);
+            entry->labels[k] = strdup(label);
+            pr_debug("set sd entry label # address[%s] label[%s]", entry->address, entry->labels[k]);
         }
 
         service_discovery_table_entry_add(table, entry);
