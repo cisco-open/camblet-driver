@@ -137,8 +137,7 @@ Most of the logs of this module are on debug level and can be shown using [dynam
 Use the following command to turn on debug level logging for the module:
 
 ```bash
-sudo su -
-echo -n '-p; module nasp file opa.c  +pftl' > /proc/dynamic_debug/control
+echo -n '-p; module nasp file opa.c  +pftl' | sudo tee /proc/dynamic_debug/control > /dev/null
 ```
 
 ### Test mTLS
