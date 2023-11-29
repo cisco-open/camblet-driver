@@ -166,7 +166,7 @@ wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char 
         return (wasm_vm_result){.err = "too many modules loaded"};
     }
 
-    u8 *wasm = kmalloc(code_size, GFP_ATOMIC);
+    u8 *wasm = kvmalloc(code_size, GFP_KERNEL);
     if (!wasm)
     {
         result = "cannot allocate memory for wasm binary";
