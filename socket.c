@@ -921,12 +921,13 @@ static int cache_and_validate_cert(nasp_socket *sc, char *key)
 {
 	// Check if cert gen is required or we already have a cached certificate for this socket.
 	u16 cert_validation_err_no = 0;
+	int err;
 
 	cert_with_key *cached_cert_bundle = find_cert_from_cache(key);
 	if (!cached_cert_bundle)
 	{
 	regen_cert:
-		int err = handle_cert_gen(sc);
+		err = handle_cert_gen(sc);
 		if (err == -1)
 		{
 			return -1;
