@@ -22,6 +22,9 @@ export PACKAGE_VERSION = $(shell dpkg-parsechangelog -S Version | cut -d'-' -f1)
 override_dh_auto_build:
     # Do nothing during the build step
 
+override_dh_builddeb:
+	dh_builddeb -- -Zgzip
+
 override_dh_auto_install:
 	dh_auto_install
 	mkdir -p debian/nasp-kernel-module/usr/src/nasp-${PACKAGE_VERSION}/
