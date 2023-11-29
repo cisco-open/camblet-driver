@@ -147,10 +147,11 @@ csr_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len
     result.csr_len = (i32)(vm_result.data->i64);
     result.csr_ptr = (i32)(vm_result.data->i64 >> 32);
 
-bail:
     i32 pointers[] = {subject_ptr, dns_ptr, uri_ptr, email_ptr, ip_ptr};
 
     int i;
+
+bail:
     for (i = 0; i < (sizeof(pointers) / sizeof(pointers[0])); i++)
     {
         if (pointers[i] <= 1)
