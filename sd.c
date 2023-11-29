@@ -126,7 +126,7 @@ static void service_discovery_table_free_locked(service_discovery_table *table)
     }
 
     service_discovery_entry *entry;
-    int i, k;
+    int i;
     hash_for_each(table->htable, i, entry, node)
     {
         pr_debug("delete entry # address[%s]", entry->address);
