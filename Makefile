@@ -133,7 +133,7 @@ _archlinux_deps:
 	sudo pacman -Syu linux-headers dkms go strace bc iperf socat
 
 _centos_deps:
-	sudo dnf install -y --enablerepo epel dkms vim-common
+	sudo dnf install -y --enablerepo epel dkms vim-common go
 
 _install_opa:
 	sudo curl -L -o /usr/bin/opa https://openpolicyagent.org/downloads/v0.56.0/opa_linux_$(shell go version | cut -f2 -d'/')_static
