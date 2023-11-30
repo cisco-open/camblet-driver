@@ -177,8 +177,8 @@ bool validate_cert(x509_certificate_validity cert_validity)
     bool result = false;
 
     time64_t x = ktime_get_real_seconds();
-    uint32_t vd = (uint32_t)(x / 86400) + 719528;
-    uint32_t vs = (uint32_t)(x % 86400);
+    uint32_t vs = (uint32_t)do_div(x, 86400);
+    uint32_t vd = (uint32_t)x + 719528;
 
     if (vd < cert_validity.notbefore_days || (vd == cert_validity.notbefore_days && vs < cert_validity.notbefore_seconds))
     {

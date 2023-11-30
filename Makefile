@@ -28,6 +28,11 @@ ifeq ($(ARCH), aarch64)
 # Anyhow, float emulation works only with this flag removed.
 	ccflags-remove-y += -mgeneral-regs-only
 endif
+ifeq ($(ARCH), armv7l)
+	ccflags-remove-y += -msoft-float
+	ccflags-y += -mhard-float
+	# ccflags-y += -mfloat-abi=softfp
+endif
 
 KBUILD_EXTRA_SYMBOLS = $(PWD)/third-party/BearSSL/Module.symvers
 EXTRA_CFLAGS = -Wall -g
