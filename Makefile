@@ -107,13 +107,13 @@ logs:
 	sudo dmesg -T --follow
 
 insmod-tls:
-	lsmod | grep tls && sudo modprobe tls || echo "tls module not available"
+	find /lib/modules/$(uname -r) -type f -name '*.ko*' | grep -w tls && sudo modprobe tls || echo "tls module not available"
 	
 insmod-bearssl: insmod-tls
 	sudo insmod third-party/BearSSL/bearssl.ko
 
 insmod: insmod-bearssl
-	ktls_available=$(shell lsmod | grep tls && sudo modprobe tls && echo true || echo false)
+	$(eval ktls_available := $(shell find /lib/modules/$(uname -r) -type f -name '*.ko*' | grep -w tls > /dev/null && sudo modprobe tls && echo true || echo false))
 	sudo insmod nasp.ko dyndbg==_ ktls_available=$(ktls_available)
 
 insmod-with-proxywasm: insmod-bearssl
