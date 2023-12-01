@@ -42,6 +42,8 @@ const char *ALPNs[] = {
 
 const size_t ALPNs_NUM = sizeof(ALPNs) / sizeof(ALPNs[0]);
 
+extern bool ktls_available;
+
 static struct proto nasp_prot;
 static struct proto nasp_ktls_prot;
 static struct proto nasp_v6_prot;
@@ -710,11 +712,16 @@ static int configure_ktls_sock(nasp_socket *s)
 	br_ssl_engine_context *eng = get_ssl_engine_context(s);
 	br_ssl_session_parameters *params = &eng->session;
 
-	if (params->cipher_suite != BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256)
+	if (params->cipher_suite != BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 || !ktls_available)
 	{
-		pr_warn("configure kTLS error: only ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 cipher suite is supported # requested_suite[%x]", params->cipher_suite);
+		if (!ktls_available)
+			pr_warn("configure kTLS error: kTLS is not available on this system # command[%s]", current->comm);
+		else
+			pr_warn("configure kTLS error: only ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 cipher suite is supported # requested_suite[%x]", params->cipher_suite);
+
 		s->send_msg = bearssl_send_msg;
 		s->recv_msg = bearssl_recv_msg;
+
 		return 0;
 	}
 

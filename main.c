@@ -34,6 +34,10 @@ static bool proxywasm_modules = false;
 module_param(proxywasm_modules, bool, 0644);
 MODULE_PARM_DESC(proxywasm_modules, "Enable/disable the proxywasm modules");
 
+bool ktls_available = true;
+module_param(ktls_available, bool, 0644);
+MODULE_PARM_DESC(ktls_available, "Marks if kTLS is available on the system");
+
 static int __init nasp_init(void)
 {
     pr_info("module loaded at 0x%p running on %d CPUs", nasp_init, nr_cpu_ids);
