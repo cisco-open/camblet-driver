@@ -101,6 +101,9 @@ bail:
 csr_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len, csr_parameters *parameters)
 {
     csr_result result;
+    int i = 0;
+    i32 pointers[8] = {0};
+
 // We do not want to concern ourselves with how variadic parameters are handled in wasm; instead,
 // we initialize all parameters that are NULL with an empty string.
 #define ALLOCATE_AND_CHECK(field)                                                    \
@@ -115,6 +118,7 @@ csr_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len
             result.err = "error during allocating ptr with length for " #field;      \
             goto bail;                                                               \
         }                                                                            \
+        pointers[i++] = field##_ptr;                                                 \
     }
 
     ALLOCATE_AND_CHECK(subject);
@@ -147,21 +151,19 @@ csr_result csr_gen(csr_module *csr, i32 priv_key_buff_ptr, i32 priv_key_buff_len
     result.csr_len = (i32)(vm_result.data->i64);
     result.csr_ptr = (i32)(vm_result.data->i64 >> 32);
 
-    i32 pointers[] = {subject_ptr, dns_ptr, uri_ptr, email_ptr, ip_ptr};
-
-    int i;
-
 bail:
-    for (i = 0; i < (sizeof(pointers) / sizeof(pointers[0])); i++)
+    for (i = i - 1; i >= 0; i--)
     {
-        if (pointers[i] <= 1)
         {
-            continue;
-        }
-        wasm_vm_result free_result = csr_free(csr, pointers[i]);
-        if (free_result.err)
-        {
-            result.err = free_result.err;
+            if (pointers[i] <= 1)
+            {
+                continue;
+            }
+            wasm_vm_result free_result = csr_free(csr, pointers[i]);
+            if (free_result.err)
+            {
+                result.err = free_result.err;
+            }
         }
     }
     return result;
