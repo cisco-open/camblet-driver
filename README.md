@@ -178,7 +178,7 @@ For example, on Debian-based systems:
 sudo apt install dkms
 ```
 
-On Red Hat-based systems, CentOS 9 in this case:
+On Red Hat compatible systems:
 
 ```bash
 sudo dnf install --enablerepo epel dkms
