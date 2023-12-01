@@ -107,7 +107,7 @@ logs:
 	sudo dmesg -T --follow
 
 insmod-tls:
-	sudo modprobe tls
+	lsmod | grep tls && sudo modprobe tls || echo "tls module not available"
 	
 insmod-bearssl: insmod-tls
 	sudo insmod third-party/BearSSL/bearssl.ko
