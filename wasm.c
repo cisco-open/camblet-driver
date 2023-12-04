@@ -11,6 +11,7 @@
 #define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
 
 #include <linux/slab.h>
+#include <linux/mm.h>
 
 #include "wasm.h"
 #include "wasm3.h"
