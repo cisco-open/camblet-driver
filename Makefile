@@ -69,7 +69,7 @@ nasp-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  tls.o \
 			  commands.o \
 			  string.o \
-			  attest.o \
+			  augmentation.o \
 			  config.o \
 			  sd.o
 

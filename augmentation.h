@@ -8,8 +8,8 @@
  * modified, or distributed except according to those terms.
  */
 
-#ifndef attest_h
-#define attest_h
+#ifndef augmentation_h
+#define augmentation_h
 
 #include "socket.h"
 

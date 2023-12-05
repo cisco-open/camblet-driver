@@ -32,7 +32,7 @@
 #include "tls.h"
 #include "string.h"
 #include "cert_tools.h"
-#include "attest.h"
+#include "augmentation.h"
 #include "json.h"
 #include "sd.h"
 
