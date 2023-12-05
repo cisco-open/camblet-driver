@@ -72,7 +72,7 @@ jobs:
       run: |
         touch /tmp/nasp.log /tmp/file-server.log /tmp/python.log
         echo "Run processes"
-        sudo ../nasp/build/nasp agent --config ../nasp/config.yaml --rules-path $(pwd)/../nasp/nasp.d/rules --sd-path $(pwd)/../nasp/nasp.d/services > /tmp/nasp.log &
+        sudo AGENT_METADATACOLLECTORS_DOCKER_ENABLED=true ../nasp/build/nasp agent --config ../nasp/config.yaml --rules-path $(pwd)/../nasp/nasp.d/rules --sd-path $(pwd)/../nasp/nasp.d/services > /tmp/nasp.log &
         go run test/file-server.go >/tmp/file-server.log &
         docker run -d --rm -p 8080:80 nginx
         sleep 2
