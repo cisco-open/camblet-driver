@@ -13,7 +13,7 @@
 #include <linux/list.h>
 #include <linux/slab.h>
 
-#include "attest.h"
+#include "augmentation.h"
 #include "commands.h"
 #include "string.h"
 #include "cert_tools.h"
