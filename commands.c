@@ -86,9 +86,9 @@ command_answer *send_command(char *name, char *data, task_context *context)
     return cmd_answer;
 }
 
-command_answer *send_attest_command()
+command_answer *send_augment_command()
 {
-    command_answer *answer = send_command("attest", "", get_task_context());
+    command_answer *answer = send_command("augment", "", get_task_context());
 
     return answer;
 }

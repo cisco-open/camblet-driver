@@ -21,64 +21,64 @@
 // Define the maximum number of elements inside the cache
 #define MAX_CACHE_LENGTH 64
 
-// workload attest responses
-static LIST_HEAD(attest_cache);
+// process augmentation responses
+static LIST_HEAD(augmentation_response_cache);
 
 // lock for the above list to make it thread safe
-static DEFINE_MUTEX(attests_cache_lock);
+static DEFINE_MUTEX(augment_response_cache_lock);
 
-static void attest_cache_lock(void)
+static void augmentation_response_cache_lock(void)
 {
-    mutex_lock(&attests_cache_lock);
+    mutex_lock(&augment_response_cache_lock);
 }
 
-static void attest_cache_unlock(void)
+static void augmentation_response_cache_unlock(void)
 {
-    mutex_unlock(&attests_cache_lock);
+    mutex_unlock(&augment_response_cache_lock);
 }
 
-static void attest_response_cache_remove_locked(attest_response_cache_entry *entry)
+static void augmentation_response_cache_remove_locked(augmentation_response_cache_entry *entry)
 {
     if (entry)
     {
         list_del(&entry->list);
-        attest_response_put(entry->response);
+        augmentation_response_put(entry->response);
         kfree(entry->key);
         kfree(entry);
     }
 }
 
-static void attest_response_cache_remove(attest_response_cache_entry *entry)
+static void augmentation_response_cache_remove(augmentation_response_cache_entry *entry)
 {
     if (entry)
     {
-        attest_cache_lock();
-        attest_response_cache_remove_locked(entry);
-        attest_cache_unlock();
+        augmentation_response_cache_lock();
+        augmentation_response_cache_remove_locked(entry);
+        augmentation_response_cache_unlock();
     }
 }
 
-static void housekeep_attest_cache_locked(void)
+static void housekeep_augment_cache_locked(void)
 {
-    if (linkedlist_length(&attest_cache) >= MAX_CACHE_LENGTH)
+    if (linkedlist_length(&augmentation_response_cache) >= MAX_CACHE_LENGTH)
     {
         pr_debug("cache is full: remove the oldest element");
-        attest_response_cache_entry *last_entry = list_last_entry(&attest_cache, attest_response_cache_entry, list);
+        augmentation_response_cache_entry *last_entry = list_last_entry(&augmentation_response_cache, augmentation_response_cache_entry, list);
         pr_debug("remove cache entry # key=[%s]", last_entry->key);
-        attest_response_cache_remove_locked(last_entry);
+        augmentation_response_cache_remove_locked(last_entry);
     }
 }
 
-static attest_response *attest_response_init(void)
+static augmentation_response *augmentation_response_init(void)
 {
-    attest_response *response = kzalloc(sizeof(attest_response), GFP_KERNEL);
+    augmentation_response *response = kzalloc(sizeof(augmentation_response), GFP_KERNEL);
 
     kref_init(&response->kref);
 
     return response;
 }
 
-static void attest_response_free(attest_response *response)
+static void augmentation_response_free(augmentation_response *response)
 {
     if (!response)
     {
@@ -90,14 +90,14 @@ static void attest_response_free(attest_response *response)
     kfree(response);
 }
 
-static void attest_response_release(struct kref *kref)
+static void augmentation_response_release(struct kref *kref)
 {
-    attest_response *response = container_of(kref, attest_response, kref);
+    augmentation_response *response = container_of(kref, augmentation_response, kref);
 
-    attest_response_free(response);
+    augmentation_response_free(response);
 }
 
-void attest_response_get(attest_response *response)
+void augmentation_response_get(augmentation_response *response)
 {
     if (!response)
     {
@@ -107,14 +107,14 @@ void attest_response_get(attest_response *response)
     kref_get(&response->kref);
 }
 
-void attest_response_put(attest_response *response)
+void augmentation_response_put(augmentation_response *response)
 {
     if (!response)
     {
         return;
     }
 
-    kref_put(&response->kref, attest_response_release);
+    kref_put(&response->kref, augmentation_response_release);
 }
 
 static char *get_task_context_key(task_context *ctx)
@@ -126,7 +126,7 @@ static char *get_task_context_key(task_context *ctx)
     return key;
 }
 
-static void attest_response_cache_set_locked(char *key, attest_response *response)
+static void augmentation_response_cache_set_locked(char *key, augmentation_response *response)
 {
     if (!key)
     {
@@ -134,9 +134,9 @@ static void attest_response_cache_set_locked(char *key, attest_response *respons
         return;
     }
 
-    housekeep_attest_cache_locked();
+    housekeep_augment_cache_locked();
 
-    attest_response_cache_entry *new_entry = kzalloc(sizeof(attest_response_cache_entry), GFP_KERNEL);
+    augmentation_response_cache_entry *new_entry = kzalloc(sizeof(augmentation_response_cache_entry), GFP_KERNEL);
     if (!new_entry)
     {
         pr_err("memory allocation error");
@@ -147,19 +147,19 @@ static void attest_response_cache_set_locked(char *key, attest_response *respons
     new_entry->response = response;
 
     pr_debug("add entry # key[%s]", new_entry->key);
-    list_add(&new_entry->list, &attest_cache);
+    list_add(&new_entry->list, &augmentation_response_cache);
 }
 
-static attest_response *attest_response_cache_get_locked(char *key)
+static augmentation_response *augmentation_response_cache_get_locked(char *key)
 {
     if (!key)
     {
         return NULL;
     }
 
-    attest_response_cache_entry *entry;
+    augmentation_response_cache_entry *entry;
 
-    list_for_each_entry(entry, &attest_cache, list)
+    list_for_each_entry(entry, &augmentation_response_cache, list)
     {
         if (strncmp(entry->key, key, strlen(key)) == 0)
         {
@@ -171,29 +171,29 @@ static attest_response *attest_response_cache_get_locked(char *key)
     return NULL;
 }
 
-attest_response *attest_workload()
+augmentation_response *augment_workload()
 {
-    attest_response *response;
+    augmentation_response *response;
 
-    attest_cache_lock();
+    augmentation_response_cache_lock();
 
     char *key = get_task_context_key(get_task_context());
-    response = attest_response_cache_get_locked(key);
+    response = augmentation_response_cache_get_locked(key);
     if (response)
     {
-        attest_response_get(response);
+        augmentation_response_get(response);
         goto ret;
     }
 
-    response = attest_response_init();
-    command_answer *answer = send_attest_command();
+    response = augmentation_response_init();
+    command_answer *answer = send_augment_command();
     if (answer->error)
         response->error = strdup(answer->error);
     else
     {
         response->response = strdup(answer->answer);
-        attest_response_cache_set_locked(key, response);
-        attest_response_get(response);
+        augmentation_response_cache_set_locked(key, response);
+        augmentation_response_get(response);
     }
 
     free_command_answer(answer);
@@ -201,7 +201,7 @@ attest_response *attest_workload()
 ret:
     kfree(key);
 
-    attest_cache_unlock();
+    augmentation_response_cache_unlock();
 
     return response;
 }

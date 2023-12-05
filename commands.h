@@ -36,7 +36,7 @@ void free_command_answer(command_answer *cmd_answer);
 command_answer *send_command(char *name, char *data, task_context *context);
 command_answer *answer_with_error(char *error_message);
 
-command_answer *send_attest_command(void);
+command_answer *send_augment_command(void);
 command_answer *send_accept_command(u16 port);
 command_answer *send_connect_command(u16 port);
 csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl);

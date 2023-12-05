@@ -1070,16 +1070,16 @@ void add_net_conn_info_to_json(net_conn_info conn_info, JSON_Object *json_object
 	json_object_set_boolean(json_object, buff, true);
 }
 
-static command_answer *prepare_opa_input(net_conn_info conn_info, service_discovery_entry *sd_entry, char *attest_response_json)
+static command_answer *prepare_opa_input(net_conn_info conn_info, service_discovery_entry *sd_entry, char *augmentation_response_json)
 {
-	if (!attest_response_json)
+	if (!augmentation_response_json)
 	{
-		return answer_with_error("nil attest response json");
+		return answer_with_error("nil augmentation response json");
 	}
 
 	command_answer *answer = NULL;
 
-	JSON_Value *json = json_parse_string(attest_response_json);
+	JSON_Value *json = json_parse_string(augmentation_response_json);
 	if (!json)
 	{
 		return answer_with_error("could not parse json");
@@ -1165,12 +1165,12 @@ opa_socket_context enriched_socket_eval(direction direction, struct sock *sk, in
 		}
 	}
 
-	// attest workload connection
-	attest_response *response = attest_workload();
+	// augmenting process connection
+	augmentation_response *response = augment_workload();
 	if (response->error)
 	{
-		pr_err("could not attest # err[%s]", response->error);
-		attest_response_put(response);
+		pr_err("could not augment process connection # err[%s]", response->error);
+		augmentation_response_put(response);
 	}
 	else
 	{
@@ -1181,11 +1181,11 @@ opa_socket_context enriched_socket_eval(direction direction, struct sock *sk, in
 		}
 		else
 		{
-			pr_debug("attestation response # response[%s]", answer->answer);
+			pr_debug("augmentation response # response[%s]", answer->answer);
 			opa_socket_ctx = socket_eval(answer->answer);
 		}
 		free_command_answer(answer);
-		attest_response_put(response);
+		augmentation_response_put(response);
 	}
 
 	return opa_socket_ctx;

@@ -13,22 +13,22 @@
 
 #include "socket.h"
 
-typedef struct attest_response
+typedef struct augmentation_response
 {
     struct kref kref;
     char *error;
     char *response;
-} attest_response;
+} augmentation_response;
 
 typedef struct
 {
     char *key;
-    attest_response *response;
+    augmentation_response *response;
     struct list_head list;
-} attest_response_cache_entry;
+} augmentation_response_cache_entry;
 
-void attest_response_get(attest_response *response);
-void attest_response_put(attest_response *response);
-attest_response *attest_workload(void);
+void augmentation_response_get(augmentation_response *response);
+void augmentation_response_put(augmentation_response *response);
+augmentation_response *augment_workload(void);
 
 #endif
