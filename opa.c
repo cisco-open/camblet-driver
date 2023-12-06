@@ -377,9 +377,9 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
         ret.allowed = true;
         ret.passthrough = false;
 
-        JSON_Array *allowed_spiffe_ids = json_object_dotget_array(matched_policy, "egress.policy.spiffeID");
+        JSON_Array *allowed_spiffe_ids = json_object_dotget_array(matched_policy, "egress.policy.allowedSPIFFEIDs");
         if (allowed_spiffe_ids == NULL)
-            allowed_spiffe_ids = json_object_dotget_array(matched_policy, "policy.spiffeID");
+            allowed_spiffe_ids = json_object_dotget_array(matched_policy, "policy.allowedSPIFFEIDs");
         if (allowed_spiffe_ids != NULL)
         {
             ret.allowed_spiffe_ids_length = json_array_get_count(allowed_spiffe_ids);
@@ -389,17 +389,17 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             }
         }
 
-        int mtls = json_object_dotget_boolean(matched_policy, "egress.properties.mtls");
+        int mtls = json_object_dotget_boolean(matched_policy, "egress.policy.mtls");
         if (mtls == -1)
-            mtls = json_object_dotget_boolean(matched_policy, "properties.mtls");
+            mtls = json_object_dotget_boolean(matched_policy, "policy.mtls");
         if (mtls == 0)
             ret.mtls = false;
         else if (mtls == 1)
             ret.mtls = true;
 
-        int passthrough = json_object_dotget_boolean(matched_policy, "egress.properties.passthrough");
+        int passthrough = json_object_dotget_boolean(matched_policy, "egress.policy.passthrough");
         if (passthrough == -1)
-            passthrough = json_object_dotget_boolean(matched_policy, "properties.passthrough");
+            passthrough = json_object_dotget_boolean(matched_policy, "policy.passthrough");
         if (passthrough == 0)
             ret.passthrough = false;
         else if (passthrough == 1)
