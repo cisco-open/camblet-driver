@@ -349,20 +349,20 @@ wasm_vm_result wasm_vm_free(wasm_vm *vm, const char *module, i32 ptr, unsigned s
 
 m3ApiRawFunction(m3_wasi_generic_environ_get)
 {
-    m3ApiReturnType(uint32_t)
-        m3ApiGetArgMem(uint32_t *, env)
-            m3ApiGetArgMem(char *, env_buf)
+    m3ApiReturnType(uint32_t);
+    m3ApiGetArgMem(uint32_t *, env);
+    m3ApiGetArgMem(char *, env_buf);
 
-                m3ApiReturn(0);
+    m3ApiReturn(0);
 }
 
 m3ApiRawFunction(m3_wasi_generic_environ_sizes_get)
 {
-    m3ApiReturnType(uint32_t)
-        m3ApiGetArgMem(uint32_t *, env_count)
-            m3ApiGetArgMem(uint32_t *, env_buf_size)
+    m3ApiReturnType(uint32_t);
+    m3ApiGetArgMem(uint32_t *, env_count);
+    m3ApiGetArgMem(uint32_t *, env_buf_size);
 
-                m3ApiCheckMem(env_count, sizeof(uint32_t));
+    m3ApiCheckMem(env_count, sizeof(uint32_t));
     m3ApiCheckMem(env_buf_size, sizeof(uint32_t));
 
     *env_count = 0;
@@ -373,8 +373,8 @@ m3ApiRawFunction(m3_wasi_generic_environ_sizes_get)
 
 m3ApiRawFunction(m3_wasi_generic_proc_exit)
 {
-    m3ApiGetArg(i32, code)
-        m3ApiSuccess();
+    m3ApiGetArg(i32, code);
+    m3ApiSuccess();
 }
 
 M3Result SuppressLookupFailure(M3Result i_result)

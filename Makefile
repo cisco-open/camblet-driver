@@ -107,13 +107,13 @@ logs:
 	sudo dmesg -T --follow
 
 insmod-tls:
-	find /lib/modules/$(uname -r) -type f -name '*.ko*' | grep -w tls && sudo modprobe tls || echo "tls module not available"
+	@find /lib/modules/$(uname -r) -type f -name '*.ko*' | grep -w tls > /dev/null && sudo modprobe tls || echo "tls module not available"
 	
 insmod-bearssl: insmod-tls
 	sudo insmod third-party/BearSSL/bearssl.ko
 
 insmod: insmod-bearssl
-	$(eval ktls_available := $(shell find /lib/modules/$(uname -r) -type f -name '*.ko*' | grep -w tls > /dev/null && sudo modprobe tls && echo true || echo false))
+	$(eval ktls_available := $(shell lsmod | grep -w tls > /dev/null && echo 1 || echo 0))
 	sudo insmod nasp.ko dyndbg==_ ktls_available=$(ktls_available)
 
 insmod-with-proxywasm: insmod-bearssl
@@ -133,7 +133,7 @@ endif
 _archlinux_deps:
 	sudo pacman -Syu linux-headers dkms go strace bc iperf socat
 
-_centos_deps:
+_rhel_deps:
 	sudo dnf install -y --enablerepo epel dkms vim-common go
 
 _install_opa:
