@@ -11,6 +11,8 @@
 #ifndef augmentation_h
 #define augmentation_h
 
+#include <linux/inet.h>
+
 typedef struct augmentation_response
 {
     struct kref kref;
