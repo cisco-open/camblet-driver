@@ -251,6 +251,13 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
             }
         }
 
+        JSON_Array *chain = json_object_get_array(root, "chain");
+        if (chain == NULL)
+        {
+            errormsg = "could not find chain";
+            goto error;
+        }
+
         const char *raw = json_object_dotget_string(root, "certificate.raw");
         if (raw == NULL)
         {
@@ -258,12 +265,33 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
             goto error;
         }
 
-        csr_sign_answer->cert->chain = kzalloc(1 * sizeof *csr_sign_answer->cert->chain, GFP_KERNEL);
-        csr_sign_answer->cert->chain_len = 1;
+        csr_sign_answer->cert->chain_len = json_array_get_count(chain);
+        csr_sign_answer->cert->chain_len++;
+        csr_sign_answer->cert->chain = kzalloc(csr_sign_answer->cert->chain_len * sizeof *csr_sign_answer->cert->chain, GFP_KERNEL);
 
         srclen = strlen(raw);
-        csr_sign_answer->cert->chain->data = kmalloc(srclen, GFP_KERNEL);
-        csr_sign_answer->cert->chain->data_len = base64_decode(csr_sign_answer->cert->chain->data, srclen, raw, srclen);
+        csr_sign_answer->cert->chain[0].data = kmalloc(srclen, GFP_KERNEL);
+        csr_sign_answer->cert->chain[0].data_len = base64_decode(csr_sign_answer->cert->chain[0].data, srclen, raw, srclen);
+
+        int k;
+        int j = 1;
+        for (k = 0; k < csr_sign_answer->cert->chain_len - 1; k++)
+        {
+            JSON_Object *chain_entry = json_array_get_object(chain, k);
+            if (chain_entry)
+            {
+                raw = json_object_get_string(chain_entry, "raw");
+                if (raw)
+                {
+                    srclen = strlen(raw);
+                    pr_info("srclen [%d]", srclen);
+                    csr_sign_answer->cert->chain[j].data = kmalloc(srclen, GFP_KERNEL);
+                    csr_sign_answer->cert->chain[j].data_len = base64_decode(csr_sign_answer->cert->chain[j].data, srclen, raw, srclen);
+
+                    j++;
+                }
+            }
+        }
 
         int result = set_cert_validity(csr_sign_answer->cert);
         if (result < 0)
