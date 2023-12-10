@@ -72,7 +72,8 @@ jobs:
       run: |
         touch /tmp/nasp.log /tmp/file-server.log /tmp/python.log
         echo "Run processes"
-        sudo AGENT_METADATACOLLECTORS_DOCKER_ENABLED=true ../nasp/build/nasp agent --config ../nasp/config.yaml --rules-path $(pwd)/../nasp/nasp.d/rules --sd-path $(pwd)/../nasp/nasp.d/services > /tmp/nasp.log &
+        ../nasp/build/nasp ca create-root nasp-root-ca > /tmp/nasp-ca.pem
+        sudo AGENT_METADATACOLLECTORS_DOCKER_ENABLED=true ../nasp/build/nasp agent --config ../nasp/config.yaml --rules-path $(pwd)/../nasp/nasp.d/rules --sd-path $(pwd)/../nasp/nasp.d/services --ca-pem-path /tmp/nasp-ca.pem > /tmp/nasp.log &
         go run test/file-server.go >/tmp/file-server.log &
         docker run -d --rm -p 8080:80 nginx
         sleep 2
