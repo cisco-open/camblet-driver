@@ -27,8 +27,8 @@
 
 MODULE_AUTHOR("Cisco Systems");
 MODULE_LICENSE("Dual MIT/GPL");
-MODULE_DESCRIPTION("A kernel module that exposes a Wasm VM");
-MODULE_VERSION("0.1");
+MODULE_DESCRIPTION("NASP - Kernel Space Access Control for Zero Trust Networking");
+MODULE_VERSION("0.3.0");
 
 static bool proxywasm_modules = false;
 module_param(proxywasm_modules, bool, 0644);
