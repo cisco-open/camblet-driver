@@ -155,7 +155,7 @@ setup-vm: _debian_deps _install_opa _install_wasm_target
 setup-archlinux-vm: _archlinux_deps _install_opa _install_wasm_target
 
 setup-dev-env:
-	test -f .vscode/c_cpp_properties.json || cp .vscode/c_cpp_properties.json.orig .vscode/c_cpp_properties.json
+	test -f .vscode/c_cpp_properties.json || cp .vscode/c_cpp_properties.json.template .vscode/c_cpp_properties.json
 	brew tap messense/macos-cross-toolchains
 	brew install $(shell lima uname -m)-unknown-linux-gnu
 	test -d ../linux || git clone --depth=1 --branch v6.2 https://github.com/torvalds/linux.git ../linux
