@@ -1,3 +1,9 @@
+nasp-kernel-module (0.2.0) unstable; urgency=medium
+
+  * Second release.
+
+ -- Balint Molnar <bmolnar@cisco.com>  Mon, 11 Dec 2023 16:04:29 +0000
+
 nasp-kernel-module (0.1.0-1) unstable; urgency=medium
 
   * Initial release.
