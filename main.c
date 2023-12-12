@@ -25,7 +25,7 @@
 #include "static/csr_wasm.h"
 #include "static/socket_wasm.h"
 
-MODULE_AUTHOR("Cisco Systems");
+MODULE_AUTHOR("Nasp Mainteiners <team@nasp.io>");
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_DESCRIPTION("NASP - Kernel Space Access Control for Zero Trust Networking");
 MODULE_VERSION("0.3.0");
