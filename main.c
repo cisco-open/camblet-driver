@@ -100,7 +100,7 @@ static void __exit nasp_exit(void)
     sd_table_free();
     nasp_config_free();
 
-    pr_info("%s: module unloaded from 0x%p", THIS_MODULE->name, nasp_exit);
+    pr_info("%s: module unloaded from 0x%p", KBUILD_MODNAME, nasp_exit);
 }
 
 module_init(nasp_init);
