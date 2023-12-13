@@ -1,3 +1,14 @@
+nasp-kernel-module (0.3.0) unstable; urgency=medium
+
+  * remove the module on package removal
+  * add tls as module dependency
+  * fix MODULE_AUTHOR
+  * vscode template fixes
+  * change module description
+  * fix C Flexible array members (FAM) declaration
+
+ -- Nasp maintainers <team@nasp.io>  Wed, 13 Dec 2023 18:19:36 +0000
+
 nasp-kernel-module (0.2.0) unstable; urgency=medium
 
   * Second release.
