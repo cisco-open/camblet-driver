@@ -22,6 +22,13 @@ case "$1" in
     remove)
         PACKAGE_VERSION=$(dpkg-query --showformat='${Version}' --show nasp-kernel-module | grep -oP '\b\d+\.\d+\.\d+\b')
 
+        if sudo systemctl status nasp &>/dev/null ; then
+            echo "Stopping nasp service"
+            sudo systemctl stop nasp
+        fi
+
+        sudo modprobe -r nasp || true
+
         if dkms status | grep nasp | grep "$PACKAGE_VERSION" ; then
             echo "Removing nasp-kernel-module version $PACKAGE_VERSION"
             # dkms uninstall -m nasp -v $PACKAGE_VERSION --all
