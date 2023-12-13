@@ -172,3 +172,10 @@ deb:
 	rm -f ../nasp-kernel-module_$(PACKAGE_VERSION).orig.tar.xz
 	tar --exclude='./.git' --exclude='linux' -cvJf ../nasp-kernel-module_$(PACKAGE_VERSION).orig.tar.xz .
 	dpkg-buildpackage -tc
+
+rpm:
+	sudo dnf install -y kernel-devel
+	make clean
+	rm -f rpmbuild/nasp-kernel-module_0.1.0.orig.tar.xz
+	tar --exclude='./.git' --exclude='linux' -cvJf rpmbuild/nasp-kernel-module_0.1.0.orig.tar.xz .
+	rpmbuild -ba --buildroot rpmbuild rpmbuild/SPECS/nasp-kernel-module.spec
