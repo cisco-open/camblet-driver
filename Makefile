@@ -18,17 +18,8 @@ TAG ?= $(new_tag)
 commit_messages := $(shell git log --pretty=format:"%s" $(latest_tag)..HEAD)
 
 bump_version:
-	echo "Preparing debian/changelog and Readme with tag:$(TAG)"
-	dch -i --distribution=unstable --force-distribution --newversion="$$new_tag" \
-      --multimaint-merge --release-heuristic=changelog
-	sed -i 's/PACKAGE_VERSION=".*"/PACKAGE_VERSION="$$new_tag"/' dkms.conf
-	sed -i 's/github.com\/cisco-open\/nasp-kernel-module.git \/usr\/src\/nasp-.*\//github.com\/cisco-open\/nasp-kernel-module.git \/usr\/src\/nasp-$$new_tag\//' README.md; \
-	sed -i 's/sudo dkms add -m nasp -v .*$/sudo dkms add -m nasp -v $$new_tag/' README.md; \
-    sed -i 's/sudo dkms install -m nasp -v .*$/sudo dkms install -m nasp -v $$new_tag/' README.md; \
-    sed -i 's/sudo modprobe nasp/sudo modprobe nasp -v $$new_tag/' README.md; \
-    sed -i 's/sudo modprobe -r nasp/sudo modprobe -r nasp -v $$new_tag/' README.md; \
-    sed -i 's/sudo dkms uninstall -m nasp -v .*$/sudo dkms uninstall -m nasp -v $$new_tag/' README.md; \
-    sed -i 's/sudo dkms remove -m nasp -v .*$/sudo dkms remove -m nasp -v $$new_tag/' README.md
+	@echo "Preparing debian/changelog and Readme with tag:$(TAG)"
+	@./scripts/update_changelog_readme.sh $(TAG) $(latest_tag)
 
 # OPA requires floats
 EMULATE_FLOATS := 1
