@@ -1,3 +1,35 @@
+# Release related section
+latest_tag := $(shell git fetch origin; git describe --tags --abbrev=0)
+
+# Extract the version components
+major := $(shell echo $(latest_tag) | cut -d. -f1)
+minor := $(shell echo $(latest_tag) | cut -d. -f2)
+patch := $(shell echo $(latest_tag) | cut -d. -f3)
+
+# Bump the minor version
+minor_incr = $$(echo $$(( $(1) + 1)))
+
+# Prepare the new tag
+new_tag:= $(major).$(call minor_incr,$(minor)).$(patch)
+
+TAG ?= $(new_tag)
+
+# Get commit messages since the latest tag
+commit_messages := $(shell git log --pretty=format:"%s" $(latest_tag)..HEAD)
+
+bump_version:
+	echo "Preparing debian/changelog and Readme with tag:$(TAG)"
+	dch -i --distribution=unstable --force-distribution --newversion="$$new_tag" \
+      --multimaint-merge --release-heuristic=changelog
+	sed -i 's/PACKAGE_VERSION=".*"/PACKAGE_VERSION="$$new_tag"/' dkms.conf
+	sed -i 's/github.com\/cisco-open\/nasp-kernel-module.git \/usr\/src\/nasp-.*\//github.com\/cisco-open\/nasp-kernel-module.git \/usr\/src\/nasp-$$new_tag\//' README.md; \
+	sed -i 's/sudo dkms add -m nasp -v .*$/sudo dkms add -m nasp -v $$new_tag/' README.md; \
+    sed -i 's/sudo dkms install -m nasp -v .*$/sudo dkms install -m nasp -v $$new_tag/' README.md; \
+    sed -i 's/sudo modprobe nasp/sudo modprobe nasp -v $$new_tag/' README.md; \
+    sed -i 's/sudo modprobe -r nasp/sudo modprobe -r nasp -v $$new_tag/' README.md; \
+    sed -i 's/sudo dkms uninstall -m nasp -v .*$/sudo dkms uninstall -m nasp -v $$new_tag/' README.md; \
+    sed -i 's/sudo dkms remove -m nasp -v .*$/sudo dkms remove -m nasp -v $$new_tag/' README.md
+
 # OPA requires floats
 EMULATE_FLOATS := 1
 ccflags-y += -foptimize-sibling-calls \
