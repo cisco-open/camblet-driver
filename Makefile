@@ -174,8 +174,9 @@ deb:
 	dpkg-buildpackage -tc
 
 rpm:
+	$(eval PACKAGE_VERSION := $(shell rpm -q --qf '%{VERSION}' --specfile rpmbuild/SPECS/nasp-kernel-module.spec))
 	make clean
-	rm -f rpmbuild/SOURCES/nasp-kernel-module-0.3.0.tar.xz
+	rm -f rpmbuild/SOURCES/nasp-kernel-module-*.tar.xz
 	mkdir -p rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
-	tar --exclude='./.git' --exclude='linux' --exclude='rpmbuild' -cvJf rpmbuild/SOURCES/nasp-kernel-module-0.3.0.tar.xz .
+	tar --exclude='./.git' --exclude='linux' --exclude='rpmbuild' -cvJf rpmbuild/SOURCES/nasp-kernel-module-$(PACKAGE_VERSION).tar.xz .
 	rpmbuild -v -ba --define '_topdir ${PWD}/rpmbuild/' rpmbuild/SPECS/nasp-kernel-module.spec

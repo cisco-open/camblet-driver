@@ -14,7 +14,6 @@ BuildArch:      noarch
 Kernel module for the NASP project.
 
 %files
-#%license LICENSE
 /usr/src/nasp-%{version}
 
 %install
@@ -24,7 +23,38 @@ Kernel module for the NASP project.
 install -m 755 -d %{buildroot}/usr/src/nasp-%{version}
 
 # # Copy the entire content of your Git repository to the build root
-tar xvf %{_sourcedir}/nasp-kernel-module-%{version}.tar.xz -C %{buildroot}/usr/src/nasp-%{version} --strip-components=1 
+tar xvf %{_sourcedir}/nasp-kernel-module-%{version}.tar.xz -C %{buildroot}/usr/src/nasp-%{version} --strip-components=1
+
+%pre
+PACKAGE_VERSION=$(dkms status -m nasp | head -1 | awk -F[/,] '{print $2}')
+
+%post
+PACKAGE_VERSION=%{version}
+
+# Add the kernel module to the DKMS source control
+dkms add -m nasp -v ${PACKAGE_VERSION} --force
+
+# Build and install the kernel module against the current kernel version
+dkms install -m nasp -v ${PACKAGE_VERSION} --force
+
+%preun
+PACKAGE_VERSION=%{version}
+
+if sudo systemctl status nasp &>/dev/null ; then
+    echo "Stopping nasp service"
+    sudo systemctl stop nasp
+fi
+
+sudo modprobe -r nasp || true
+
+if dkms status | grep nasp | grep "$PACKAGE_VERSION" ; then
+    echo "Removing nasp-kernel-module version $PACKAGE_VERSION"
+    # dkms uninstall -m nasp -v $PACKAGE_VERSION --all
+    dkms remove -m nasp -v $PACKAGE_VERSION --all
+else
+    echo "nasp-kernel-module version $PACKAGE_VERSION not found in DKMS"
+fi
+
 
 %changelog
 * Thu Dec 14 2023 Nandor Kracser <nandork@cisco.com> - 0.3.0-1
