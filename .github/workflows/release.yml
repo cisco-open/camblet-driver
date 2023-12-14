@@ -28,7 +28,6 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           artifacts: "../nasp-kernel-module_*.deb"
-          prerelease: true
     #   uses: softprops/action-gh-release@v1
     # #   if: startsWith(github.ref, 'refs/tags/')
     #   with:
