@@ -14,9 +14,6 @@ new_tag:= $(major).$(call minor_incr,$(minor)).$(patch)
 
 TAG ?= $(new_tag)
 
-# Get commit messages since the latest tag
-commit_messages := $(shell git log --pretty=format:"%s" $(latest_tag)..HEAD)
-
 bump_version:
 	@echo "Preparing debian/changelog and Readme with tag:$(TAG)"
 	@./scripts/update_changelog_readme.sh $(TAG) $(latest_tag)
