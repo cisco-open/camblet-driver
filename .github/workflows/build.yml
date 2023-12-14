@@ -35,16 +35,16 @@ jobs:
     - name: Build with DKMS
       working-directory: nasp-kernel-module
       run: |
-        sudo cp -r . /usr/src/nasp-0.3.0/
-        sudo dkms add -m nasp -v 0.3.0
-        if sudo dkms build -m nasp -v 0.3.0; then
+        sudo cp -r . /usr/src/nasp-${{ github.ref_name }}/
+        sudo dkms add -m nasp -v ${{ github.ref_name }}
+        if sudo dkms build -m nasp -v ${{ github.ref_name }}; then
           echo "DKMS build succeeded"
         else
           echo "DKMS build failed"
-          cat /var/lib/dkms/nasp/0.3.0/build/make.log
+          cat /var/lib/dkms/nasp/${{ github.ref_name }}/build/make.log
           exit 1
         fi
-        sudo dkms install -m nasp -v 0.3.0
+        sudo dkms install -m nasp -v ${{ github.ref_name }}
 
     - name: Build Nasp CLI
       working-directory: nasp
