@@ -174,8 +174,8 @@ deb:
 	dpkg-buildpackage -tc
 
 rpm:
-	sudo dnf install -y kernel-devel
 	make clean
-	rm -f rpmbuild/nasp-kernel-module_0.1.0.orig.tar.xz
-	tar --exclude='./.git' --exclude='linux' -cvJf rpmbuild/nasp-kernel-module_0.1.0.orig.tar.xz .
-	rpmbuild -ba --buildroot rpmbuild rpmbuild/SPECS/nasp-kernel-module.spec
+	rm -f rpmbuild/SOURCES/nasp-kernel-module-0.3.0.tar.xz
+	mkdir -p rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+	tar --exclude='./.git' --exclude='linux' --exclude='rpmbuild' -cvJf rpmbuild/SOURCES/nasp-kernel-module-0.3.0.tar.xz .
+	rpmbuild -v -ba --define '_topdir ${PWD}/rpmbuild/' rpmbuild/SPECS/nasp-kernel-module.spec

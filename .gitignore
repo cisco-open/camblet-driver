@@ -12,6 +12,9 @@
 *.dwo
 *.wasm
 *.tar.gz
+*.tar.xz
 cli/cli
 target/
 linux/
+*.deb
+*.rpm

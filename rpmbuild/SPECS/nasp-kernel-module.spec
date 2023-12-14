@@ -1,43 +1,31 @@
 Name:           nasp-kernel-module
-Version:        0.1.0
+Version:        0.3.0
 Release:        1%{?dist}
 Summary:        Kernel module for the NASP project.
 
 License:        GPLv2
-URL:            https://nasp.rocks
-Source0:        %{name}-%{version}.orig.tar.xz
+URL:            https://nasp.io
+Source0:        %{name}-%{version}.tar.xz
 
-BuildRequires: make
-BuildRequires: dkms
-
-Requires:       
+Requires:       dkms
+BuildArch:      noarch
 
 %description
-
-
-
-%prep
-%autosetup
-
-
-%build
-make
-
-%configure
-%make_build
-
-
-%install
-rm -rf $RPM_BUILD_ROOT
-%make_install
-
+Kernel module for the NASP project.
 
 %files
-%license add-license-file-here
-%doc add-docs-here
+#%license LICENSE
+/usr/src/nasp-%{version}
 
+%install
+# rm -rf %{buildroot}
 
+# Create the destination directory in the build root
+install -m 755 -d %{buildroot}/usr/src/nasp-%{version}
+
+# # Copy the entire content of your Git repository to the build root
+tar xvf %{_sourcedir}/nasp-kernel-module-%{version}.tar.xz -C %{buildroot}/usr/src/nasp-%{version} --strip-components=1 
 
 %changelog
-* Mon Nov 27 2023 bmolnar
-- 
+* Thu Dec 14 2023 Nandor Kracser <nandork@cisco.com> - 0.3.0-1
+ - Initial build
