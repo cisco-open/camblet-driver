@@ -198,5 +198,5 @@ new_tag:= $(major).$(call minor_incr,$(minor)).$(patch)
 TAG ?= $(new_tag)
 
 bump_version:
-	@echo "Preparing debian/changelog and Readme with tag:$(TAG)"
+	@echo "Preparing manifests with tag:$(TAG)"
 	@./scripts/update_versions.sh $(TAG) $(latest_tag)
