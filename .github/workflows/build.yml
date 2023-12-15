@@ -35,16 +35,17 @@ jobs:
     - name: Build with DKMS
       working-directory: nasp-kernel-module
       run: |
-        sudo cp -r . /usr/src/nasp-0.3.0/
-        sudo dkms add -m nasp -v 0.3.0
-        if sudo dkms build -m nasp -v 0.3.0; then
+        LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`)
+        sudo cp -r . /usr/src/nasp-$LATEST_TAG/
+        sudo dkms add -m nasp -v $LATEST_TAG
+        if sudo dkms build -m nasp -v $LATEST_TAG; then
           echo "DKMS build succeeded"
         else
           echo "DKMS build failed"
-          cat /var/lib/dkms/nasp/0.3.0/build/make.log
+          cat /var/lib/dkms/nasp/$LATEST_TAG/build/make.log
           exit 1
         fi
-        sudo dkms install -m nasp -v 0.3.0
+        sudo dkms install -m nasp -v $LATEST_TAG
 
     - name: Build Nasp CLI
       working-directory: nasp

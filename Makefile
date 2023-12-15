@@ -180,3 +180,23 @@ rpm:
 	mkdir -p rpmbuild/SOURCES
 	tar --exclude='./.git' --exclude='linux' --exclude='rpmbuild' --exclude 'debian' -cvJf rpmbuild/SOURCES/nasp-kernel-module-$(PACKAGE_VERSION).tar.xz .
 	rpmbuild -v -ba --define '_topdir ${PWD}/rpmbuild/' rpmbuild/SPECS/nasp-kernel-module.spec
+
+# Release related section
+latest_tag := $(shell git fetch origin; git describe --tags --abbrev=0)
+
+# Extract the version components
+major := $(shell echo $(latest_tag) | cut -d. -f1)
+minor := $(shell echo $(latest_tag) | cut -d. -f2)
+patch := $(shell echo $(latest_tag) | cut -d. -f3)
+
+# Bump the minor version
+minor_incr = $$(echo $$(( $(1) + 1)))
+
+# Prepare the new tag
+new_tag:= $(major).$(call minor_incr,$(minor)).$(patch)
+
+TAG ?= $(new_tag)
+
+bump_version:
+	@echo "Preparing manifests with tag:$(TAG)"
+	@./scripts/update_versions.sh $(TAG) $(latest_tag)
