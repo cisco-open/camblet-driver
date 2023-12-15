@@ -189,13 +189,13 @@ sudo dnf install --enablerepo epel dkms
 The NASP can be installed with DKMS in the following way currently:
 
 ```bash
-sudo git clone --recurse-submodule https://github.com/cisco-open/nasp-kernel-module.git /usr/src/nasp-0.3.0/
+sudo git clone --recurse-submodule https://github.com/cisco-open/nasp-kernel-module.git /usr/src/nasp-0.4.0/
 
 # Add the kernel module to the DKMS source control
-sudo dkms add -m nasp -v 0.3.0
+sudo dkms add -m nasp -v 0.4.0
 
 # Build and install the kernel module against the current kernel version
-sudo dkms install -m nasp -v 0.3.0
+sudo dkms install -m nasp -v 0.4.0
 
 # Load the kernel module
 sudo modprobe tls # required for kTLS
@@ -212,8 +212,8 @@ Un-installation is very simple as well:
 sudo modprobe -r nasp
 
 # Remove the kernel module from DKMS source control
-sudo dkms uninstall -m nasp -v 0.3.0
-sudo dkms remove -m nasp -v 0.3.0
+sudo dkms uninstall -m nasp -v 0.4.0
+sudo dkms remove -m nasp -v 0.4.0
 ```
 
 ### Debian package

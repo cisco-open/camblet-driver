@@ -1,5 +1,5 @@
 Name:           nasp-kernel-module
-Version:        0.3.0
+Version:        0.4.0
 Release:        1%{?dist}
 Summary:        Kernel module for the NASP project.
 
@@ -57,5 +57,8 @@ fi
 
 
 %changelog
+* Fri Dec 15 2023 Nasp maintainers <team@nasp.io> - 0.4.0-1
+ - Create a new make target bump version (#128)
+
 * Thu Dec 14 2023 Nandor Kracser <nandork@cisco.com> - 0.3.0-1
  - Initial build

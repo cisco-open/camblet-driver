@@ -1,3 +1,11 @@
+nasp-kernel-module (0.4.0) unstable; urgency=medium
+
+  * Create a new make target bump version (#128)
+  * Create RPM packaging (#129)
+  * Remove prerelease flag from the release-action (#130)
+
+ -- Nasp maintainers <team@nasp.io>  Fri, 15 Dec 2023 14:17:07 +0100
+
 nasp-kernel-module (0.3.0) unstable; urgency=medium
 
   * remove the module on package removal
