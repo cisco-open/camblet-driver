@@ -199,4 +199,4 @@ TAG ?= $(new_tag)
 
 bump_version:
 	@echo "Preparing debian/changelog and Readme with tag:$(TAG)"
-	@./scripts/update_changelog_readme.sh $(TAG) $(latest_tag)
+	@./scripts/update_versions.sh $(TAG) $(latest_tag)
