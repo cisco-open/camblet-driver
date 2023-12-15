@@ -24,10 +24,14 @@ jobs:
       - name: Build nasp-kernel-module Debian package
         run: make deb
 
+      - name: Build nasp-kernel-module RedHat package
+        run: make rpm
+
       - name: Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "../nasp-kernel-module_*.deb"
+          artifacts: "../nasp-kernel-module_*.deb,rpmbuild/RPMS/noarch/nasp-kernel-module-*.rpm"
+
     #   uses: softprops/action-gh-release@v1
     # #   if: startsWith(github.ref, 'refs/tags/')
     #   with:
