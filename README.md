@@ -162,7 +162,7 @@ lima curl -v http://localhost:8000
 
 ## Installation
 
-The kernel module is not yet packaged, but it is possible to install it with [DKMS](https://github.com/dell/dkms).
+It is also possible to manually install the kernel module with [DKMS](https://github.com/dell/dkms).
 
 ### DKMS Support
 
@@ -184,6 +184,12 @@ On Red Hat compatible systems:
 sudo dnf install --enablerepo epel dkms
 ```
 
+On Amazon Linux:
+
+```bash
+sudo dnf install dkms
+```
+
 #### Prepare the NASP kernel module
 
 The NASP can be installed with DKMS in the following way currently:
@@ -198,7 +204,6 @@ sudo dkms add -m nasp -v 0.4.0
 sudo dkms install -m nasp -v 0.4.0
 
 # Load the kernel module
-sudo modprobe tls # required for kTLS
 sudo modprobe nasp
 
 # Check the logs that the module got loaded
@@ -237,5 +242,29 @@ make deb
 The package can be installed with the following command:
 
 ```bash
-sudo apt install ../nasp-kernel-module_0.3.0-1_all.deb
+sudo apt install ../nasp-kernel-module_0.4.0-1_all.deb
+```
+
+### RPM package
+
+The kernel module can be packaged into an RPM package with DKMS support, so kernel module re-builds are handled automatically.
+
+#### Building the package for yourself
+
+Prepare the build environment, if you want to build the package on your workstation:
+
+```bash
+sudo dnf install rpm-build
+```
+
+The package can be built with the following command:
+
+```bash
+make rpm
+```
+
+The package can be installed with the following command:
+
+```bash
+sudo dnf install ../nasp-kernel-module-0.4.0-1.noarch.rpm
 ```
