@@ -23,6 +23,8 @@ sed -i '' '1s/^/'"$changelog_entry"'\n\n/' debian/changelog
 sed -i '' 's/PACKAGE_VERSION=".*"/PACKAGE_VERSION="'"$new_tag"'"/' dkms.conf
 # Update the kernel-module.spec
 sed -i '' 's/Version:        .*/Version:        '"$new_tag"'/' rpmbuild/SPECS/nasp-kernel-module.spec
+# Update the main.c
+sed -i '' 's/MODULE_VERSION(".*")/MODULE_VERSION("'"$new_tag"'")/' main.c
 # Update the Readme.md
 sed -i '' 's/github.com\/cisco-open\/nasp-kernel-module.git \/usr\/src\/nasp-.*\//github.com\/cisco-open\/nasp-kernel-module.git \/usr\/src\/nasp-'"$new_tag"'\//' README.md; \
 sed -i '' 's/sudo dkms add -m nasp -v .*$/sudo dkms add -m nasp -v '"$new_tag"'/' README.md; \
