@@ -90,8 +90,11 @@ wasm_vm *this_cpu_wasm_vm(void)
 
 wasm_vm *wasm_vm_for_cpu(unsigned cpu)
 {
-    if (cpu >= nr_cpu_ids)
+    if (cpu >= num_online_cpus())
+    {
+        pr_err("cpu[%d] is not online", cpu);
         return NULL;
+    }
     return vms[cpu];
 }
 
@@ -103,7 +106,7 @@ const char *wasm_vm_last_error(wasm_vm_module *module)
 wasm_vm_result wasm_vm_new_per_cpu(void)
 {
     int cpu = 0;
-    for_each_possible_cpu(cpu)
+    for_each_online_cpu(cpu)
     {
         pr_info("create vm # cpu[%d]", cpu);
         vms[cpu] = wasm_vm_new(cpu);
@@ -116,7 +119,7 @@ wasm_vm_result wasm_vm_destroy_per_cpu(void)
     if (vms[0])
     {
         int cpu = 0;
-        for_each_possible_cpu(cpu)
+        for_each_online_cpu(cpu)
         {
             pr_info("destroy vm # cpu[%d]", cpu);
             wasm_vm_destroy(vms[cpu]);

@@ -128,7 +128,7 @@ wasm_vm_result load_module(const char *name, const char *code, unsigned length, 
 {
     wasm_vm_result result;
     unsigned cpu;
-    for_each_possible_cpu(cpu)
+    for_each_online_cpu(cpu)
     {
         wasm_vm *vm = wasm_vm_for_cpu(cpu);
         wasm_vm_lock(vm);

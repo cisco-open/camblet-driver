@@ -665,7 +665,7 @@ void load_opa_data(const char *data)
 {
     unsigned cpu;
 
-    for_each_possible_cpu(cpu)
+    for_each_online_cpu(cpu)
     {
         opa_wrapper *opa = opas[cpu];
         wasm_vm_lock(opa->vm);
