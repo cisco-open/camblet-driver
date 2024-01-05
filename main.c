@@ -41,7 +41,7 @@ MODULE_PARM_DESC(ktls_available, "Marks if kTLS is available on the system");
 
 static int __init nasp_init(void)
 {
-    pr_info("module loaded at 0x%p running on %d CPUs", nasp_init, nr_cpu_ids);
+    pr_info("module loaded at 0x%p running on %d CPUs", nasp_init, num_online_cpus());
 
     wasm_vm_result result = wasm_vm_new_per_cpu();
     if (result.err)
