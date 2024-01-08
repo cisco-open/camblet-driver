@@ -351,9 +351,9 @@ static int parse_command(const char *data)
                 goto cleanup;
             }
         }
-        else if (strcmp("load_rules", command) == 0)
+        else if (strcmp("load_policies", command) == 0)
         {
-            pr_info("load rules");
+            pr_info("load policies");
 
             const char *code = json_object_get_string(root, "code");
             char *decoded = kzalloc(strlen(code) * 2, GFP_KERNEL);
