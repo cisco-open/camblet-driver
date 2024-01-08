@@ -305,10 +305,10 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             {
                 goto free;
             }
-            int nr = json_object_get_number(policy, "nr");
-            if (nr < policy_prio || policy_prio == -1)
+            int pos = json_object_get_number(policy, "position");
+            if (pos < policy_prio || policy_prio == -1)
             {
-                policy_prio = nr;
+                policy_prio = pos;
             }
         }
 
@@ -320,24 +320,24 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             {
                 goto free;
             }
-            int nr = json_object_get_number(policy, "nr");
-            if (nr != policy_prio)
+            int pos = json_object_get_number(policy, "position");
+            if (pos != policy_prio)
             {
                 continue;
             }
-            int enr = json_object_dotget_number(policy, "egress.nr");
-            if (enr < egress_prio || egress_prio == -1)
+            int egress_pos = json_object_dotget_number(policy, "egress.position");
+            if (egress_pos < egress_prio || egress_prio == -1)
             {
-                egress_prio = enr;
+                egress_prio = egress_pos;
                 matched_policy = policy;
             }
         }
 
         pr_debug("policy match # policy[%s] prio[%d] egress_prio[%d]", json_serialize_to_string(json_object_get_wrapping_value(matched_policy)), policy_prio, egress_prio);
 
-        const char *ttl = json_object_dotget_string(matched_policy, "egress.properties.ttl");
+        const char *ttl = json_object_dotget_string(matched_policy, "egress.certificate.ttl");
         if (ttl == NULL)
-            ttl = json_object_dotget_string(matched_policy, "properties.ttl");
+            ttl = json_object_dotget_string(matched_policy, "certificate.ttl");
         if (ttl != NULL)
         {
             ret.ttl = strdup(ttl);
@@ -377,9 +377,9 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
         ret.allowed = true;
         ret.passthrough = false;
 
-        JSON_Array *allowed_spiffe_ids = json_object_dotget_array(matched_policy, "egress.policy.allowedSPIFFEIDs");
+        JSON_Array *allowed_spiffe_ids = json_object_dotget_array(matched_policy, "egress.connection.allowedSPIFFEIDs");
         if (allowed_spiffe_ids == NULL)
-            allowed_spiffe_ids = json_object_dotget_array(matched_policy, "policy.allowedSPIFFEIDs");
+            allowed_spiffe_ids = json_object_dotget_array(matched_policy, "connection.allowedSPIFFEIDs");
         if (allowed_spiffe_ids != NULL)
         {
             ret.allowed_spiffe_ids_length = json_array_get_count(allowed_spiffe_ids);
@@ -389,25 +389,24 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             }
         }
 
-        int mtls = json_object_dotget_boolean(matched_policy, "egress.policy.mtls");
-        if (mtls == -1)
-            mtls = json_object_dotget_boolean(matched_policy, "policy.mtls");
-        if (mtls == 0)
-            ret.mtls = false;
-        else if (mtls == 1)
-            ret.mtls = true;
+        const char *mtls = json_object_dotget_string(matched_policy, "egress.connection.mtls");
+        if (mtls == NULL)
+            mtls = json_object_dotget_string(matched_policy, "connection.mtls");
 
-        int passthrough = json_object_dotget_boolean(matched_policy, "egress.policy.passthrough");
+        if (mtls != NULL && strcmp(mtls, "DISABLE") == 0)
+            ret.mtls = false;
+
+        int passthrough = json_object_dotget_boolean(matched_policy, "egress.connection.passthrough");
         if (passthrough == -1)
-            passthrough = json_object_dotget_boolean(matched_policy, "policy.passthrough");
+            passthrough = json_object_dotget_boolean(matched_policy, "connection.passthrough");
         if (passthrough == 0)
             ret.passthrough = false;
         else if (passthrough == 1)
             ret.passthrough = true;
 
-        const char *workload_id = json_object_dotget_string(matched_policy, "egress.properties.workloadID");
+        const char *workload_id = json_object_dotget_string(matched_policy, "egress.certificate.workloadID");
         if (workload_id == NULL)
-            workload_id = json_object_dotget_string(matched_policy, "properties.workloadID");
+            workload_id = json_object_dotget_string(matched_policy, "certificate.workloadID");
         if (workload_id != NULL)
         {
             nasp_config_lock();
@@ -418,9 +417,9 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             nasp_config_unlock();
         }
 
-        JSON_Array *dns = json_object_dotget_array(matched_policy, "egress.properties.dns");
+        JSON_Array *dns = json_object_dotget_array(matched_policy, "egress.certificate.dnsNames");
         if (dns == NULL)
-            dns = json_object_dotget_array(matched_policy, "properties.dns");
+            dns = json_object_dotget_array(matched_policy, "certificate.dnsNames");
         if (dns != NULL)
         {
             int dns_len = 0;
