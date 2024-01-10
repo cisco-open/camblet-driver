@@ -119,7 +119,7 @@ cd nasp
 GOOS=linux make build
 
 # But you need to run it in the VM, where the device is exposed
-lima sudo build/nasp agent 
+lima sudo build/nasp agent --policies-path $(pwd)/nasp.d/policies --services-path $(pwd)/nasp.d/services
 ```
 
 Then follow the instructions [here](https://github.com/cisco-open/nasp#cli).
