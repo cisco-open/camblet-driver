@@ -60,8 +60,16 @@ xwc_end_chain(const br_x509_class **ctx)
     mini_cc = &nasp_cc->ctx;
 
     unsigned int err = mini_cc->vtable->end_chain(&mini_cc->vtable);
-    if (err)
+
+    if (err == BR_ERR_X509_NOT_TRUSTED && nasp_cc->insecure)
+    {
+        pr_warn("end chain error # err[%d], but using skip-verify now", err);
+        return 0;
+    }
+    else if (err != 0)
+    {
         return err;
+    }
 
     int i, k;
     bool allowed = true;
@@ -119,10 +127,11 @@ static const br_x509_class x509_nasp_vtable = {
     xwc_get_pkey,
 };
 
-void br_x509_nasp_init(br_x509_nasp_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context)
+void br_x509_nasp_init(br_x509_nasp_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context, bool insecure)
 {
     ctx->vtable = &x509_nasp_vtable;
     ctx->socket_context = socket_context;
+    ctx->insecure = insecure;
 
     br_name_element *name_elts = kmalloc(sizeof(br_name_element) * 3, GFP_KERNEL);
 

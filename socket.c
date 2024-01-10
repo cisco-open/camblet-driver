@@ -35,8 +35,10 @@
 #include "augmentation.h"
 #include "json.h"
 #include "sd.h"
+#include "nasp.h"
 
 const char *ALPNs[] = {
+	"http/1.1",
 	"nasp",
 };
 
@@ -76,6 +78,8 @@ struct nasp_socket
 	csr_parameters *parameters;
 
 	x509_certificate *cert;
+
+	char *hostname;
 
 	proxywasm *p;
 	proxywasm_context *pc;
@@ -322,6 +326,11 @@ static void nasp_socket_free(nasp_socket *s)
 			kfree(s->cc);
 		}
 
+		if (s->hostname)
+		{
+			kfree(s->hostname);
+		}
+
 		br_x509_nasp_free(&s->xc);
 
 		opa_socket_context_free(s->opa_socket_ctx);
@@ -363,7 +372,7 @@ int proxywasm_attach(proxywasm *p, nasp_socket *s, ListenerDirection direction, 
 	return 0;
 }
 
-static nasp_socket *nasp_socket_accept(struct sock *sock, opa_socket_context opa_socket_ctx)
+static nasp_socket *nasp_new_server_socket(struct sock *sock, opa_socket_context opa_socket_ctx)
 {
 	nasp_socket *s = kzalloc(sizeof(nasp_socket), GFP_KERNEL);
 	s->sc = kzalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
@@ -396,7 +405,7 @@ static nasp_socket *nasp_socket_accept(struct sock *sock, opa_socket_context opa
 	return s;
 }
 
-static nasp_socket *nasp_socket_connect(struct sock *sock, opa_socket_context opa_socket_ctx)
+static nasp_socket *nasp_new_client_socket(struct sock *sock, opa_socket_context opa_socket_ctx)
 {
 	nasp_socket *s = kzalloc(sizeof(nasp_socket), GFP_KERNEL);
 	s->cc = kzalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
@@ -728,20 +737,20 @@ static int configure_ktls_sock(nasp_socket *s)
 	pr_debug("configure kTLS for output # command[%s] cipher_suite[%x] version[%x] iv[%.*s]", current->comm, params->cipher_suite, params->version, 12, eng->out.chapol.iv);
 	pr_debug("configure kTLS for input # command[%s] cipher_suite[%x] version[%x] iv[%.*s]", current->comm, params->cipher_suite, params->version, 12, eng->in.chapol.iv);
 
-	struct tls12_crypto_info_chacha20_poly1305 crypto_info_tx;
-	crypto_info_tx.info.version = TLS_1_2_VERSION;
-	crypto_info_tx.info.cipher_type = TLS_CIPHER_CHACHA20_POLY1305;
+	struct tls12_crypto_info_chacha20_poly1305 crypto_info_tx = {.info = {.version = TLS_1_2_VERSION,
+																		  .cipher_type = TLS_CIPHER_CHACHA20_POLY1305}};
 	memcpy(crypto_info_tx.iv, eng->out.chapol.iv, TLS_CIPHER_CHACHA20_POLY1305_IV_SIZE);
 	memcpy(crypto_info_tx.key, eng->out.chapol.key, TLS_CIPHER_CHACHA20_POLY1305_KEY_SIZE);
-	memcpy(crypto_info_tx.rec_seq, &eng->out.chapol.seq, TLS_CIPHER_CHACHA20_POLY1305_REC_SEQ_SIZE);
-	// memcpy(crypto_info.salt, eng->out.chapol.salt, TLS_CIPHER_CHACHA20_POLY1305_SALT_SIZE);
+	uint64_t outseq = m3_bswap64(eng->out.chapol.seq);
+	memcpy(crypto_info_tx.rec_seq, &outseq, TLS_CIPHER_CHACHA20_POLY1305_REC_SEQ_SIZE);
+	//  memcpy(crypto_info.salt, eng->out.chapol.salt, TLS_CIPHER_CHACHA20_POLY1305_SALT_SIZE);
 
-	struct tls12_crypto_info_chacha20_poly1305 crypto_info_rx;
-	crypto_info_rx.info.version = TLS_1_2_VERSION;
-	crypto_info_rx.info.cipher_type = TLS_CIPHER_CHACHA20_POLY1305;
+	struct tls12_crypto_info_chacha20_poly1305 crypto_info_rx = {.info = {.version = TLS_1_2_VERSION,
+																		  .cipher_type = TLS_CIPHER_CHACHA20_POLY1305}};
 	memcpy(crypto_info_rx.iv, eng->in.chapol.iv, TLS_CIPHER_CHACHA20_POLY1305_IV_SIZE);
 	memcpy(crypto_info_rx.key, eng->in.chapol.key, TLS_CIPHER_CHACHA20_POLY1305_KEY_SIZE);
-	memcpy(crypto_info_rx.rec_seq, &eng->in.chapol.seq, TLS_CIPHER_CHACHA20_POLY1305_REC_SEQ_SIZE);
+	uint64_t inseq = m3_bswap64(eng->in.chapol.seq);
+	memcpy(crypto_info_rx.rec_seq, &inseq, TLS_CIPHER_CHACHA20_POLY1305_REC_SEQ_SIZE);
 	// memcpy(crypto_info.salt, eng->out.chapol.salt, TLS_CIPHER_CHACHA20_POLY1305_SALT_SIZE);
 
 	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TCP, TCP_ULP, KERNEL_SOCKPTR("tls"), sizeof("tls"));
@@ -758,6 +767,13 @@ static int configure_ktls_sock(nasp_socket *s)
 		return ret;
 	}
 
+	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TLS, TLS_RX, KERNEL_SOCKPTR(&crypto_info_rx), sizeof(crypto_info_rx));
+	if (ret != 0)
+	{
+		pr_err("could not set sockopt TLS_RX # command[%s] err[%d]", current->comm, ret);
+		return ret;
+	}
+
 	// unsigned int yes = 1;
 	// ret = c->sock->sk_prot->setsockopt(c->sock, SOL_TLS, TLS_TX_ZEROCOPY_RO, KERNEL_SOCKPTR(&yes), sizeof(yes));
 	// if (ret != 0)
@@ -765,13 +781,6 @@ static int configure_ktls_sock(nasp_socket *s)
 	// 	pr_err("could not set sockopt TLS_TX_ZEROCOPY_RO # command[%s] err[%d]", current->comm, ret);
 	// 	return ret;
 	// }
-
-	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TLS, TLS_RX, KERNEL_SOCKPTR(&crypto_info_rx), sizeof(crypto_info_rx));
-	if (ret != 0)
-	{
-		pr_err("could not set sockopt TLS_RX # command[%s] err[%d]", current->comm, ret);
-		return ret;
-	}
 
 	// We have to save the proto here because the setsockopt calls override the TCP protocol.
 	// later those methods set by ktls has to be used to read and write data, but first we
@@ -799,6 +808,53 @@ static int configure_ktls_sock(nasp_socket *s)
 	return 0;
 }
 
+bool sockptr_is_nasp(sockptr_t sp)
+{
+	char value[4];
+	copy_from_sockptr(value, sp, 4);
+	return strncmp(value, "nasp", 4) == 0;
+}
+
+// We intercept this call to set the socket options for setting up a simple TLS connection.
+int nasp_setsockopt(struct sock *sk, int level,
+					int optname, sockptr_t optval,
+					unsigned int optlen)
+{
+	printk(KERN_INFO "nasp_setsockopt called # command[%s] sk[%p] level[%d] optname[%d] optlen[%d]\n", current->comm, sk, level, optname, optlen);
+
+	if (level == SOL_TCP && optname == TCP_ULP)
+	{
+		// check if optval is "nasp"
+		if (optlen == sizeof("nasp") && sockptr_is_nasp(optval))
+		{
+			opa_socket_context opa_socket_ctx = {.allowed = true, .passthrough = false, .mtls = false};
+			nasp_socket *s = nasp_new_client_socket(sk, opa_socket_ctx);
+
+			sk->sk_user_data = s;
+
+			return 0;
+		}
+	}
+	else if (level == SOL_NASP)
+	{
+		if (optname == NASP_HOSTNAME)
+		{
+			nasp_socket *s = sk->sk_user_data;
+			if (!s)
+			{
+				pr_err("nasp_setsockopt error: sk_user_data is NULL # command[%s]", current->comm);
+				return -1;
+			}
+
+			s->hostname = kzalloc(optlen, GFP_KERNEL);
+			copy_from_sockptr(s->hostname, optval, optlen);
+			return 0;
+		}
+	}
+
+	return tcp_setsockopt(sk, level, optname, optval, optlen);
+}
+
 // a function to evaluate the connection if it should be intercepted, now with opa
 static opa_socket_context socket_eval(const char *input)
 {
@@ -807,9 +863,15 @@ static opa_socket_context socket_eval(const char *input)
 
 struct sock *(*accept)(struct sock *sk, int flags, int *err, bool kern);
 int (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
+int (*setsockopt)(struct sock *sk, int level,
+				  int optname, sockptr_t optval,
+				  unsigned int optlen);
 
 struct sock *(*accept_v6)(struct sock *sk, int flags, int *err, bool kern);
 int (*connect_v6)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
+int (*setsockopt_v6)(struct sock *sk, int level,
+					 int optname, sockptr_t optval,
+					 unsigned int optlen);
 
 // lock cert generation
 static DEFINE_MUTEX(cert_gen_lock);
@@ -1142,6 +1204,12 @@ static int br_low_write(void *ctx, const unsigned char *buf, size_t len)
 
 opa_socket_context enriched_socket_eval(direction direction, struct sock *sk, int port)
 {
+	// we take a shortcut if the socket is already augmented for example through setsockopt
+	if (sk->sk_user_data)
+	{
+		return ((nasp_socket *)sk->sk_user_data)->opa_socket_ctx;
+	}
+
 	service_discovery_entry *sd_entry = NULL;
 	opa_socket_context opa_socket_ctx = {0};
 
@@ -1214,7 +1282,8 @@ void nasp_configure_server_tls(nasp_socket *sc)
 		br_x509_minimal_init_full(&sc->xc.ctx, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
 		br_ssl_server_set_trust_anchor_names_alt(sc->sc, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
 
-		br_x509_nasp_init(&sc->xc, &sc->sc->eng, &sc->opa_socket_ctx);
+		bool insecure;
+		br_x509_nasp_init(&sc->xc, &sc->sc->eng, &sc->opa_socket_ctx, insecure = false);
 		br_ssl_engine_set_default_rsavrfy(&sc->sc->eng);
 	}
 
@@ -1241,7 +1310,7 @@ void nasp_configure_server_tls(nasp_socket *sc)
 	br_sslio_init(&sc->ioc, &sc->sc->eng, br_low_read, sc, br_low_write, sc);
 }
 
-void nasp_configure_client_tls(nasp_socket *sc, const char *server_name)
+void nasp_configure_client_tls(nasp_socket *sc)
 {
 	/*
 	 * Initialise the context with the cipher suites and
@@ -1256,9 +1325,28 @@ void nasp_configure_client_tls(nasp_socket *sc, const char *server_name)
 	 *   EC key, cert signed with ECDSA: ECDH_ECDSA or ECDHE_ECDSA
 	 *   EC key, cert signed with RSA: ECDH_RSA or ECDHE_ECDSA
 	 */
-	br_ssl_client_init_full(sc->cc, &sc->xc.ctx, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
+	int trust_anchors_len = 0;
+	br_x509_trust_anchor *trust_anchors = NULL;
 
-	br_x509_nasp_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx);
+	if (sc->cert && sc->cert->trust_anchors)
+	{
+		trust_anchors_len = sc->cert->trust_anchors_len;
+		trust_anchors = sc->cert->trust_anchors;
+	}
+
+	br_ssl_client_init_full(sc->cc, &sc->xc.ctx, trust_anchors, trust_anchors_len);
+
+	// Currently we need to enforce our one and only cipher suite,
+	// from where we can extract kTLS paramaters.
+	static const uint16_t suites[] = {
+		BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+	};
+
+	br_ssl_engine_set_suites(&sc->cc->eng, suites,
+							 (sizeof suites) / (sizeof suites[0]));
+
+	bool insecure;
+	br_x509_nasp_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx, insecure = trust_anchors_len == 0);
 
 	// mTLS enablement
 	if (sc->opa_socket_ctx.mtls)
@@ -1283,7 +1371,7 @@ void nasp_configure_client_tls(nasp_socket *sc, const char *server_name)
 	 * target host name: it will be used for the SNI extension. The
 	 * last parameter is 0: we are not trying to resume a session.
 	 */
-	if (br_ssl_client_reset(sc->cc, server_name, false) != 1)
+	if (br_ssl_client_reset(sc->cc, sc->hostname, false) != 1)
 	{
 		pr_err("br_ssl_client_reset error");
 	}
@@ -1329,7 +1417,7 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	if (opa_socket_ctx.allowed)
 	{
-		sc = nasp_socket_accept(client_sk, opa_socket_ctx);
+		sc = nasp_new_server_socket(client_sk, opa_socket_ctx);
 		if (!sc)
 		{
 			pr_err("could not create nasp socket");
@@ -1370,7 +1458,7 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
 	u16 port = ntohs(usin->sin_port);
-	nasp_socket *sc = NULL;
+	nasp_socket *sc = sk->sk_user_data;
 
 	int err;
 	struct proto *prot;
@@ -1391,8 +1479,8 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		goto error;
 	}
 
-	// return if the agent is not running
-	if (atomic_read(&already_open) == CDEV_NOT_USED)
+	// return if the agent is not running, and we don't have a socket context attached to the socket
+	if (sc == NULL && atomic_read(&already_open) == CDEV_NOT_USED)
 	{
 		return err;
 	}
@@ -1401,27 +1489,31 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	if (opa_socket_ctx.allowed)
 	{
-		sc = nasp_socket_connect(sk, opa_socket_ctx);
 		if (!sc)
 		{
-			pr_err("could not create nasp socket");
-			goto error;
+			sc = nasp_new_client_socket(sk, opa_socket_ctx);
+			if (!sc)
+			{
+				pr_err("could not create nasp socket");
+				goto error;
+			}
 		}
 
 		pr_debug("connect # command[%s] uid[%d] destination_port[%d]", current->comm, current_uid().val, port);
 
-		const char *server_name = NULL; // TODO, this needs to be sourced down here
-
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
 
-		int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.id);
-		if (result == -1)
+		if (sc->opa_socket_ctx.mtls)
 		{
-			goto error;
+			int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.id);
+			if (result == -1)
+			{
+				goto error;
+			}
 		}
 
-		nasp_configure_client_tls(sc, server_name);
+		nasp_configure_client_tls(sc);
 
 		// We should save the ssl context here to the socket
 		// and overwrite the socket protocol with our own
@@ -1451,18 +1543,24 @@ int socket_init(void)
 	}
 
 	// let's overwrite tcp_prot with our own implementation
+
+	// save original tcp_prot methods first
 	accept = tcp_prot.accept;
 	connect = tcp_prot.connect;
+	setsockopt = tcp_prot.setsockopt;
 
-	// let's overwrite tcp_prot with our own implementation
 	accept_v6 = tcpv6_prot.accept;
 	connect_v6 = tcpv6_prot.connect;
+	setsockopt_v6 = tcpv6_prot.setsockopt;
 
+	// overwrite tcp_prot with our methods
 	tcp_prot.accept = nasp_accept;
 	tcp_prot.connect = nasp_connect;
+	tcp_prot.setsockopt = nasp_setsockopt;
 
 	tcpv6_prot.accept = nasp_accept;
 	tcpv6_prot.connect = nasp_connect;
+	tcpv6_prot.setsockopt = nasp_setsockopt;
 
 	memcpy(&nasp_prot, &tcp_prot, sizeof(nasp_prot));
 	nasp_prot.recvmsg = nasp_recvmsg;
@@ -1499,9 +1597,11 @@ void socket_exit(void)
 {
 	tcp_prot.accept = accept;
 	tcp_prot.connect = connect;
+	tcp_prot.setsockopt = setsockopt;
 
 	tcpv6_prot.accept = accept_v6;
 	tcpv6_prot.connect = connect_v6;
+	tcpv6_prot.setsockopt = setsockopt_v6;
 
 	//- free global tls key
 	free_rsa_private_key(rsa_priv);
