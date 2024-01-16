@@ -820,8 +820,6 @@ int nasp_setsockopt(struct sock *sk, int level,
 					int optname, sockptr_t optval,
 					unsigned int optlen)
 {
-	printk(KERN_INFO "nasp_setsockopt called # command[%s] sk[%p] level[%d] optname[%d] optlen[%d]\n", current->comm, sk, level, optname, optlen);
-
 	if (level == SOL_TCP && optname == TCP_ULP)
 	{
 		// check if optval is "nasp"
