@@ -26,9 +26,10 @@ typedef struct br_x509_nasp_context
     const br_x509_class *vtable;
     br_x509_minimal_context ctx;
     opa_socket_context *socket_context;
+    bool insecure;
 } br_x509_nasp_context;
 
-void br_x509_nasp_init(br_x509_nasp_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context);
+void br_x509_nasp_init(br_x509_nasp_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context, bool insecure);
 void br_x509_nasp_free(br_x509_nasp_context *ctx);
 
 #endif
