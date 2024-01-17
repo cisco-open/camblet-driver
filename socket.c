@@ -1439,7 +1439,7 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		// We should save the ssl context here to the socket
 		// and overwrite the socket protocol with our own
 		client_sk->sk_user_data = sc;
-		client_sk->sk_prot = prot;
+		*client_sk->sk_prot = *prot;
 	}
 
 	return client_sk;
@@ -1516,7 +1516,7 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		// We should save the ssl context here to the socket
 		// and overwrite the socket protocol with our own
 		sk->sk_user_data = sc;
-		sk->sk_prot = prot;
+		*sk->sk_prot = *prot;
 	}
 
 	return err;
