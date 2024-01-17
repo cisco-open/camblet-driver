@@ -108,6 +108,8 @@ struct nasp_socket
 						struct msghdr *msg,
 						size_t size);
 
+	void (*ktls_close)(struct sock *sk, long timeout);
+
 	nasp_send_msg *send_msg;
 	nasp_recv_msg *recv_msg;
 };
@@ -668,14 +670,22 @@ bail:
 
 void nasp_close(struct sock *sk, long timeout)
 {
+	void (*close)(struct sock *sk, long timeout) = tcp_close;
 	nasp_socket *s = READ_ONCE(sk->sk_user_data);
+
 	if (s)
 	{
+		if (s->ktls_close)
+		{
+			close = READ_ONCE(s->ktls_close);
+		}
+
 		pr_debug("free nasp socket # command[%s] sk[%p]", current->comm, sk);
 		nasp_socket_free(s);
 		WRITE_ONCE(sk->sk_user_data, NULL);
 	}
-	tcp_close(sk, timeout);
+
+	close(sk, timeout);
 }
 
 // analyze tls_main.c to find out what we need to implement: check build_protos()
@@ -710,7 +720,11 @@ void ensure_nasp_ktls_prot(struct sock *sock, struct proto *nasp_ktls_prot)
 		nasp_ktls_prot->setsockopt = setsockopt;
 		nasp_ktls_prot->getsockopt = getsockopt;
 		nasp_ktls_prot->sock_is_readable = sock_is_readable;
-		WRITE_ONCE(nasp_ktls_prot->close, close);
+
+		nasp_ktls_prot->recvmsg = nasp_recvmsg;
+		nasp_ktls_prot->sendmsg = nasp_sendmsg;
+
+		WRITE_ONCE(nasp_ktls_prot->close, nasp_close);
 	}
 }
 
@@ -753,6 +767,10 @@ static int configure_ktls_sock(nasp_socket *s)
 	memcpy(crypto_info_rx.rec_seq, &inseq, TLS_CIPHER_CHACHA20_POLY1305_REC_SEQ_SIZE);
 	// memcpy(crypto_info.salt, eng->out.chapol.salt, TLS_CIPHER_CHACHA20_POLY1305_SALT_SIZE);
 
+	// We have to set the protocol to the original here because the kTLS proto gets created from the sockets original protocol,
+	// so if it contains the nasp protocol parts it will spread to places where kTLS is used but nasp is not.
+	s->sock->sk_prot = s->sock->sk_family == AF_INET6 ? &tcpv6_prot : &tcp_prot;
+
 	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TCP, TCP_ULP, KERNEL_SOCKPTR("tls"), sizeof("tls"));
 	if (ret != 0)
 	{
@@ -787,6 +805,7 @@ static int configure_ktls_sock(nasp_socket *s)
 	// need to put back our read and write methods.
 	s->ktls_recvmsg = s->sock->sk_prot->recvmsg;
 	s->ktls_sendmsg = s->sock->sk_prot->sendmsg;
+	s->ktls_close = s->sock->sk_prot->close;
 
 	struct proto *ktls_prot;
 	if (s->sock->sk_family == AF_INET)
@@ -815,7 +834,10 @@ bool sockptr_is_nasp(sockptr_t sp)
 	return strncmp(value, "nasp", 4) == 0;
 }
 
-// We intercept this call to set the socket options for setting up a simple TLS connection.
+// Let's intercept this call to set the socket options for setting up a simple TLS connection.
+//
+// TODO:
+// We should put this method back to the proto after kTLS is configured, because kTLS will override this method.
 int nasp_setsockopt(struct sock *sk, int level,
 					int optname, sockptr_t optval,
 					unsigned int optlen)
@@ -1439,7 +1461,7 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 		// We should save the ssl context here to the socket
 		// and overwrite the socket protocol with our own
 		client_sk->sk_user_data = sc;
-		client_sk->sk_prot = prot;
+		WRITE_ONCE(client_sk->sk_prot, prot);
 	}
 
 	return client_sk;
@@ -1516,7 +1538,7 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		// We should save the ssl context here to the socket
 		// and overwrite the socket protocol with our own
 		sk->sk_user_data = sc;
-		sk->sk_prot = prot;
+		WRITE_ONCE(sk->sk_prot, prot);
 	}
 
 	return err;
