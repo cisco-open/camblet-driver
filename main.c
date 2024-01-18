@@ -28,7 +28,7 @@
 MODULE_AUTHOR("Camblet Maintainers <team@camblet.io>");
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_DESCRIPTION("Camblet - Kernel Space Access Control for Zero Trust Networking");
-MODULE_VERSION("0.3.0");
+MODULE_VERSION("0.5.0");
 MODULE_SOFTDEP("pre: tls");
 
 static bool proxywasm_modules = false;

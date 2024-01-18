@@ -1,3 +1,10 @@
+camblet-driver (0.5.0) unstable; urgency=medium
+
+  * Contains a fix for KTLS issues
+  * Project and code structure renaming
+
+ -- Camblet maintainers <team@camblet.io>  Thu, 18 Dec 2024 21:35:07 +0100
+
 camblet-driver (0.4.0) unstable; urgency=medium
 
   * Create a new make target bump version (#128)
