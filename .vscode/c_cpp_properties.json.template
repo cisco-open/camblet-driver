@@ -1,6 +1,6 @@
 {
     "env": {
-        "linux-src": "./linux/"
+        "linux-src": "../linux/"
     },
     "configurations": [
         {
