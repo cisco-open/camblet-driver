@@ -1,10 +1,10 @@
-# nasp-kernel-module
+# camblet-driver
 
-[![Makefile CI](https://github.com/cisco-open/nasp-kernel-module/actions/workflows/build.yml/badge.svg)](https://github.com/cisco-open/nasp-kernel-module/actions/workflows/build.yml)
+[![Makefile CI](https://github.com/cisco-open/camblet-driver/actions/workflows/build.yml/badge.svg)](https://github.com/cisco-open/camblet-driver/actions/workflows/build.yml)
 
 ## Introduction
 
-The *nasp-kernel-module* is the supporting Linux kernel module for the [Nasp](https://github.com/cisco-open/nasp) system. It is capable of enhancing plain old TCP sockets in a frictionless way so that application developers can focus on their business logic instead of dealing with the complexity of TLS, mTLS, and other security-related concerns. It is doing this seamlessly, no code changes or re-compilations or re-deployments are required.
+The *camblet-driver* is the supporting Linux kernel module for the [Camblet](https://github.com/cisco-open/camblet) system. It is capable of enhancing plain old TCP sockets in a frictionless way so that application developers can focus on their business logic instead of dealing with the complexity of TLS, mTLS, and other security-related concerns. It is doing this seamlessly, no code changes or re-compilations or re-deployments are required.
 
 The features are the following:
 
@@ -31,8 +31,8 @@ Current restrictions for kernel-space wasm3:
 Checkout the code before you start:
 
 ```bash
-git clone --recurse-submodules https://github.com/cisco-open/nasp-kernel-module.git
-cd nasp-kernel-module
+git clone --recurse-submodules https://github.com/cisco-open/camblet-driver.git
+cd camblet-driver
 ```
 
 ### Lima
@@ -82,7 +82,7 @@ make setup-dev-env
 
 *This assumes that you have created a development environment according to the previous section.*
 
-Build the kernel modules(BearSSL and NASP):
+Build the kernel modules(BearSSL and Camblet):
 
 ```bash
 # Enter the VM
@@ -92,13 +92,13 @@ lima
 make -j$(nproc)
 ```
 
-Load the kernel modules(BearSSL and NASP):
+Load the kernel modules(BearSSL and Camblet):
 
 ```bash
 make insmod
 ```
 
-Unload the kernel modules(BearSSL and NASP):
+Unload the kernel modules(BearSSL and Camblet):
 
 ```bash
 make rmmod
@@ -110,19 +110,19 @@ Follow the kernel logs:
 make logs
 ```
 
-Install the [CLI](https://github.com/cisco-open/nasp) for the kernel module:
+Install the [CLI](https://github.com/cisco-open/camblet) for the kernel module:
 
 ```bash
 # You can build the module on your workstation
-git clone https://github.com/cisco-open/nasp.git
-cd nasp
+git clone https://github.com/cisco-open/camblet.git
+cd camblet
 GOOS=linux make build
 
 # But you need to run it in the VM, where the device is exposed
-lima sudo build/nasp agent --policies-path $(pwd)/nasp.d/policies --services-path $(pwd)/nasp.d/services
+lima sudo build/camblet agent --policies-path $(pwd)/camblet.d/policies --services-path $(pwd)/camblet.d/services
 ```
 
-Then follow the instructions [here](https://github.com/cisco-open/nasp#cli).
+Then follow the instructions [here](https://github.com/cisco-open/camblet#cli).
 
 ## TLS Termination
 
@@ -137,7 +137,7 @@ Most of the logs of this module are on debug level and can be shown using [dynam
 Use the following command to turn on debug level logging for the module:
 
 ```bash
-echo -n '-p; module nasp file opa.c  +pftl' | sudo tee /proc/dynamic_debug/control > /dev/null
+echo -n '-p; module camblet file opa.c  +pftl' | sudo tee /proc/dynamic_debug/control > /dev/null
 ```
 
 ### Test mTLS
@@ -190,21 +190,21 @@ On Amazon Linux:
 sudo dnf install dkms
 ```
 
-#### Prepare the NASP kernel module
+#### Prepare the Camblet kernel module
 
-The NASP can be installed with DKMS in the following way currently:
+The Camblet can be installed with DKMS in the following way currently:
 
 ```bash
-sudo git clone --recurse-submodule https://github.com/cisco-open/nasp-kernel-module.git /usr/src/nasp-0.4.0/
+sudo git clone --recurse-submodule https://github.com/cisco-open/camblet-driver.git /usr/src/camblet-0.4.0/
 
 # Add the kernel module to the DKMS source control
-sudo dkms add -m nasp -v 0.4.0
+sudo dkms add -m camblet -v 0.4.0
 
 # Build and install the kernel module against the current kernel version
-sudo dkms install -m nasp -v 0.4.0
+sudo dkms install -m camblet -v 0.4.0
 
 # Load the kernel module
-sudo modprobe nasp
+sudo modprobe camblet
 
 # Check the logs that the module got loaded
 sudo dmesg -T
@@ -214,11 +214,11 @@ Un-installation is very simple as well:
 
 ```bash
 # Unload the kernel module
-sudo modprobe -r nasp
+sudo modprobe -r camblet
 
 # Remove the kernel module from DKMS source control
-sudo dkms uninstall -m nasp -v 0.4.0
-sudo dkms remove -m nasp -v 0.4.0
+sudo dkms uninstall -m camblet -v 0.4.0
+sudo dkms remove -m camblet -v 0.4.0
 ```
 
 ### Debian package
@@ -242,7 +242,7 @@ make deb
 The package can be installed with the following command:
 
 ```bash
-sudo apt install ../nasp-kernel-module_0.4.0-1_all.deb
+sudo apt install ../camblet-driver_0.4.0-1_all.deb
 ```
 
 ### RPM package
@@ -266,5 +266,5 @@ make rpm
 The package can be installed with the following command:
 
 ```bash
-sudo dnf install ../nasp-kernel-module-0.4.0-1.noarch.rpm
+sudo dnf install ../camblet-driver-0.4.0-1.noarch.rpm
 ```

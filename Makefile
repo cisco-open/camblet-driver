@@ -37,8 +37,8 @@ ccflags-remove-y += -Wdeclaration-after-statement
 VERBOSE := 1
 
 # obj-m specifies we're a kernel module.
-obj-m += nasp.o
-nasp-objs :=  third-party/wasm3/source/m3_api_libc.o \
+obj-m += camblet.o
+camblet-objs :=  third-party/wasm3/source/m3_api_libc.o \
               third-party/wasm3/source/m3_compile.o \
 			  third-party/wasm3/source/m3_api_meta_wasi.o \
 			  third-party/wasm3/source/m3_api_tracer.o \
@@ -114,13 +114,13 @@ insmod-bearssl: insmod-tls
 
 insmod: insmod-bearssl
 	$(eval ktls_available := $(shell lsmod | grep -w tls > /dev/null && echo 1 || echo 0))
-	sudo insmod nasp.ko dyndbg==_ ktls_available=$(ktls_available)
+	sudo insmod camblet.ko dyndbg==_ ktls_available=$(ktls_available)
 
 insmod-with-proxywasm: insmod-bearssl
-	sudo insmod nasp.ko proxywasm_modules=1
+	sudo insmod camblet.ko proxywasm_modules=1
 
 rmmod:
-	sudo rmmod nasp
+	sudo rmmod camblet
 	sudo rmmod bearssl
 
 _debian_deps:
@@ -164,22 +164,22 @@ setup-dev-env:
 
 # Usage: make debug LINE=get_command+0x88/0x130
 debug:
-	sudo addr2line -e nasp.ko $(LINE)
+	sudo addr2line -e camblet.ko $(LINE)
 
 deb:
 	$(eval PACKAGE_VERSION := $(shell dpkg-parsechangelog -S Version | cut -d'-' -f1))
 	make clean
-	rm -f ../nasp-kernel-module_$(PACKAGE_VERSION).orig.tar.xz
-	tar --exclude='./.git' --exclude='linux' --exclude='rpmbuild' --exclude 'debian' -cvJf ../nasp-kernel-module_$(PACKAGE_VERSION).orig.tar.xz .
+	rm -f ../camblet-driver_$(PACKAGE_VERSION).orig.tar.xz
+	tar --exclude='./.git' --exclude='linux' --exclude='rpmbuild' --exclude 'debian' -cvJf ../camblet-driver_$(PACKAGE_VERSION).orig.tar.xz .
 	dpkg-buildpackage -tc
 
 rpm:
-	$(eval PACKAGE_VERSION := $(shell rpm -q --qf '%{VERSION}' --specfile rpmbuild/SPECS/nasp-kernel-module.spec))
+	$(eval PACKAGE_VERSION := $(shell rpm -q --qf '%{VERSION}' --specfile rpmbuild/SPECS/camblet-driver.spec))
 	make clean
-	rm -f rpmbuild/SOURCES/nasp-kernel-module-*.tar.xz
+	rm -f rpmbuild/SOURCES/camblet-driver-*.tar.xz
 	mkdir -p rpmbuild/SOURCES
-	tar --exclude='./.git' --exclude='linux' --exclude='rpmbuild' --exclude 'debian' -cvJf rpmbuild/SOURCES/nasp-kernel-module-$(PACKAGE_VERSION).tar.xz .
-	rpmbuild -v -ba --define '_topdir ${PWD}/rpmbuild/' rpmbuild/SPECS/nasp-kernel-module.spec
+	tar --exclude='./.git' --exclude='linux' --exclude='rpmbuild' --exclude 'debian' -cvJf rpmbuild/SOURCES/camblet-driver-$(PACKAGE_VERSION).tar.xz .
+	rpmbuild -v -ba --define '_topdir ${PWD}/rpmbuild/' rpmbuild/SPECS/camblet-driver.spec
 
 bump_version:
 	$(eval latest_tag := $(shell git fetch origin; git describe --tags --abbrev=0))

@@ -1,5 +1,5 @@
 #!/bin/sh
-# prerm script for nasp-kernel-module.
+# prerm script for camblet-driver.
 #
 # See: dh_installdeb(1).
 
@@ -20,21 +20,21 @@ echo "prerem called with params: $@"
 
 case "$1" in
     remove)
-        PACKAGE_VERSION=$(dpkg-query --showformat='${Version}' --show nasp-kernel-module | grep -oP '\b\d+\.\d+\.\d+\b')
+        PACKAGE_VERSION=$(dpkg-query --showformat='${Version}' --show camblet-driver | grep -oP '\b\d+\.\d+\.\d+\b')
 
-        if sudo systemctl status nasp &>/dev/null ; then
-            echo "Stopping nasp service"
-            sudo systemctl stop nasp
+        if sudo systemctl status camblet &>/dev/null ; then
+            echo "Stopping camblet service"
+            sudo systemctl stop camblet
         fi
 
-        sudo modprobe -r nasp || true
+        sudo modprobe -r camblet || true
 
-        if dkms status | grep nasp | grep "$PACKAGE_VERSION" ; then
-            echo "Removing nasp-kernel-module version $PACKAGE_VERSION"
-            # dkms uninstall -m nasp -v $PACKAGE_VERSION --all
-            dkms remove -m nasp -v $PACKAGE_VERSION --all
+        if dkms status | grep camblet | grep "$PACKAGE_VERSION" ; then
+            echo "Removing camblet-driver version $PACKAGE_VERSION"
+            # dkms uninstall -m camblet -v $PACKAGE_VERSION --all
+            dkms remove -m camblet -v $PACKAGE_VERSION --all
         else
-            echo "nasp-kernel-module version $PACKAGE_VERSION not found in DKMS"
+            echo "camblet-driver version $PACKAGE_VERSION not found in DKMS"
         fi
     ;;
 

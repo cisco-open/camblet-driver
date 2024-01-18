@@ -8,14 +8,14 @@
  * modified, or distributed except according to those terms.
  */
 
-#ifndef nasp_h
-#define nasp_h
+#ifndef camblet_h
+#define camblet_h
 
-#define SOL_NASP 7891
-#define NASP_HOSTNAME 1
+#define SOL_CAMBLET 7891
+#define CAMBLET_HOSTNAME 1
 
-typedef struct nasp_tls
+typedef struct camblet_tls
 {
-} nasp_tls;
+} camblet_tls;
 
-#endif /* nasp_h */
+#endif /* camblet_h */

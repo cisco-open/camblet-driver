@@ -1,20 +1,20 @@
-Document: nasp-kernel-module
-Title: Debian nasp-kernel-module Manual
+Document: camblet-driver
+Title: Debian camblet-driver Manual
 Author: <insert document author here>
-Abstract: This manual describes what nasp-kernel-module is
+Abstract: This manual describes what camblet-driver is
  and how it can be used to
  manage online manuals on Debian systems.
 Section: unknown
 
 Format: debiandoc-sgml
-Files: /usr/share/doc/nasp-kernel-module/nasp-kernel-module.sgml.gz
+Files: /usr/share/doc/camblet-driver/camblet-driver.sgml.gz
 
 Format: postscript
-Files: /usr/share/doc/nasp-kernel-module/nasp-kernel-module.ps.gz
+Files: /usr/share/doc/camblet-driver/camblet-driver.ps.gz
 
 Format: text
-Files: /usr/share/doc/nasp-kernel-module/nasp-kernel-module.text.gz
+Files: /usr/share/doc/camblet-driver/camblet-driver.text.gz
 
 Format: HTML
-Index: /usr/share/doc/nasp-kernel-module/html/index.html
-Files: /usr/share/doc/nasp-kernel-module/html/*.html
+Index: /usr/share/doc/camblet-driver/html/index.html
+Files: /usr/share/doc/camblet-driver/html/*.html

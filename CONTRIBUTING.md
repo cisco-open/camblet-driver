@@ -19,7 +19,7 @@ We use GitHub to host code, track issues or feature requests, and accept pull re
 
 ### Issues
 
-We use GitHub issues to track bugs and problems. Report a bug by [opening a new issue](https://github.com/cisco-open/nasp-kernel-module/issues).
+We use GitHub issues to track bugs and problems. Report a bug by [opening a new issue](https://github.com/cisco-open/camblet-driver/issues).
 
 Please format your issues in such a way as to help others who might be facing similar challenges.
 Give your issues meaningful titles, that offer context and help us and the community to understand and quickly ramp up on it.

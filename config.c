@@ -12,41 +12,41 @@
 
 #include "config.h"
 
-nasp_config *config;
+camblet_config *config;
 
-static DEFINE_MUTEX(nasp_config_mutex_lock);
+static DEFINE_MUTEX(camblet_config_mutex_lock);
 
-void nasp_config_lock(void)
+void camblet_config_lock(void)
 {
-    mutex_lock(&nasp_config_mutex_lock);
+    mutex_lock(&camblet_config_mutex_lock);
 }
 
-void nasp_config_unlock(void)
+void camblet_config_unlock(void)
 {
-    mutex_unlock(&nasp_config_mutex_lock);
+    mutex_unlock(&camblet_config_mutex_lock);
 }
 
-void nasp_config_init()
+void camblet_config_init()
 {
-    nasp_config_lock();
-    config = kzalloc(sizeof(nasp_config), GFP_KERNEL);
-    strlcpy(config->trust_domain, "nasp", MAX_TRUST_DOMAIN_LEN);
-    nasp_config_unlock();
+    camblet_config_lock();
+    config = kzalloc(sizeof(camblet_config), GFP_KERNEL);
+    strlcpy(config->trust_domain, "camblet", MAX_TRUST_DOMAIN_LEN);
+    camblet_config_unlock();
 }
 
-nasp_config *nasp_config_get_locked()
+camblet_config *camblet_config_get_locked()
 {
     return config;
 }
 
-void nasp_config_free()
+void camblet_config_free()
 {
-    nasp_config_lock();
+    camblet_config_lock();
     if (!config)
     {
         return;
     }
 
     kfree(config);
-    nasp_config_unlock();
+    camblet_config_unlock();
 }

@@ -1,5 +1,5 @@
 #!/bin/sh
-# preinst script for nasp-kernel-module.
+# preinst script for camblet-driver.
 #
 # See: dh_installdeb(1).
 

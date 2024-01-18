@@ -25,9 +25,9 @@
 #include "static/csr_wasm.h"
 #include "static/socket_wasm.h"
 
-MODULE_AUTHOR("Nasp Mainteiners <team@nasp.io>");
+MODULE_AUTHOR("Camblet Maintainers <team@camblet.io>");
 MODULE_LICENSE("Dual MIT/GPL");
-MODULE_DESCRIPTION("NASP - Kernel Space Access Control for Zero Trust Networking");
+MODULE_DESCRIPTION("Camblet - Kernel Space Access Control for Zero Trust Networking");
 MODULE_VERSION("0.3.0");
 MODULE_SOFTDEP("pre: tls");
 
@@ -39,9 +39,9 @@ bool ktls_available = true;
 module_param(ktls_available, bool, 0644);
 MODULE_PARM_DESC(ktls_available, "Marks if kTLS is available on the system");
 
-static int __init nasp_init(void)
+static int __init camblet_init(void)
 {
-    pr_info("module loaded at 0x%p running on %d CPUs", nasp_init, num_online_cpus());
+    pr_info("module loaded at 0x%p running on %d CPUs", camblet_init, num_online_cpus());
 
     wasm_vm_result result = wasm_vm_new_per_cpu();
     if (result.err)
@@ -50,7 +50,7 @@ static int __init nasp_init(void)
         return -1;
     }
 
-    nasp_config_init();
+    camblet_config_init();
     sd_table_init();
 
     int ret = 0;
@@ -92,17 +92,17 @@ static int __init nasp_init(void)
     return ret;
 }
 
-static void __exit nasp_exit(void)
+static void __exit camblet_exit(void)
 {
     socket_exit();
     chardev_exit();
     wasm_vm_destroy_per_cpu();
 
     sd_table_free();
-    nasp_config_free();
+    camblet_config_free();
 
-    pr_info("%s: module unloaded from 0x%p", KBUILD_MODNAME, nasp_exit);
+    pr_info("%s: module unloaded from 0x%p", KBUILD_MODNAME, camblet_exit);
 }
 
-module_init(nasp_init);
-module_exit(nasp_exit);
+module_init(camblet_init);
+module_exit(camblet_exit);

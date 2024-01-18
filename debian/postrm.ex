@@ -1,5 +1,5 @@
 #!/bin/sh
-# postrm script for nasp-kernel-module.
+# postrm script for camblet-driver.
 #
 # See: dh_installdeb(1).
 

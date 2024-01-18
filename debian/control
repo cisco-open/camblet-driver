@@ -1,4 +1,4 @@
-Source: nasp-kernel-module
+Source: camblet-driver
 Section: kernel
 Priority: optional
 Maintainer: Nandor Kracser <nandork@cisco.com>
@@ -6,13 +6,13 @@ Rules-Requires-Root: no
 Build-Depends:
  debhelper-compat (= 13),
 Standards-Version: 4.6.2
-Homepage: https://github.com/cisco-open/nasp-kernel-module
-Vcs-Browser: https://github.com/cisco-open/nasp-kernel-module
-Vcs-Git: https://github.com/cisco-open/nasp-kernel-module.git
+Homepage: https://github.com/cisco-open/camblet-driver
+Vcs-Browser: https://github.com/cisco-open/camblet-driver
+Vcs-Git: https://github.com/cisco-open/camblet-driver.git
 
-Package: nasp-kernel-module
+Package: camblet-driver
 Architecture: all
 Pre-Depends:
  ${misc:Depends},
  dkms
-Description: Kernel module for the NASP project.
+Description: Kernel module for the Camblet project.

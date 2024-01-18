@@ -35,32 +35,32 @@
 #include "augmentation.h"
 #include "json.h"
 #include "sd.h"
-#include "nasp.h"
+#include "camblet.h"
 
 const char *ALPNs[] = {
 	"http/1.1",
-	"nasp",
+	"camblet",
 };
 
 const size_t ALPNs_NUM = sizeof(ALPNs) / sizeof(ALPNs[0]);
 
 extern bool ktls_available;
 
-static struct proto nasp_prot;
-static struct proto nasp_ktls_prot;
-static struct proto nasp_v6_prot;
-static struct proto nasp_v6_ktls_prot;
+static struct proto camblet_prot;
+static struct proto camblet_ktls_prot;
+static struct proto camblet_v6_prot;
+static struct proto camblet_v6_ktls_prot;
 
 static br_rsa_private_key *rsa_priv;
 static br_rsa_public_key *rsa_pub;
 
-struct nasp_socket;
-typedef struct nasp_socket nasp_socket;
+struct camblet_socket;
+typedef struct camblet_socket camblet_socket;
 
-typedef int(nasp_send_msg)(nasp_socket *s, void *msg, size_t len);
-typedef int(nasp_recv_msg)(nasp_socket *s, void *buf, size_t len, int flags);
+typedef int(camblet_send_msg)(camblet_socket *s, void *msg, size_t len);
+typedef int(camblet_recv_msg)(camblet_socket *s, void *buf, size_t len, int flags);
 
-struct nasp_socket
+struct camblet_socket
 {
 	union
 	{
@@ -70,7 +70,7 @@ struct nasp_socket
 
 	unsigned char iobuf[BR_SSL_BUFSIZE_BIDI];
 	br_sslio_context ioc;
-	br_x509_nasp_context xc;
+	br_x509_camblet_context xc;
 	br_x509_class validator;
 
 	br_rsa_private_key *rsa_priv;
@@ -110,18 +110,18 @@ struct nasp_socket
 
 	void (*ktls_close)(struct sock *sk, long timeout);
 
-	nasp_send_msg *send_msg;
-	nasp_recv_msg *recv_msg;
+	camblet_send_msg *send_msg;
+	camblet_recv_msg *recv_msg;
 };
 
-static int get_read_buffer_capacity(nasp_socket *s);
+static int get_read_buffer_capacity(camblet_socket *s);
 
-static br_ssl_engine_context *get_ssl_engine_context(nasp_socket *s)
+static br_ssl_engine_context *get_ssl_engine_context(camblet_socket *s)
 {
 	return s->direction == ListenerDirectionInbound ? &s->sc->eng : &s->cc->eng;
 }
 
-static int ktls_send_msg(nasp_socket *s, void *msg, size_t len)
+static int ktls_send_msg(camblet_socket *s, void *msg, size_t len)
 {
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = msg, .iov_len = len};
@@ -131,7 +131,7 @@ static int ktls_send_msg(nasp_socket *s, void *msg, size_t len)
 	return s->ktls_sendmsg(s->sock, &hdr, len);
 }
 
-static int ktls_recv_msg(nasp_socket *s, void *buf, size_t size, int flags)
+static int ktls_recv_msg(camblet_socket *s, void *buf, size_t size, int flags)
 {
 	int buf_len = get_read_buffer_capacity(s);
 	struct msghdr hdr = {0};
@@ -147,7 +147,7 @@ static int ktls_recv_msg(nasp_socket *s, void *buf, size_t size, int flags)
 						   flags, &addr_len);
 }
 
-static int bearssl_send_msg(nasp_socket *s, void *src, size_t len)
+static int bearssl_send_msg(camblet_socket *s, void *src, size_t len)
 {
 	int err = br_sslio_write_all(&s->ioc, src, len);
 	if (err < 0)
@@ -193,7 +193,7 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 	return (int)alen;
 }
 
-static int bearssl_recv_msg(nasp_socket *s, void *dst, size_t len, int flags)
+static int bearssl_recv_msg(camblet_socket *s, void *dst, size_t len, int flags)
 {
 	int ret = br_sslio_read_with_flags(&s->ioc, dst, len, flags);
 	if (ret < 0)
@@ -211,7 +211,7 @@ static int bearssl_recv_msg(nasp_socket *s, void *dst, size_t len, int flags)
 	return ret;
 }
 
-static int plain_send_msg(nasp_socket *s, void *msg, size_t len)
+static int plain_send_msg(camblet_socket *s, void *msg, size_t len)
 {
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = msg, .iov_len = len};
@@ -221,7 +221,7 @@ static int plain_send_msg(nasp_socket *s, void *msg, size_t len)
 	return tcp_sendmsg(s->sock, &hdr, len);
 }
 
-static int plain_recv_msg(nasp_socket *s, void *buf, size_t size, int flags)
+static int plain_recv_msg(camblet_socket *s, void *buf, size_t size, int flags)
 {
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = buf, .iov_len = size};
@@ -236,65 +236,65 @@ static int plain_recv_msg(nasp_socket *s, void *buf, size_t size, int flags)
 					   flags, &addr_len);
 }
 
-static int nasp_socket_read(nasp_socket *s, void *dst, size_t len, int flags)
+static int camblet_socket_read(camblet_socket *s, void *dst, size_t len, int flags)
 {
 	return s->recv_msg(s, dst, len, flags);
 }
-static int nasp_socket_write(nasp_socket *s, void *src, size_t len)
+static int camblet_socket_write(camblet_socket *s, void *src, size_t len)
 {
 	return s->send_msg(s, src, len);
 }
 
-static char *get_read_buffer(nasp_socket *s)
+static char *get_read_buffer(camblet_socket *s)
 {
 	return s->read_buffer->data;
 }
 
-static char *get_read_buffer_for_read(nasp_socket *s, int len)
+static char *get_read_buffer_for_read(camblet_socket *s, int len)
 {
 	return buffer_access(s->read_buffer, len);
 }
 
-static int get_read_buffer_capacity(nasp_socket *s)
+static int get_read_buffer_capacity(camblet_socket *s)
 {
 	return s->read_buffer->capacity - s->read_buffer->size;
 }
 
-static int get_read_buffer_size(nasp_socket *s)
+static int get_read_buffer_size(camblet_socket *s)
 {
 	return s->read_buffer->size;
 }
 
-static void set_read_buffer_size(nasp_socket *s, int size)
+static void set_read_buffer_size(camblet_socket *s, int size)
 {
 	s->read_buffer->size = size;
 }
 
-static char *get_write_buffer(nasp_socket *s)
+static char *get_write_buffer(camblet_socket *s)
 {
 	return s->write_buffer->data;
 }
 
-static char *get_write_buffer_for_write(nasp_socket *s, int len)
+static char *get_write_buffer_for_write(camblet_socket *s, int len)
 {
 	return buffer_access(s->write_buffer, len);
 }
 
-static int get_write_buffer_size(nasp_socket *s)
+static int get_write_buffer_size(camblet_socket *s)
 {
 	return s->write_buffer->size;
 }
 
-static void set_write_buffer_size(nasp_socket *s, int size)
+static void set_write_buffer_size(camblet_socket *s, int size)
 {
 	s->write_buffer->size = size;
 }
 
-static void nasp_socket_free(nasp_socket *s)
+static void camblet_socket_free(camblet_socket *s)
 {
 	if (s)
 	{
-		pr_debug("free nasp socket # command[%s]", current->comm);
+		pr_debug("free camblet socket # command[%s]", current->comm);
 
 		if (s->p)
 		{
@@ -333,7 +333,7 @@ static void nasp_socket_free(nasp_socket *s)
 			kfree(s->hostname);
 		}
 
-		br_x509_nasp_free(&s->xc);
+		br_x509_camblet_free(&s->xc);
 
 		opa_socket_context_free(s->opa_socket_ctx);
 		buffer_free(s->read_buffer);
@@ -348,7 +348,7 @@ static void nasp_socket_free(nasp_socket *s)
 	}
 }
 
-int proxywasm_attach(proxywasm *p, nasp_socket *s, ListenerDirection direction, buffer_t *upstream_buffer, buffer_t *downstream_buffer)
+int proxywasm_attach(proxywasm *p, camblet_socket *s, ListenerDirection direction, buffer_t *upstream_buffer, buffer_t *downstream_buffer)
 {
 	wasm_vm_result res = proxywasm_create_context(p, upstream_buffer, downstream_buffer);
 	if (res.err)
@@ -374,9 +374,9 @@ int proxywasm_attach(proxywasm *p, nasp_socket *s, ListenerDirection direction, 
 	return 0;
 }
 
-static nasp_socket *nasp_new_server_socket(struct sock *sock, opa_socket_context opa_socket_ctx)
+static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_context opa_socket_ctx)
 {
-	nasp_socket *s = kzalloc(sizeof(nasp_socket), GFP_KERNEL);
+	camblet_socket *s = kzalloc(sizeof(camblet_socket), GFP_KERNEL);
 	s->sc = kzalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
 	s->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
 	s->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
@@ -399,7 +399,7 @@ static nasp_socket *nasp_new_server_socket(struct sock *sock, opa_socket_context
 
 		if (err != 0)
 		{
-			nasp_socket_free(s);
+			camblet_socket_free(s);
 			return NULL;
 		}
 	}
@@ -407,9 +407,9 @@ static nasp_socket *nasp_new_server_socket(struct sock *sock, opa_socket_context
 	return s;
 }
 
-static nasp_socket *nasp_new_client_socket(struct sock *sock, opa_socket_context opa_socket_ctx)
+static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_context opa_socket_ctx)
 {
-	nasp_socket *s = kzalloc(sizeof(nasp_socket), GFP_KERNEL);
+	camblet_socket *s = kzalloc(sizeof(camblet_socket), GFP_KERNEL);
 	s->cc = kzalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
 	s->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
 	s->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
@@ -432,7 +432,7 @@ static nasp_socket *nasp_new_client_socket(struct sock *sock, opa_socket_context
 
 		if (err != 0)
 		{
-			nasp_socket_free(s);
+			camblet_socket_free(s);
 			return NULL;
 		}
 	}
@@ -449,14 +449,14 @@ void dump_array(unsigned char array[], size_t len)
 	}
 }
 
-static int configure_ktls_sock(nasp_socket *s);
+static int configure_ktls_sock(camblet_socket *s);
 
-static bool nasp_socket_proxywasm_enabled(nasp_socket *s)
+static bool camblet_socket_proxywasm_enabled(camblet_socket *s)
 {
 	return s->pc != NULL;
 }
 
-static int ensure_tls_handshake(nasp_socket *s)
+static int ensure_tls_handshake(camblet_socket *s)
 {
 	int ret = 0;
 	char *protocol = READ_ONCE(s->protocol);
@@ -489,7 +489,7 @@ static int ensure_tls_handshake(nasp_socket *s)
 		if (protocol)
 		{
 			pr_debug("selected ALPN # command[%s] alpn[%s]", current->comm, protocol);
-			if (nasp_socket_proxywasm_enabled(s))
+			if (camblet_socket_proxywasm_enabled(s))
 				set_property_v(s->pc, "upstream.negotiated_protocol", protocol, strlen(protocol));
 		}
 		else
@@ -521,7 +521,7 @@ bail:
 }
 
 // returns continue (0), pause (1) or error (-1)
-static int nasp_socket_proxywasm_on_data(nasp_socket *s, int data_size, bool end_of_stream, bool send)
+static int camblet_socket_proxywasm_on_data(camblet_socket *s, int data_size, bool end_of_stream, bool send)
 {
 	int action = Pause;
 	proxywasm_lock(s->p, s->pc);
@@ -546,7 +546,7 @@ bail:
 	return action;
 }
 
-int nasp_recvmsg(struct sock *sock,
+int camblet_recvmsg(struct sock *sock,
 				 struct msghdr *msg,
 				 size_t size,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
@@ -557,7 +557,7 @@ int nasp_recvmsg(struct sock *sock,
 {
 	int ret, len;
 
-	nasp_socket *s = sock->sk_user_data;
+	camblet_socket *s = sock->sk_user_data;
 
 	ret = ensure_tls_handshake(s);
 	if (ret != 0)
@@ -577,7 +577,7 @@ int nasp_recvmsg(struct sock *sock,
 
 	while (action != Continue)
 	{
-		ret = nasp_socket_read(s, get_read_buffer_for_read(s, len), len, flags);
+		ret = camblet_socket_read(s, get_read_buffer_for_read(s, len), len, flags);
 		if (ret < 0)
 		{
 			if (ret == -ERESTARTSYS)
@@ -592,9 +592,9 @@ int nasp_recvmsg(struct sock *sock,
 
 		set_read_buffer_size(s, get_read_buffer_size(s) + ret);
 
-		if (nasp_socket_proxywasm_enabled(s))
+		if (camblet_socket_proxywasm_enabled(s))
 		{
-			action = nasp_socket_proxywasm_on_data(s, ret, end_of_stream, false);
+			action = camblet_socket_proxywasm_on_data(s, ret, end_of_stream, false);
 			if (action < 0)
 			{
 				ret = -1;
@@ -623,11 +623,11 @@ bail:
 	return ret;
 }
 
-int nasp_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
+int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 {
 	int ret, len;
 
-	nasp_socket *s = sock->sk_user_data;
+	camblet_socket *s = sock->sk_user_data;
 
 	ret = ensure_tls_handshake(s);
 	if (ret != 0)
@@ -639,9 +639,9 @@ int nasp_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	set_write_buffer_size(s, get_write_buffer_size(s) + len);
 
-	if (nasp_socket_proxywasm_enabled(s))
+	if (camblet_socket_proxywasm_enabled(s))
 	{
-		ret = nasp_socket_proxywasm_on_data(s, len, false, true);
+		ret = camblet_socket_proxywasm_on_data(s, len, false, true);
 		if (ret < 0)
 		{
 			goto bail;
@@ -654,7 +654,7 @@ int nasp_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 		}
 	}
 
-	ret = nasp_socket_write(s, get_write_buffer(s), get_write_buffer_size(s));
+	ret = camblet_socket_write(s, get_write_buffer(s), get_write_buffer_size(s));
 	if (ret < 0)
 	{
 		goto bail;
@@ -668,10 +668,10 @@ bail:
 	return ret;
 }
 
-void nasp_close(struct sock *sk, long timeout)
+void camblet_close(struct sock *sk, long timeout)
 {
 	void (*close)(struct sock *sk, long timeout) = tcp_close;
-	nasp_socket *s = READ_ONCE(sk->sk_user_data);
+	camblet_socket *s = READ_ONCE(sk->sk_user_data);
 
 	if (s)
 	{
@@ -680,8 +680,8 @@ void nasp_close(struct sock *sk, long timeout)
 			close = READ_ONCE(s->ktls_close);
 		}
 
-		pr_debug("free nasp socket # command[%s] sk[%p]", current->comm, sk);
-		nasp_socket_free(s);
+		pr_debug("free camblet socket # command[%s] sk[%p]", current->comm, sk);
+		camblet_socket_free(s);
 		WRITE_ONCE(sk->sk_user_data, NULL);
 	}
 
@@ -689,9 +689,9 @@ void nasp_close(struct sock *sk, long timeout)
 }
 
 // analyze tls_main.c to find out what we need to implement: check build_protos()
-void ensure_nasp_ktls_prot(struct sock *sock, struct proto *nasp_ktls_prot)
+void ensure_camblet_ktls_prot(struct sock *sock, struct proto *camblet_ktls_prot)
 {
-	void (*close)(struct sock *sk, long timeout) = READ_ONCE(nasp_ktls_prot->close);
+	void (*close)(struct sock *sk, long timeout) = READ_ONCE(camblet_ktls_prot->close);
 
 	if (close == NULL)
 	{
@@ -715,20 +715,20 @@ void ensure_nasp_ktls_prot(struct sock *sock, struct proto *nasp_ktls_prot)
 						int offset, size_t size, int flags);
 		sendpage = sock->sk_prot->sendpage;
 
-		nasp_ktls_prot->sendpage = sendpage;
+		camblet_ktls_prot->sendpage = sendpage;
 #endif
-		nasp_ktls_prot->setsockopt = setsockopt;
-		nasp_ktls_prot->getsockopt = getsockopt;
-		nasp_ktls_prot->sock_is_readable = sock_is_readable;
+		camblet_ktls_prot->setsockopt = setsockopt;
+		camblet_ktls_prot->getsockopt = getsockopt;
+		camblet_ktls_prot->sock_is_readable = sock_is_readable;
 
-		nasp_ktls_prot->recvmsg = nasp_recvmsg;
-		nasp_ktls_prot->sendmsg = nasp_sendmsg;
+		camblet_ktls_prot->recvmsg = camblet_recvmsg;
+		camblet_ktls_prot->sendmsg = camblet_sendmsg;
 
-		WRITE_ONCE(nasp_ktls_prot->close, nasp_close);
+		WRITE_ONCE(camblet_ktls_prot->close, camblet_close);
 	}
 }
 
-static int configure_ktls_sock(nasp_socket *s)
+static int configure_ktls_sock(camblet_socket *s)
 {
 	int ret;
 
@@ -768,7 +768,7 @@ static int configure_ktls_sock(nasp_socket *s)
 	// memcpy(crypto_info.salt, eng->out.chapol.salt, TLS_CIPHER_CHACHA20_POLY1305_SALT_SIZE);
 
 	// We have to set the protocol to the original here because the kTLS proto gets created from the sockets original protocol,
-	// so if it contains the nasp protocol parts it will spread to places where kTLS is used but nasp is not.
+	// so if it contains the camblet protocol parts it will spread to places where kTLS is used but camblet is not.
 	s->sock->sk_prot = s->sock->sk_family == AF_INET6 ? &tcpv6_prot : &tcp_prot;
 
 	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TCP, TCP_ULP, KERNEL_SOCKPTR("tls"), sizeof("tls"));
@@ -810,14 +810,14 @@ static int configure_ktls_sock(nasp_socket *s)
 	struct proto *ktls_prot;
 	if (s->sock->sk_family == AF_INET)
 	{
-		ktls_prot = &nasp_ktls_prot;
+		ktls_prot = &camblet_ktls_prot;
 	}
 	else
 	{
-		ktls_prot = &nasp_v6_ktls_prot;
+		ktls_prot = &camblet_v6_ktls_prot;
 	}
 
-	ensure_nasp_ktls_prot(s->sock, ktls_prot);
+	ensure_camblet_ktls_prot(s->sock, ktls_prot);
 
 	WRITE_ONCE(s->sock->sk_prot, ktls_prot);
 
@@ -827,42 +827,42 @@ static int configure_ktls_sock(nasp_socket *s)
 	return 0;
 }
 
-bool sockptr_is_nasp(sockptr_t sp)
+bool sockptr_is_camblet(sockptr_t sp)
 {
 	char value[4];
 	copy_from_sockptr(value, sp, 4);
-	return strncmp(value, "nasp", 4) == 0;
+	return strncmp(value, "camblet", 4) == 0;
 }
 
 // Let's intercept this call to set the socket options for setting up a simple TLS connection.
 //
 // TODO:
 // We should put this method back to the proto after kTLS is configured, because kTLS will override this method.
-int nasp_setsockopt(struct sock *sk, int level,
+int camblet_setsockopt(struct sock *sk, int level,
 					int optname, sockptr_t optval,
 					unsigned int optlen)
 {
 	if (level == SOL_TCP && optname == TCP_ULP)
 	{
-		// check if optval is "nasp"
-		if (optlen == sizeof("nasp") && sockptr_is_nasp(optval))
+		// check if optval is "camblet"
+		if (optlen == sizeof("camblet") && sockptr_is_camblet(optval))
 		{
 			opa_socket_context opa_socket_ctx = {.allowed = true, .passthrough = false, .mtls = false};
-			nasp_socket *s = nasp_new_client_socket(sk, opa_socket_ctx);
+			camblet_socket *s = camblet_new_client_socket(sk, opa_socket_ctx);
 
 			sk->sk_user_data = s;
 
 			return 0;
 		}
 	}
-	else if (level == SOL_NASP)
+	else if (level == SOL_CAMBLET)
 	{
-		if (optname == NASP_HOSTNAME)
+		if (optname == CAMBLET_HOSTNAME)
 		{
-			nasp_socket *s = sk->sk_user_data;
+			camblet_socket *s = sk->sk_user_data;
 			if (!s)
 			{
-				pr_err("nasp_setsockopt error: sk_user_data is NULL # command[%s]", current->comm);
+				pr_err("camblet_setsockopt error: sk_user_data is NULL # command[%s]", current->comm);
 				return -1;
 			}
 
@@ -896,7 +896,7 @@ int (*setsockopt_v6)(struct sock *sk, int level,
 // lock cert generation
 static DEFINE_MUTEX(cert_gen_lock);
 
-static int handle_cert_gen_locked(nasp_socket *sc)
+static int handle_cert_gen_locked(camblet_socket *sc)
 {
 	// Generating certificate signing request
 	if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
@@ -942,7 +942,7 @@ static int handle_cert_gen_locked(nasp_socket *sc)
 		return -1;
 	}
 
-	sc->parameters->subject = "CN=nasp-protected-workload";
+	sc->parameters->subject = "CN=camblet-protected-workload";
 
 	if (sc->opa_socket_ctx.dns)
 	{
@@ -997,7 +997,7 @@ static int handle_cert_gen_locked(nasp_socket *sc)
 	return 0;
 }
 
-static int handle_cert_gen(nasp_socket *sc)
+static int handle_cert_gen(camblet_socket *sc)
 {
 	mutex_lock(&cert_gen_lock);
 	int ret = handle_cert_gen_locked(sc);
@@ -1006,7 +1006,7 @@ static int handle_cert_gen(nasp_socket *sc)
 	return ret;
 }
 
-static int cache_and_validate_cert(nasp_socket *sc, char *key)
+static int cache_and_validate_cert(camblet_socket *sc, char *key)
 {
 	// Check if cert gen is required or we already have a cached certificate for this socket.
 	u16 cert_validation_err_no = 0;
@@ -1201,7 +1201,7 @@ cleanup:
  */
 static int br_low_read(void *ctx, unsigned char *buf, size_t len)
 {
-	nasp_socket *s = (nasp_socket *)ctx;
+	camblet_socket *s = (camblet_socket *)ctx;
 	int ret = plain_recv_msg(s, buf, len, 0);
 	// BearSSL doesn't like 0 return value, but it's not an error
 	// so we return -1 instead and set sock_closed to true to
@@ -1219,7 +1219,7 @@ static int br_low_read(void *ctx, unsigned char *buf, size_t len)
  */
 static int br_low_write(void *ctx, const unsigned char *buf, size_t len)
 {
-	return plain_send_msg((nasp_socket *)ctx, buf, len);
+	return plain_send_msg((camblet_socket *)ctx, buf, len);
 }
 
 opa_socket_context enriched_socket_eval(direction direction, struct sock *sk, int port)
@@ -1227,7 +1227,7 @@ opa_socket_context enriched_socket_eval(direction direction, struct sock *sk, in
 	// we take a shortcut if the socket is already augmented for example through setsockopt
 	if (sk->sk_user_data)
 	{
-		return ((nasp_socket *)sk->sk_user_data)->opa_socket_ctx;
+		return ((camblet_socket *)sk->sk_user_data)->opa_socket_ctx;
 	}
 
 	service_discovery_entry *sd_entry = NULL;
@@ -1279,7 +1279,7 @@ opa_socket_context enriched_socket_eval(direction direction, struct sock *sk, in
 	return opa_socket_ctx;
 }
 
-void nasp_configure_server_tls(nasp_socket *sc)
+void camblet_configure_server_tls(camblet_socket *sc)
 {
 	/*
 	 * Initialise the context with the cipher suites and
@@ -1303,7 +1303,7 @@ void nasp_configure_server_tls(nasp_socket *sc)
 		br_ssl_server_set_trust_anchor_names_alt(sc->sc, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
 
 		bool insecure;
-		br_x509_nasp_init(&sc->xc, &sc->sc->eng, &sc->opa_socket_ctx, insecure = false);
+		br_x509_camblet_init(&sc->xc, &sc->sc->eng, &sc->opa_socket_ctx, insecure = false);
 		br_ssl_engine_set_default_rsavrfy(&sc->sc->eng);
 	}
 
@@ -1330,7 +1330,7 @@ void nasp_configure_server_tls(nasp_socket *sc)
 	br_sslio_init(&sc->ioc, &sc->sc->eng, br_low_read, sc, br_low_write, sc);
 }
 
-void nasp_configure_client_tls(nasp_socket *sc)
+void camblet_configure_client_tls(camblet_socket *sc)
 {
 	/*
 	 * Initialise the context with the cipher suites and
@@ -1366,7 +1366,7 @@ void nasp_configure_client_tls(nasp_socket *sc)
 							 (sizeof suites) / (sizeof suites[0]));
 
 	bool insecure;
-	br_x509_nasp_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx, insecure = trust_anchors_len == 0);
+	br_x509_camblet_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx, insecure = trust_anchors_len == 0);
 
 	// mTLS enablement
 	if (sc->opa_socket_ctx.mtls)
@@ -1403,21 +1403,21 @@ void nasp_configure_client_tls(nasp_socket *sc)
 	br_sslio_init(&sc->ioc, &sc->cc->eng, br_low_read, sc, br_low_write, sc);
 }
 
-struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
+struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 {
 	struct sock *client_sk = NULL;
 	struct proto *prot;
-	nasp_socket *sc = NULL;
+	camblet_socket *sc = NULL;
 
 	if (sk->sk_family == AF_INET)
 	{
 		client_sk = accept(sk, flags, err, kern);
-		prot = &nasp_prot;
+		prot = &camblet_prot;
 	}
 	else
 	{
 		client_sk = accept_v6(sk, flags, err, kern);
-		prot = &nasp_v6_prot;
+		prot = &camblet_v6_prot;
 	}
 
 	if (!client_sk && *err != 0)
@@ -1437,10 +1437,10 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	if (opa_socket_ctx.allowed)
 	{
-		sc = nasp_new_server_socket(client_sk, opa_socket_ctx);
+		sc = camblet_new_server_socket(client_sk, opa_socket_ctx);
 		if (!sc)
 		{
-			pr_err("could not create nasp socket");
+			pr_err("could not create camblet socket");
 			goto error;
 		}
 
@@ -1456,7 +1456,7 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 			goto error;
 		}
 
-		nasp_configure_server_tls(sc);
+		camblet_configure_server_tls(sc);
 
 		// We should save the ssl context here to the socket
 		// and overwrite the socket protocol with our own
@@ -1467,18 +1467,18 @@ struct sock *nasp_accept(struct sock *sk, int flags, int *err, bool kern)
 	return client_sk;
 
 error:
-	nasp_socket_free(sc);
+	camblet_socket_free(sc);
 	if (client_sk)
 		client_sk->sk_prot->close(client_sk, 0);
 
 	return NULL;
 }
 
-int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
 	u16 port = ntohs(usin->sin_port);
-	nasp_socket *sc = sk->sk_user_data;
+	camblet_socket *sc = sk->sk_user_data;
 
 	int err;
 	struct proto *prot;
@@ -1486,12 +1486,12 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if (sk->sk_family == AF_INET)
 	{
 		err = connect(sk, uaddr, addr_len);
-		prot = &nasp_prot;
+		prot = &camblet_prot;
 	}
 	else
 	{
 		err = connect_v6(sk, uaddr, addr_len);
-		prot = &nasp_v6_prot;
+		prot = &camblet_v6_prot;
 	}
 
 	if (err != 0)
@@ -1511,10 +1511,10 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	{
 		if (!sc)
 		{
-			sc = nasp_new_client_socket(sk, opa_socket_ctx);
+			sc = camblet_new_client_socket(sk, opa_socket_ctx);
 			if (!sc)
 			{
-				pr_err("could not create nasp socket");
+				pr_err("could not create camblet socket");
 				goto error;
 			}
 		}
@@ -1533,7 +1533,7 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			}
 		}
 
-		nasp_configure_client_tls(sc);
+		camblet_configure_client_tls(sc);
 
 		// We should save the ssl context here to the socket
 		// and overwrite the socket protocol with our own
@@ -1544,7 +1544,7 @@ int nasp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	return err;
 
 error:
-	nasp_socket_free(sc);
+	camblet_socket_free(sc);
 
 	lock_sock(sk);
 	sk->sk_prot->close(sk, 0);
@@ -1574,29 +1574,29 @@ int socket_init(void)
 	setsockopt_v6 = tcpv6_prot.setsockopt;
 
 	// overwrite tcp_prot with our methods
-	tcp_prot.accept = nasp_accept;
-	tcp_prot.connect = nasp_connect;
-	tcp_prot.setsockopt = nasp_setsockopt;
+	tcp_prot.accept = camblet_accept;
+	tcp_prot.connect = camblet_connect;
+	tcp_prot.setsockopt = camblet_setsockopt;
 
-	tcpv6_prot.accept = nasp_accept;
-	tcpv6_prot.connect = nasp_connect;
-	tcpv6_prot.setsockopt = nasp_setsockopt;
+	tcpv6_prot.accept = camblet_accept;
+	tcpv6_prot.connect = camblet_connect;
+	tcpv6_prot.setsockopt = camblet_setsockopt;
 
-	memcpy(&nasp_prot, &tcp_prot, sizeof(nasp_prot));
-	nasp_prot.recvmsg = nasp_recvmsg;
-	nasp_prot.sendmsg = nasp_sendmsg;
-	nasp_prot.close = nasp_close;
+	memcpy(&camblet_prot, &tcp_prot, sizeof(camblet_prot));
+	camblet_prot.recvmsg = camblet_recvmsg;
+	camblet_prot.sendmsg = camblet_sendmsg;
+	camblet_prot.close = camblet_close;
 
-	memcpy(&nasp_ktls_prot, &nasp_prot, sizeof(nasp_prot));
-	nasp_ktls_prot.close = NULL; // mark it as uninitialized
+	memcpy(&camblet_ktls_prot, &camblet_prot, sizeof(camblet_prot));
+	camblet_ktls_prot.close = NULL; // mark it as uninitialized
 
-	memcpy(&nasp_v6_prot, &tcpv6_prot, sizeof(nasp_v6_prot));
-	nasp_v6_prot.recvmsg = nasp_recvmsg;
-	nasp_v6_prot.sendmsg = nasp_sendmsg;
-	nasp_v6_prot.close = nasp_close;
+	memcpy(&camblet_v6_prot, &tcpv6_prot, sizeof(camblet_v6_prot));
+	camblet_v6_prot.recvmsg = camblet_recvmsg;
+	camblet_v6_prot.sendmsg = camblet_sendmsg;
+	camblet_v6_prot.close = camblet_close;
 
-	memcpy(&nasp_v6_ktls_prot, &nasp_v6_prot, sizeof(nasp_v6_prot));
-	nasp_v6_ktls_prot.close = NULL; // mark it as uninitialized
+	memcpy(&camblet_v6_ktls_prot, &camblet_v6_prot, sizeof(camblet_v6_prot));
+	camblet_v6_ktls_prot.close = NULL; // mark it as uninitialized
 
 	//- generate global tls key
 	rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);

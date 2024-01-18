@@ -1,7 +1,7 @@
-nasp-kernel-module for Debian
+camblet-driver for Debian
 ----------------------------
 
-The *nasp-kernel-module* is the supporting Linux kernel module for the [Nasp](https://github.com/cisco-open/nasp)
+The *camblet-driver* is the supporting Linux kernel module for the [Camblet](https://github.com/cisco-open/camblet)
 system. It is capable of enhancing plain old TCP sockets in a frictionless way so that application developers can
 focus on their business logic instead of dealing with the complexity of TLS, mTLS, and other security-related concerns.
 It is doing this seamlessly, no code changes or re-compilations or re-deployments are required. 

@@ -8,7 +8,7 @@
             "defines": [
                 "MODULE",
                 "__KERNEL__",
-                "KBUILD_MODNAME='nasp'",
+                "KBUILD_MODNAME='camblet'",
                 "CONFIG_IPV6=1",
                 "d_m3HasFloat=1"
             ],
