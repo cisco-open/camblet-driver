@@ -347,8 +347,8 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
         size_t id_len = json_object_dotget_string_len(matched_policy, "id");
         if (egress_id_len > 0 || id_len > 0)
         {
-            nasp_config_lock();
-            nasp_config *config = nasp_config_get_locked();
+            camblet_config_lock();
+            camblet_config *config = camblet_config_get_locked();
             size_t trust_domain_len = strlen(config->trust_domain);
             size_t ttl_len = 0;
             if (ttl)
@@ -361,7 +361,7 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             {
                 strcat(ret.id, ttl);
             }
-            nasp_config_unlock();
+            camblet_config_unlock();
             if (id_len > 0)
             {
                 strcat(ret.id, json_object_dotget_string(matched_policy, "id"));
@@ -409,12 +409,12 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             workload_id = json_object_dotget_string(matched_policy, "certificate.workloadID");
         if (workload_id != NULL)
         {
-            nasp_config_lock();
-            nasp_config *config = nasp_config_get_locked();
+            camblet_config_lock();
+            camblet_config *config = camblet_config_get_locked();
             int workload_id_len = snprintf(NULL, 0, "spiffe://%s/%s", config->trust_domain, workload_id);
             ret.uri = kzalloc(workload_id_len + 1, GFP_KERNEL);
             snprintf(ret.uri, workload_id_len + 1, "spiffe://%s/%s", config->trust_domain, workload_id);
-            nasp_config_unlock();
+            camblet_config_unlock();
         }
 
         JSON_Array *dns = json_object_dotget_array(matched_policy, "egress.certificate.dnsNames");

@@ -1,5 +1,5 @@
 #!/bin/sh
-# postinst script for nasp-kernel-module.
+# postinst script for camblet-driver.
 #
 # See: dh_installdeb(1).
 
@@ -21,19 +21,19 @@ echo "postinst called with params: $@"
 
 case "$1" in
     configure)
-        PACKAGE_VERSION=$(dpkg-query --showformat='${Version}' --show nasp-kernel-module | grep -oP '\b\d+\.\d+\.\d+\b')
+        PACKAGE_VERSION=$(dpkg-query --showformat='${Version}' --show camblet-driver | grep -oP '\b\d+\.\d+\.\d+\b')
 
-        if dkms status | grep nasp | grep "$PACKAGE_VERSION" ; then
+        if dkms status | grep camblet | grep "$PACKAGE_VERSION" ; then
             OLD_VERSION=$(echo "$2" | grep -oP '\b\d+\.\d+\.\d+\b')
-            echo "Upgrading nasp-kernel-module from version $OLD_VERSION to $PACKAGE_VERSION"
-            dkms remove -m nasp -v $OLD_VERSION --all
+            echo "Upgrading camblet-driver from version $OLD_VERSION to $PACKAGE_VERSION"
+            dkms remove -m camblet -v $OLD_VERSION --all
         fi
 
         # Add the kernel module to the DKMS source control
-        dkms add -m nasp -v ${PACKAGE_VERSION}
+        dkms add -m camblet -v ${PACKAGE_VERSION}
 
         # Build and install the kernel module against the current kernel version
-        dkms install -m nasp -v ${PACKAGE_VERSION}
+        dkms install -m camblet -v ${PACKAGE_VERSION}
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

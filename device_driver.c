@@ -90,7 +90,7 @@ void chardev_exit(void)
 /* Methods */
 
 /* Called when a process tries to open the device file, like
- * "sudo cat /dev/nasp"
+ * "sudo cat /dev/camblet"
  */
 static int device_open(struct inode *inode, struct file *file)
 {
@@ -257,7 +257,7 @@ static void load_sd_info(const char *data)
     json_value_free(json);
 }
 
-static void load_nasp_config(const char *data)
+static void load_camblet_config(const char *data)
 {
     if (!data)
     {
@@ -267,26 +267,26 @@ static void load_nasp_config(const char *data)
     JSON_Value *json = json_parse_string(data);
     if (json == NULL)
     {
-        pr_err("could not load nasp config: invalid json");
+        pr_err("could not load camblet config: invalid json");
     }
 
     JSON_Object *root = json_value_get_object(json);
     if (root == NULL)
     {
-        pr_err("could not load nasp config: invalid json root");
+        pr_err("could not load camblet config: invalid json root");
     }
 
     const char *trust_domain = json_object_get_string(root, "trust_domain");
     if (trust_domain)
     {
-        nasp_config_lock();
-        nasp_config *config = nasp_config_get_locked();
+        camblet_config_lock();
+        camblet_config *config = camblet_config_get_locked();
         if (strcmp(config->trust_domain, trust_domain) != 0)
         {
             pr_info("change trust domain # old[%s] new[%s]", config->trust_domain, trust_domain);
             strlcpy(config->trust_domain, trust_domain, MAX_TRUST_DOMAIN_LEN);
         }
-        nasp_config_unlock();
+        camblet_config_unlock();
     }
 
     json_value_free(json);
@@ -386,7 +386,7 @@ static int parse_command(const char *data)
 
             if (decoded)
             {
-                load_nasp_config(decoded);
+                load_camblet_config(decoded);
                 kfree(decoded);
             }
         }

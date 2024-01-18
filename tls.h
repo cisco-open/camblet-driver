@@ -21,15 +21,15 @@
  * br_x509_minimal_context structure is not doing anything interesting
  * with the DN and SAN fields, and we want to be able to access them.
  */
-typedef struct br_x509_nasp_context
+typedef struct br_x509_camblet_context
 {
     const br_x509_class *vtable;
     br_x509_minimal_context ctx;
     opa_socket_context *socket_context;
     bool insecure;
-} br_x509_nasp_context;
+} br_x509_camblet_context;
 
-void br_x509_nasp_init(br_x509_nasp_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context, bool insecure);
-void br_x509_nasp_free(br_x509_nasp_context *ctx);
+void br_x509_camblet_init(br_x509_camblet_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context, bool insecure);
+void br_x509_camblet_free(br_x509_camblet_context *ctx);
 
 #endif

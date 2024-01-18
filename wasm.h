@@ -18,7 +18,7 @@
 
 #define FATAL(msg, ...)                                                    \
     {                                                                      \
-        printk(KERN_CRIT "nasp: Error: [Fatal] " msg "\n", ##__VA_ARGS__); \
+        printk(KERN_CRIT "camblet: Error: [Fatal] " msg "\n", ##__VA_ARGS__); \
     }
 
 #define PRIi32 "i"

@@ -19,7 +19,7 @@
 wasm_vm_result load_module(const char *name, const char *code, unsigned length, const char *entrypoint);
 
 #define SUCCESS 0
-#define DEVICE_NAME "nasp"                 /* Dev name as it appears in /dev/devices   */
+#define DEVICE_NAME "camblet"                 /* Dev name as it appears in /dev/devices   */
 #define DEVICE_BUFFER_SIZE 2 * 1024 * 1024 /* Max length of the message from the device */
 
 enum

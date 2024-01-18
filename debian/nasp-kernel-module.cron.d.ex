@@ -1,4 +1,4 @@
 #
-# Regular cron jobs for the nasp-kernel-module package.
+# Regular cron jobs for the camblet-driver package.
 #
-0 4	* * *	root	[ -x /usr/bin/nasp-kernel-module_maintenance ] && /usr/bin/nasp-kernel-module_maintenance
+0 4	* * *	root	[ -x /usr/bin/camblet-driver_maintenance ] && /usr/bin/camblet-driver_maintenance

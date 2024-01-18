@@ -10,55 +10,55 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-      name: Checkout nasp-kernel-module
+      name: Checkout camblet-driver
       with:
         submodules: recursive
-        path: nasp-kernel-module
+        path: camblet-driver
 
     - uses: actions/checkout@v4
-      name: Checkout nasp
+      name: Checkout camblet
       with:
         submodules: recursive
-        repository: cisco-open/nasp
-        path: nasp
+        repository: cisco-open/camblet
+        path: camblet
         fetch-depth: 0
 
     - name: Setup Golang with cache
       uses: magnetikonline/action-golang-cache@v4
       with:
-        go-version-file: nasp/go.mod
+        go-version-file: camblet/go.mod
 
     - name: Install/setup prerequisites
-      working-directory: nasp-kernel-module
+      working-directory: camblet-driver
       run: make setup-vm
 
     - name: Build with DKMS
-      working-directory: nasp-kernel-module
+      working-directory: camblet-driver
       run: |
         TEST_TAG=0.0.0
-        sudo cp -r . /usr/src/nasp-$TEST_TAG/
-        sudo dkms add -m nasp -v $TEST_TAG
-        if sudo dkms build -m nasp -v $TEST_TAG; then
+        sudo cp -r . /usr/src/camblet-$TEST_TAG/
+        sudo dkms add -m camblet -v $TEST_TAG
+        if sudo dkms build -m camblet -v $TEST_TAG; then
           echo "DKMS build succeeded"
         else
           echo "DKMS build failed"
-          cat /var/lib/dkms/nasp/$TEST_TAG/build/make.log
+          cat /var/lib/dkms/camblet/$TEST_TAG/build/make.log
           exit 1
         fi
-        sudo dkms install -m nasp -v $TEST_TAG
+        sudo dkms install -m camblet -v $TEST_TAG
 
-    - name: Build Nasp CLI
-      working-directory: nasp
+    - name: Build Camblet CLI
+      working-directory: camblet
       run: |
         echo "checking out ${GITHUB_HEAD_REF} branch"
         git checkout ${GITHUB_HEAD_REF} || echo "branch not found"
         make build
   
     - name: Run the kernel module
-      working-directory: nasp-kernel-module 
+      working-directory: camblet-driver 
       run: |
         sudo modprobe tls
-        sudo modprobe nasp
+        sudo modprobe camblet
         sudo dmesg -T
 
     # - name: Setup upterm session
@@ -68,13 +68,13 @@ jobs:
     #     limit-access-to-actor: true
 
     - name: Run proxy-wasm smoke test
-      working-directory: nasp-kernel-module
+      working-directory: camblet-driver
       timeout-minutes: 1
       run: |
-        touch /tmp/nasp.log /tmp/file-server.log /tmp/python.log
+        touch /tmp/camblet.log /tmp/file-server.log /tmp/python.log
         echo "Run processes"
-        ../nasp/build/nasp ca create-root nasp-root-ca > /tmp/nasp-ca.pem
-        sudo AGENT_METADATACOLLECTORS_DOCKER_ENABLED=true ../nasp/build/nasp agent --config ../nasp/config.yaml --policies-path $(pwd)/../nasp/nasp.d/policies --services-path $(pwd)/../nasp/nasp.d/services --ca-pem-path /tmp/nasp-ca.pem > /tmp/nasp.log &
+        ../camblet/build/camblet ca create-root camblet-root-ca > /tmp/camblet-ca.pem
+        sudo AGENT_METADATACOLLECTORS_DOCKER_ENABLED=true ../camblet/build/camblet agent --config ../camblet/config.yaml --policies-path $(pwd)/../camblet/camblet.d/policies --services-path $(pwd)/../camblet/camblet.d/services --ca-pem-path /tmp/camblet-ca.pem > /tmp/camblet.log &
         go run test/file-server.go >/tmp/file-server.log &
         docker run -d --rm -p 8080:80 nginx
         sleep 2
@@ -103,17 +103,17 @@ jobs:
 
         echo "Stop processes"
         sudo kill -9 $(jobs -p)
-        sudo pkill -9 nasp
+        sudo pkill -9 camblet
 
     - name: kernel log
       if: always()
       run: |
         sudo dmesg -T
 
-    - name: Nasp agent log
+    - name: Camblet agent log
       if: always()
       run: |
-        cat /tmp/nasp.log
+        cat /tmp/camblet.log
 
     - name: File server log
       if: always()
@@ -126,4 +126,4 @@ jobs:
         cat /tmp/python.log
 
     - name: Cleanup module
-      run: sudo modprobe -r nasp
+      run: sudo modprobe -r camblet

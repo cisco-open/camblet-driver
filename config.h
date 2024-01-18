@@ -13,15 +13,15 @@
 
 #define MAX_TRUST_DOMAIN_LEN 256
 
-typedef struct nasp_config
+typedef struct camblet_config
 {
     char trust_domain[MAX_TRUST_DOMAIN_LEN];
-} nasp_config;
+} camblet_config;
 
-nasp_config *nasp_config_get_locked(void);
-void nasp_config_lock(void);
-void nasp_config_unlock(void);
-void nasp_config_init(void);
-void nasp_config_free(void);
+camblet_config *camblet_config_get_locked(void);
+void camblet_config_lock(void);
+void camblet_config_unlock(void);
+void camblet_config_init(void);
+void camblet_config_free(void);
 
 #endif

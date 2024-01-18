@@ -14,29 +14,29 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        name: Checkout nasp-kernel-module
+        name: Checkout camblet-driver
         with:
           submodules: recursive
 
       - name: Install/setup prerequisites
         run: sudo apt install debhelper
 
-      - name: Build nasp-kernel-module Debian package
+      - name: Build camblet-driver Debian package
         run: make deb
 
-      - name: Build nasp-kernel-module RedHat package
+      - name: Build camblet-driver RedHat package
         run: make rpm
 
       - name: Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "../nasp-kernel-module_*.deb,rpmbuild/RPMS/noarch/nasp-kernel-module-*.rpm"
+          artifacts: "../camblet-driver_*.deb,rpmbuild/RPMS/noarch/camblet-driver-*.rpm"
 
     #   uses: softprops/action-gh-release@v1
     # #   if: startsWith(github.ref, 'refs/tags/')
     #   with:
     #     files: |
-    #       ../nasp-kernel-module_*.deb
+    #       ../camblet-driver_*.deb
     # tag_name: ${{ github.ref }}
     # draft: ${{ ! startsWith(github.ref, 'refs/tags/') }}
     # prerelease: ${{ ! startsWith(github.ref, 'refs/tags/') }}

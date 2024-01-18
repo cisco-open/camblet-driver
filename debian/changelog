@@ -1,4 +1,4 @@
-nasp-kernel-module (0.4.0) unstable; urgency=medium
+camblet-driver (0.4.0) unstable; urgency=medium
 
   * Create a new make target bump version (#128)
   * Create RPM packaging (#129)
@@ -6,7 +6,7 @@ nasp-kernel-module (0.4.0) unstable; urgency=medium
 
  -- Nasp maintainers <team@nasp.io>  Fri, 15 Dec 2023 14:17:07 +0100
 
-nasp-kernel-module (0.3.0) unstable; urgency=medium
+camblet-driver (0.3.0) unstable; urgency=medium
 
   * remove the module on package removal
   * add tls as module dependency
@@ -17,13 +17,13 @@ nasp-kernel-module (0.3.0) unstable; urgency=medium
 
  -- Nasp maintainers <team@nasp.io>  Wed, 13 Dec 2023 18:19:36 +0000
 
-nasp-kernel-module (0.2.0) unstable; urgency=medium
+camblet-driver (0.2.0) unstable; urgency=medium
 
   * Second release.
 
  -- Balint Molnar <bmolnar@cisco.com>  Mon, 11 Dec 2023 16:04:29 +0000
 
-nasp-kernel-module (0.1.0-1) unstable; urgency=medium
+camblet-driver (0.1.0-1) unstable; urgency=medium
 
   * Initial release.
 

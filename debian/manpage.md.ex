@@ -1,4 +1,4 @@
-% nasp-kernel-module(SECTION) | User Commands
+% camblet-driver(SECTION) | User Commands
 %
 % "November 14 2023"
 
@@ -25,24 +25,24 @@
 
 # NAME
 
-nasp-kernel-module - program to do something
+camblet-driver - program to do something
 
 # SYNOPSIS
 
-**nasp-kernel-module** **-e** _this_ [**\-\-example=that**] [{**-e** | **\-\-example**} _this_]
+**camblet-driver** **-e** _this_ [**\-\-example=that**] [{**-e** | **\-\-example**} _this_]
                  [{**-e** | **\-\-example**} {_this_ | _that_}]
 
-**nasp-kernel-module** [{**-h** | *\-\-help**} | {**-v** | **\-\-version**}]
+**camblet-driver** [{**-h** | *\-\-help**} | {**-v** | **\-\-version**}]
 
 # DESCRIPTION
 
-This manual page documents briefly the **nasp-kernel-module** and **bar** commands.
+This manual page documents briefly the **camblet-driver** and **bar** commands.
 
 This manual page was written for the Debian distribution because the
 original program does not have a manual page. Instead, it has documentation
 in the GNU info(1) format; see below.
 
-**nasp-kernel-module** is a program that...
+**camblet-driver** is a program that...
 
 # OPTIONS
 
@@ -63,11 +63,11 @@ a complete description, see the **info**(1) files.
 
 /etc/foo.conf
 :   The system-wide configuration file to control the behaviour of
-    nasp-kernel-module. See **foo.conf**(5) for further details.
+    camblet-driver. See **foo.conf**(5) for further details.
 
 ${HOME}/.foo.conf
 :   The per-user configuration file to control the behaviour of
-    nasp-kernel-module. See **foo.conf**(5) for further details.
+    camblet-driver. See **foo.conf**(5) for further details.
 
 # ENVIRONMENT
 
@@ -83,7 +83,7 @@ Bad configuration file. Exiting.
 :   The configuration file seems to contain a broken configuration
     line. Use the **\-\-verbose** option, to get more info.
 
-**nasp-kernel-module** provides some return codes, that can be used in scripts:
+**camblet-driver** provides some return codes, that can be used in scripts:
 
     Code Diagnostic
     0 Program exited successfully.
