@@ -114,7 +114,7 @@ insmod-bearssl: insmod-tls
 
 insmod: insmod-bearssl
 	$(eval ktls_available := $(shell lsmod | grep -w tls > /dev/null && echo 1 || echo 0))
-	sudo insmod camblet.ko dyndbg==_ ktls_available=$(ktls_available)
+	sudo insmod camblet.ko ktls_available=$(ktls_available)
 
 insmod-with-proxywasm: insmod-bearssl
 	sudo insmod camblet.ko proxywasm_modules=1
@@ -181,6 +181,7 @@ rpm:
 	tar --exclude='./.git' --exclude='linux' --exclude='rpmbuild' --exclude 'debian' -cvJf rpmbuild/SOURCES/camblet-driver-$(PACKAGE_VERSION).tar.xz .
 	rpmbuild -v -ba --define '_topdir ${PWD}/rpmbuild/' rpmbuild/SPECS/camblet-driver.spec
 
+.PHONY: bump_version
 bump_version:
 	$(eval latest_tag := $(shell git fetch origin; git describe --tags --abbrev=0))
 	$(eval major := $(shell echo $(latest_tag) | cut -d. -f1))
@@ -194,3 +195,29 @@ bump_version:
 
 	@echo "Preparing manifests with tag:$(TAG)"
 	@./scripts/update_versions.sh $(TAG) $(latest_tag)
+
+.PHONY: setup-perf-test
+setup-perf-test:
+ifeq (,$(wildcard test/tls-perf/tls-perf))
+	sudo apt update
+	sudo apt install -y git libssl-dev make build-essential
+	cd test && git clone https://github.com/tempesta-tech/tls-perf.git
+	cd test/tls-perf && make
+endif
+	# This target installs tls-perf tests the TLS Handshake only.
+	# It does not send or read any data after the handshake was done.
+	# To run it against nasp please make sure that the kernel module and the agent is installed and functional
+	# Since a simple python http server going to be used a proper policy must be configured.
+	# /etc/nasp/rules/python.yaml
+	# - selectors:
+	#     - process:binary:path: /usr/bin/python3.10
+	#       process:gid: "1000"
+	#       process:name: python3
+	#       process:uid: "501"
+	#   properties:
+	#     workloadID: python
+	#     ttl: 24h0m0s
+	#   policy:
+	#     mtls: false
+	# To run the perf test please use the following command:
+	# cd test/tls-perf && ./tls-perf -l 1000 -t 2 -T 10 127.0.0.1 8000
