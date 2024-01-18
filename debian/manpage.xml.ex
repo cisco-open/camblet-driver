@@ -57,7 +57,7 @@ man(1), man(7), http://www.tldp.org/HOWTO/Man-Page/
   <!-- TITLE should be something like "User commands" or similar (see
        http://www.tldp.org/HOWTO/Man-Page/q2.html). -->
   <!ENTITY dhtitle     "camblet-driver User Manual">
-  <!ENTITY dhucpackage "Camblet-kernel-module">
+  <!ENTITY dhucpackage "Camblet-driver">
   <!ENTITY dhpackage   "camblet-driver">
 ]>
 

@@ -26,7 +26,7 @@ manpage.1: manpage.sgml
   <!ENTITY dhsection   "<manvolnum>SECTION</manvolnum>">
   <!ENTITY dhemail     "<email>nandork@unknown</email>">
   <!ENTITY dhusername  "unknown">
-  <!ENTITY dhucpackage "<refentrytitle>Camblet-kernel-module</refentrytitle>">
+  <!ENTITY dhucpackage "<refentrytitle>Camblet-driver</refentrytitle>">
   <!ENTITY dhpackage   "camblet-driver">
 
   <!ENTITY debian      "<productname>Debian</productname>">
