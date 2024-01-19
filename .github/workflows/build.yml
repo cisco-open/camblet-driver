@@ -30,7 +30,9 @@ jobs:
 
     - name: Install/setup prerequisites
       working-directory: camblet-driver
-      run: make setup-vm
+      run: |
+        make setup-vm
+        sudo apt install openssl
 
     - name: Build with DKMS
       working-directory: camblet-driver
@@ -94,6 +96,11 @@ jobs:
         curl -k -v https://localhost:7000/
         echo "testing with wget..."
         wget --no-check-certificate https://localhost:7000/
+
+        echo "Test openssl client connect to python with default cipher"
+        openssl s_client -connect 127.0.0.1:7000
+        echo "Test openssl client connect to python with ECDHE-RSA-CHACHA20-POLY1305 cipher"
+        openssl s_client -cipher ECDHE-RSA-CHACHA20-POLY1305 -connect 127.0.0.1:7000
 
         echo "Test sendfile with NGiNX using curl"
         curl -v http://localhost:8080
