@@ -114,7 +114,7 @@ insmod-bearssl: insmod-tls
 
 insmod: insmod-bearssl
 	$(eval ktls_available := $(shell lsmod | grep -w tls > /dev/null && echo 1 || echo 0))
-	sudo insmod camblet.ko ktls_available=$(ktls_available)
+	sudo insmod camblet.ko dyndbg==_ ktls_available=$(ktls_available)
 
 insmod-with-proxywasm: insmod-bearssl
 	sudo insmod camblet.ko proxywasm_modules=1
