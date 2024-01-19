@@ -5,7 +5,7 @@ new_tag="$1"
 latest_tag="$2"
 
 # Get commit messages since the latest tag
-commit_messages=$(git log --pretty=format:"%s" "$latest_tag"..HEAD)
+commit_messages=$(git --no-pager log --pretty=format:"%s" "$latest_tag"..HEAD)
 
 # Define changelog entry
 changelog_entry="camblet-driver ($new_tag) unstable; urgency=medium\n"
@@ -16,8 +16,8 @@ done <<< "$commit_messages"
 
 changelog_entry+="\n\n -- Camblet maintainers <team@camblet.io>  $(date -R)"
 
-sed -i '' '1s/^/'"$changelog_entry"'\n\n/' debian/changelog
-
+escaped_changelog_entry=$(printf "%s" "$changelog_entry" | sed 's/\//\\&/g')
+sed -i '' "1s/^/$escaped_changelog_entry\\n\\n/" debian/changelog
 
 # Update the dkms.conf
 sed -i '' 's/PACKAGE_VERSION=".*"/PACKAGE_VERSION="'"$new_tag"'"/' dkms.conf
