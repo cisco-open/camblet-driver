@@ -26,6 +26,7 @@
 #include "string.h"
 #include "config.h"
 #include "sd.h"
+#include "trace.h"
 
 /* Global variables are declared as static, so are global within the file. */
 
@@ -411,6 +412,86 @@ static int parse_command(const char *data)
                 kfree(decoded);
             }
         }
+        else if (strcmp("manage_trace_requests", command) == 0)
+        {
+            const char *data = json_object_get_string(root, "data");
+            if (data == NULL)
+            {
+                pr_debug("could not find data # command[%s]", command);
+
+                goto cleanup;
+            }
+
+            JSON_Value *data_json = json_parse_string(data);
+            if (data_json == NULL)
+            {
+                pr_debug("could not parse json # command[%s]", command);
+
+                goto cleanup;
+            }
+
+            JSON_Object *data_root = json_value_get_object(data_json);
+            if (data_root == NULL)
+            {
+                pr_debug("invalid json format # command[%s]", command);
+
+                goto request_trace_out;
+            }
+
+            const char *action = json_object_get_string(data_root, "action");
+            if (action == NULL)
+            {
+                pr_debug("could not find action # command[%s]", command);
+
+                goto request_trace_out;
+            }
+
+            int pid = -1;
+            if (json_object_has_value(data_root, "pid") == 1)
+            {
+                pid = json_object_get_number(data_root, "pid");
+            }
+
+            int uid = -1;
+            if (json_object_has_value(data_root, "uid") == 1)
+            {
+                uid = json_object_get_number(data_root, "uid");
+            }
+
+            const char *command_name = json_object_get_string(data_root, "command_name");
+
+            pr_debug("manage trace # command[%s] action[%s] pid[%d] uid[%d] command_name[%s]", command, action, pid, uid, command_name);
+
+            if (strcmp(action, "add") == 0)
+            {
+                pr_debug("add trace # command[%s] pid[%d] uid[%d] command_name[%s]", command, pid, uid, command_name);
+                add_trace_request(pid, uid, command_name);
+            }
+            else if (strcmp(action, "remove") == 0)
+            {
+                pr_debug("disable trace # command[%s] pid[%d] uid[%d] command_name[%s]", command, pid, uid, command_name);
+                trace_request *tr = get_trace_request(pid, uid, command_name);
+                if (tr)
+                {
+                    remove_trace_request(tr);
+                }
+                else
+                {
+                    pr_debug("trace not exists # command[%s] pid[%d] uid[%d] command_name[%s]", command, pid, uid, command_name);
+                }
+            }
+            else if (strcmp(action, "clear") == 0)
+            {
+                pr_debug("clear trace requests");
+
+                clear_trace_requests();
+            }
+
+        request_trace_out:
+            json_value_free(data_json);
+
+            goto cleanup;
+        }
         else if (strcmp("answer", command) == 0)
         {
             const char *command_id = json_object_get_string(root, "id");
@@ -523,6 +604,7 @@ static char *serialize_command(struct command *cmd)
     json_object_set_string(root_object, "id", uuid);
     json_object_set_string(root_object, "command", cmd->name);
     json_object_set_string(root_object, "data", cmd->data);
+    json_object_set_boolean(root_object, "is_message", cmd->is_message);
 
     serialized_string = json_serialize_to_string(root_value);
 
@@ -550,15 +632,19 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
     }
 
     char *command_json = serialize_command(c);
+    if (c->is_message)
+    {
+        free_command(c);
+    }
     if (command_json == NULL)
     {
         return -EFAULT;
     }
 
-    pr_debug("arrived command # command[%s]", command_json);
+    pr_debug("sent command # command[%s]", command_json);
 
     int bytes_read = 0;
-    int bytes_to_read = strlen(command_json); // min(length, c->size - *offset);
+    int bytes_to_read = strlen(command_json);
 
     if (bytes_to_read >= length)
     {
@@ -567,7 +653,6 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
 
     if (bytes_to_read > 0)
     {
-        // if (copy_to_user(buffer, c->data + *offset, bytes_to_read))
         if (copy_to_user(buffer, command_json, bytes_to_read))
         {
             kfree(command_json);
@@ -597,7 +682,7 @@ static ssize_t device_write(struct file *file, const char *buffer, size_t length
         bytes_to_write = maxbytes;
 
     bytes_writen = bytes_to_write - copy_from_user(device_buffer + device_buffer_size, buffer, bytes_to_write);
-    pr_debug("write to userspace # bytes[%d]", bytes_writen);
+    pr_debug("write from userspace # bytes[%d]", bytes_writen);
     *offset += bytes_writen;
     device_buffer_size += bytes_writen;
 

@@ -71,7 +71,8 @@ camblet-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  string.o \
 			  augmentation.o \
 			  config.o \
-			  sd.o
+			  sd.o \
+			  trace.o
 
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/

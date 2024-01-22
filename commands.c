@@ -20,6 +20,7 @@
 #include "base64.h"
 #include "string.h"
 #include "socket.h"
+#include "trace.h"
 
 // commands that are waiting to be processed by the driver
 static LIST_HEAD(command_list);
@@ -34,9 +35,7 @@ static DECLARE_WAIT_QUEUE_HEAD(command_wait_queue);
 // commands that are being processed by the driver
 static LIST_HEAD(in_flight_command_list);
 
-// add a command to the list (to be processed by the driver)
-// this is a blocking function, it will wait until the command is processed
-command_answer *send_command(char *name, char *data, task_context *context)
+command_answer *this_send_command(char *name, char *data, task_context *context, bool is_message)
 {
     struct command *cmd = kzalloc(sizeof(struct command), GFP_KERNEL);
 
@@ -44,7 +43,7 @@ command_answer *send_command(char *name, char *data, task_context *context)
     cmd->name = name;
     cmd->data = data;
     cmd->context = context;
-    init_waitqueue_head(&cmd->wait_queue);
+    cmd->is_message = is_message;
 
     spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
     list_add_tail(&cmd->list, &command_list);
@@ -52,6 +51,13 @@ command_answer *send_command(char *name, char *data, task_context *context)
 
     // we can now wake up the driver to send out a command for processing
     wake_up_interruptible(&command_wait_queue);
+
+    if (cmd->is_message)
+    {
+        return NULL;
+    }
+
+    init_waitqueue_head(&cmd->wait_queue);
 
     // wait until the command is processed
     pr_debug("waiting for command to be processed # name[%s] uuid[%pUB] ", name, cmd->uuid.b);
@@ -77,18 +83,28 @@ command_answer *send_command(char *name, char *data, task_context *context)
     spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
 
     command_answer *cmd_answer = cmd->answer;
-    if (cmd->context)
-    {
-        free_task_context(cmd->context);
-    }
-    kfree(cmd);
+    free_command(cmd);
 
     return cmd_answer;
 }
 
+// add a command to the list (to be processed by the driver)
+// this is a blocking function, it will wait until the command is processed
+command_answer *send_command(char *name, char *data, task_context *context)
+{
+    return this_send_command(name, data, context, false);
+}
+
+// add a message to the command list (to be processed by the driver)
+// this is a non-blocking function
+command_answer *send_message(char *name, char *data, task_context *context)
+{
+    return this_send_command(name, data, context, true);
+}
+
 command_answer *send_augment_command()
 {
-    command_answer *answer = send_command("augment", "", get_task_context());
+    command_answer *answer = send_command("augment", NULL, get_task_context());
 
     return answer;
 }
@@ -105,11 +121,8 @@ command_answer *send_accept_command(u16 port)
 
     json_object_set_number(root_object, "port", port);
 
-    char *serialized_string = json_serialize_to_string(root_value);
+    command_answer *answer = send_command("accept", json_serialize_to_string(root_value), get_task_context());
 
-    command_answer *answer = send_command("accept", serialized_string, get_task_context());
-
-    json_free_serialized_string(serialized_string);
     json_value_free(root_value);
 
     return answer;
@@ -127,11 +140,8 @@ command_answer *send_connect_command(u16 port)
 
     json_object_set_number(root_object, "port", port);
 
-    char *serialized_string = json_serialize_to_string(root_value);
+    command_answer *answer = send_command("connect", json_serialize_to_string(root_value), get_task_context());
 
-    command_answer *answer = send_command("connect", serialized_string, get_task_context());
-
-    json_free_serialized_string(serialized_string);
     json_value_free(root_value);
 
     return answer;
@@ -166,11 +176,8 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
         json_object_set_string(root_object, "ttl", ttl);
     }
 
-    char *serialized_string = json_serialize_to_string(root_value);
+    command_answer *answer = send_command("csr_sign", json_serialize_to_string(root_value), get_task_context());
 
-    command_answer *answer = send_command("csr_sign", serialized_string, get_task_context());
-
-    json_free_serialized_string(serialized_string);
     json_value_free(root_value);
 
     if (answer->error)
@@ -284,7 +291,6 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
                 if (raw)
                 {
                     srclen = strlen(raw);
-                    pr_info("srclen [%d]", srclen);
                     csr_sign_answer->cert->chain[j].data = kmalloc(srclen, GFP_KERNEL);
                     csr_sign_answer->cert->chain[j].data_len = base64_decode(csr_sign_answer->cert->chain[j].data, srclen, raw, srclen);
 
@@ -357,7 +363,10 @@ command *get_next_command(void)
     spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
     command *cmd = list_first_entry(&command_list, struct command, list);
     list_del(&cmd->list);
-    list_add_tail(&cmd->list, &in_flight_command_list);
+    if (!cmd->is_message)
+    {
+        list_add_tail(&cmd->list, &in_flight_command_list);
+    }
     spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
 
     return cmd;
@@ -373,7 +382,28 @@ command_answer *answer_with_error(char *error_message)
 
 void free_command_answer(command_answer *cmd_answer)
 {
+    if (!cmd_answer)
+    {
+        return;
+    }
+
     kfree(cmd_answer->error);
     kfree(cmd_answer->answer);
     kfree(cmd_answer);
+}
+
+void free_command(command *cmd)
+{
+    if (!cmd)
+    {
+        return;
+    }
+
+    if (cmd->context)
+    {
+        free_task_context(cmd->context);
+    }
+
+    kfree(cmd->data);
+    kfree(cmd);
 }
