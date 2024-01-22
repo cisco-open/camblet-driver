@@ -33,6 +33,7 @@ typedef struct csr_sign_answer
 
 void free_command_answer(command_answer *cmd_answer);
 
+command_answer *send_message(char *name, char *data, task_context *context);
 command_answer *send_command(char *name, char *data, task_context *context);
 command_answer *answer_with_error(char *error_message);
 
@@ -50,10 +51,12 @@ typedef struct command
     task_context *context;
     uuid_t uuid;
     struct command_answer *answer;
+    bool is_message;
     wait_queue_head_t wait_queue;
 } command;
 
 command *lookup_in_flight_command(char *id);
 command *get_next_command(void);
+void free_command(command *cmd);
 
 #endif
