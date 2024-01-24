@@ -18,6 +18,32 @@ const unsigned char OID_rfc822Name[] = {0, 1};
 const unsigned char OID_dNSName[] = {0, 2};
 const unsigned char OID_uniformResourceIdentifier[] = {0, 6};
 
+static int compare_spiffe_ids(const char *allowed_id, const char *id)
+{
+    int allowed_id_len = strlen(allowed_id);
+    int id_len = strlen(id);
+    int ret = strncmp(allowed_id, id, allowed_id_len);
+    if (ret == 0)
+    {
+        if (allowed_id_len == id_len)
+        {
+            return 0;
+        }
+        else if (id_len > allowed_id_len)
+        {
+            if (id[allowed_id_len] == '/')
+            {
+                return 0;
+            }
+            else
+            {
+                return 1;
+            }
+        }
+    }
+    return ret;
+}
+
 static void
 xwc_start_chain(const br_x509_class **ctx, const char *server_name)
 {
@@ -89,7 +115,7 @@ xwc_end_chain(const br_x509_class **ctx)
         {
             for (k = 0; k < camblet_cc->socket_context->allowed_spiffe_ids_length; k++)
             {
-                if (strncmp(camblet_cc->socket_context->allowed_spiffe_ids[k], mini_cc->name_elts[i].buf, strlen(camblet_cc->socket_context->allowed_spiffe_ids[k])) == 0)
+                if (compare_spiffe_ids(camblet_cc->socket_context->allowed_spiffe_ids[k], mini_cc->name_elts[i].buf) == 0)
                 {
                     pr_debug("spiffe id match # cert_uri[%s] policy_uri[%s]", mini_cc->name_elts[i].buf, camblet_cc->socket_context->allowed_spiffe_ids[k]);
                     allowed = true;
