@@ -22,7 +22,7 @@ case "$1" in
     remove)
         PACKAGE_VERSION=$(dpkg-query --showformat='${Version}' --show camblet-driver | grep -oP '\b\d+\.\d+\.\d+\b')
 
-        if sudo systemctl status camblet &>/dev/null ; then
+        if systemctl is-active --quiet camblet ; then
             echo "Stopping camblet service"
             sudo systemctl stop camblet
         fi
