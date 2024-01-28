@@ -54,9 +54,14 @@ jobs:
     - name: Build Camblet CLI
       working-directory: camblet
       run: |
-        echo "checking out ${GITHUB_HEAD_REF} branch"
-        git checkout ${GITHUB_HEAD_REF} || echo "branch not found"
+        echo "checking out '${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}' branch"
+        git checkout ${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}} || echo "branch not found"
         make build
+        sudo mkdir -p /etc/camblet
+        sudo cp -a camblet.d/policies /etc/camblet/
+        sudo cp -a camblet.d/services /etc/camblet/
+        sudo cp config.yaml /etc/camblet/config.yaml
+        sudo cp build/camblet /usr/local/bin/
   
     - name: Run the kernel module
       working-directory: camblet-driver 
@@ -77,8 +82,7 @@ jobs:
       run: |
         touch /tmp/camblet.log /tmp/file-server.log /tmp/python.log
         echo "Run processes"
-        ../camblet/build/camblet ca create-root camblet-root-ca > /tmp/camblet-ca.pem
-        sudo AGENT_METADATACOLLECTORS_DOCKER_ENABLED=true ../camblet/build/camblet agent --config ../camblet/config.yaml --policies-path $(pwd)/../camblet/camblet.d/policies --services-path $(pwd)/../camblet/camblet.d/services --ca-pem-path /tmp/camblet-ca.pem > /tmp/camblet.log &
+        sudo AGENT_METADATACOLLECTORS_DOCKER_ENABLED=true camblet agent > /tmp/camblet.log &
         go run test/file-server.go >/tmp/file-server.log &
         docker run -d --rm -p 8080:80 nginx
         sleep 2
