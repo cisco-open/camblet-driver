@@ -16,6 +16,7 @@
 #include "task_context.h"
 #include "json.h"
 #include "commands.h"
+#include "socket.h"
 
 // a list to hold trace requests
 static LIST_HEAD(trace_requests);
@@ -174,7 +175,7 @@ char *compose_log_message(const char *message, int n, va_list args)
 
     va_copy(args_copy, args);
 
-    if (message == NULL || n < 2 || n % 2 != 0)
+    if (message == NULL || n < 0 || (n > 0 && n % 2 != 0))
     {
         retval = ERR_PTR(-EINVAL);
 
@@ -184,7 +185,7 @@ char *compose_log_message(const char *message, int n, va_list args)
     int size = strlen(message) + 3;
     for (i = 0; i < n; i++)
     {
-        char *arg = va_arg(args, const char *);
+        const char *arg = va_arg(args, const char *);
         if (arg == NULL)
         {
             if (i % 2 == 0)
@@ -211,8 +212,8 @@ char *compose_log_message(const char *message, int n, va_list args)
 
     for (i = 0; i < n; i += 2)
     {
-        char *var = va_arg(args_copy, const char *);
-        char *value = va_arg(args_copy, const char *);
+        const char *var = va_arg(args_copy, const char *);
+        const char *value = va_arg(args_copy, const char *);
         if (var && value)
         {
             if (!sep)
@@ -236,13 +237,13 @@ out:
     return retval;
 }
 
-int trace_log(const char *message, int log_level, int n, ...)
+int trace_log(const tcp_connection_context *conn_ctx, const char *message, int log_level, int n, ...)
 {
     unsigned int i;
     va_list args, args_copy;
     char level[8];
 
-    if (n % 2 != 0)
+    if (n < 0 || (n > 0 && n % 2 != 0))
     {
         return -EINVAL;
     }
@@ -313,11 +314,23 @@ int trace_log(const char *message, int log_level, int n, ...)
         return -ENOMEM;
     }
 
+    if (!uuid_is_null(&conn_ctx->uuid))
+    {
+        char uuid[UUID_STRING_LEN + 1];
+        int uuid_len = snprintf(uuid, UUID_STRING_LEN + 1, "%pUB", conn_ctx->uuid.b);
+        if (uuid_len < 0 || json_object_set_string(root_object, "uuid", uuid) < 0)
+        {
+            json_value_free(root_value);
+
+            return -ENOMEM;
+        }
+    }
+
     va_start(args, n);
     for (i = 0; i < n; i += 2)
     {
-        char *var = va_arg(args, const char *);
-        char *value = va_arg(args, const char *);
+        const char *var = va_arg(args, const char *);
+        const char *value = va_arg(args, const char *);
         if (var && value && json_object_set_string(root_object, var, value) < 0)
         {
             pr_err("could not set json string [%s] [%s]", var, value);

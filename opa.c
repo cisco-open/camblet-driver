@@ -255,6 +255,7 @@ static int parse_opa_builtins(opa_wrapper *opa, char *json)
 
 void opa_socket_context_free(opa_socket_context ctx)
 {
+    kfree(ctx.matched_policy_json);
     kfree(ctx.id);
     kfree(ctx.dns);
     kfree(ctx.uri);
@@ -333,7 +334,8 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             }
         }
 
-        pr_debug("policy match # policy[%s] prio[%d] egress_prio[%d]", json_serialize_to_string(json_object_get_wrapping_value(matched_policy)), policy_prio, egress_prio);
+        ret.matched_policy_json = json_serialize_to_string(json_object_get_wrapping_value(matched_policy));
+        pr_debug("policy match # policy[%s] prio[%d] egress_prio[%d]", ret.matched_policy_json, policy_prio, egress_prio);
 
         const char *ttl = json_object_dotget_string(matched_policy, "egress.certificate.ttl");
         if (ttl == NULL)
@@ -651,8 +653,6 @@ opa_socket_context this_cpu_opa_socket_eval(const char *input)
 
     char *json = (char *)(wasm_vm_memory(opa->eval->module) + result.data->i32);
     ret = parse_opa_socket_eval_result(json);
-
-    pr_debug("opa eval result # name[%s] id[%s] allowed[%d] mtls[%d] uri[%s] ttl[%s]", opa->eval->module->name, ret.id, ret.allowed, ret.mtls, ret.uri, ret.ttl);
 
 cleanup:
     wasm_vm_unlock(opa->vm);

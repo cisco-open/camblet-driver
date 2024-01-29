@@ -22,7 +22,7 @@ typedef struct
     bool allowed;
     bool mtls;
     bool passthrough;
-
+    char *matched_policy_json;
     char *id;
     char *dns;
     char *uri;

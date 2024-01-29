@@ -36,6 +36,7 @@
 #include "json.h"
 #include "sd.h"
 #include "camblet.h"
+#include "trace.h"
 
 const char *ALPNs[] = {
 	"http/1.1",
@@ -112,6 +113,8 @@ struct camblet_socket
 
 	camblet_send_msg *send_msg;
 	camblet_recv_msg *recv_msg;
+
+	const tcp_connection_context *conn_ctx;
 };
 
 static int get_read_buffer_capacity(camblet_socket *s);
@@ -374,7 +377,7 @@ int proxywasm_attach(proxywasm *p, camblet_socket *s, ListenerDirection directio
 	return 0;
 }
 
-static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_context opa_socket_ctx)
+static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_context opa_socket_ctx, const tcp_connection_context *conn_ctx)
 {
 	camblet_socket *s = kzalloc(sizeof(camblet_socket), GFP_KERNEL);
 	s->sc = kzalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
@@ -386,6 +389,8 @@ static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_c
 
 	s->sock = sock;
 	s->opa_socket_ctx = opa_socket_ctx;
+
+	s->conn_ctx = conn_ctx;
 
 	mutex_init(&s->lock);
 
@@ -407,7 +412,7 @@ static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_c
 	return s;
 }
 
-static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_context opa_socket_ctx)
+static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_context opa_socket_ctx, const tcp_connection_context *conn_ctx)
 {
 	camblet_socket *s = kzalloc(sizeof(camblet_socket), GFP_KERNEL);
 	s->cc = kzalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
@@ -419,6 +424,8 @@ static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_c
 
 	s->sock = sock;
 	s->opa_socket_ctx = opa_socket_ctx;
+
+	s->conn_ctx = conn_ctx;
 
 	mutex_init(&s->lock);
 
@@ -460,6 +467,7 @@ static int ensure_tls_handshake(camblet_socket *s)
 {
 	int ret = 0;
 	char *protocol = READ_ONCE(s->protocol);
+	const tcp_connection_context *conn_ctx = s->conn_ctx;
 
 	if (protocol != NULL)
 	{
@@ -476,11 +484,16 @@ static int ensure_tls_handshake(camblet_socket *s)
 		if (ret == 0)
 		{
 			pr_debug("TLS handshake done # command[%s] sk[%p]", current->comm, s->sock);
+			trace_msg(conn_ctx, "TLS handshake done", 0);
 		}
 		else
 		{
 			const br_ssl_engine_context *ec = get_ssl_engine_context(s);
-			pr_err("TLS handshake error # command[%s] err[%d]", current->comm, br_ssl_engine_last_error(ec));
+			int last_err = br_ssl_engine_last_error(ec);
+			pr_err("TLS handshake error # command[%s] err[%d]", current->comm, last_err);
+			char last_err_str[8];
+			snprintf(last_err_str, 8, "%d", last_err);
+			trace_err(conn_ctx, "TLS handshake error", 2, "error_code", last_err_str);
 			goto bail;
 		}
 
@@ -488,7 +501,7 @@ static int ensure_tls_handshake(camblet_socket *s)
 
 		if (protocol)
 		{
-			pr_debug("selected ALPN # command[%s] alpn[%s]", current->comm, protocol);
+			trace_debug(conn_ctx, "ALPN selected", 2, "alpn", protocol);
 			if (camblet_socket_proxywasm_enabled(s))
 				set_property_v(s->pc, "upstream.negotiated_protocol", protocol, strlen(protocol));
 		}
@@ -497,7 +510,7 @@ static int ensure_tls_handshake(camblet_socket *s)
 
 		if (s->opa_socket_ctx.passthrough)
 		{
-			pr_debug("enable TLS passthrough # command[%s]", current->comm);
+			trace_debug(conn_ctx, "passthrough enabled", 0);
 			s->send_msg = plain_send_msg;
 			s->recv_msg = plain_recv_msg;
 		}
@@ -507,6 +520,7 @@ static int ensure_tls_handshake(camblet_socket *s)
 			if (ret != 0)
 			{
 				pr_err("configure_ktls_sock failed # command[%s] err[%d]", current->comm, ret);
+				trace_err(conn_ctx, "kTLS configuration failed", 0);
 				goto bail;
 			}
 		}
@@ -547,13 +561,13 @@ bail:
 }
 
 int camblet_recvmsg(struct sock *sock,
-				 struct msghdr *msg,
-				 size_t size,
+					struct msghdr *msg,
+					size_t size,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
-				 int noblock,
+					int noblock,
 #endif
-				 int flags,
-				 int *addr_len)
+					int flags,
+					int *addr_len)
 {
 	int ret, len;
 
@@ -824,6 +838,8 @@ static int configure_ktls_sock(camblet_socket *s)
 	s->send_msg = ktls_send_msg;
 	s->recv_msg = ktls_recv_msg;
 
+	trace_debug(s->conn_ctx, "kTLS configured", 0);
+
 	return 0;
 }
 
@@ -839,8 +855,8 @@ bool sockptr_is_camblet(sockptr_t sp)
 // TODO:
 // We should put this method back to the proto after kTLS is configured, because kTLS will override this method.
 int camblet_setsockopt(struct sock *sk, int level,
-					int optname, sockptr_t optval,
-					unsigned int optlen)
+					   int optname, sockptr_t optval,
+					   unsigned int optlen)
 {
 	if (level == SOL_TCP && optname == TCP_ULP)
 	{
@@ -848,7 +864,8 @@ int camblet_setsockopt(struct sock *sk, int level,
 		if (optlen == sizeof("camblet") && sockptr_is_camblet(optval))
 		{
 			opa_socket_context opa_socket_ctx = {.allowed = true, .passthrough = false, .mtls = false};
-			camblet_socket *s = camblet_new_client_socket(sk, opa_socket_ctx);
+			tcp_connection_context conn_ctx = {.direction = OUTPUT};
+			camblet_socket *s = camblet_new_client_socket(sk, opa_socket_ctx, &conn_ctx);
 
 			sk->sk_user_data = s;
 
@@ -876,9 +893,30 @@ int camblet_setsockopt(struct sock *sk, int level,
 }
 
 // a function to evaluate the connection if it should be intercepted, now with opa
-static opa_socket_context socket_eval(const char *input)
+static opa_socket_context socket_eval(const tcp_connection_context *conn_ctx, const char *input)
 {
-	return this_cpu_opa_socket_eval(input);
+	opa_socket_context ctx = this_cpu_opa_socket_eval(input);
+
+	if (ctx.matched_policy_json)
+	{
+		trace_msg(conn_ctx, "policy match found", 2, "match", ctx.matched_policy_json);
+	}
+	else
+	{
+		trace_msg(conn_ctx, "policy match not found", 0);
+	}
+
+	char is_mtls_enabled[] = "false";
+	if (ctx.mtls)
+		strcpy(is_mtls_enabled, "true");
+
+	char is_camblet_enabled[] = "false";
+	if (ctx.allowed)
+		strcpy(is_camblet_enabled, "true");
+
+	trace_debug(conn_ctx, "policy evaluation result", 10, "id", ctx.id, "uri", ctx.uri, "ttl", ctx.ttl, "mtls", is_mtls_enabled, "camblet_enabled", is_camblet_enabled);
+
+	return ctx;
 }
 
 struct sock *(*accept)(struct sock *sk, int flags, int *err, bool kern);
@@ -1047,10 +1085,14 @@ static int cache_and_validate_cert(camblet_socket *sc, char *key)
 	return 0;
 }
 
-static net_conn_info get_net_conn_info(direction direction, struct sock *s, u16 port)
+static tcp_connection_context tcp_connection_context_init(direction direction, struct sock *s, u16 port)
 {
-	net_conn_info info = {.direction = direction};
+	tcp_connection_context info = {.direction = direction};
 	const char *ipformat = "%pI4";
+
+	uuid_gen(&info.uuid);
+
+	pr_info("aa # direction[%d] uuid[%pUB]", direction, info.uuid.b);
 
 	if (s->sk_family == AF_INET6)
 	{
@@ -1094,6 +1136,9 @@ static net_conn_info get_net_conn_info(direction direction, struct sock *s, u16 
 		info.destination_port = port;
 	}
 
+	snprintf(info.source_address, INET6_ADDRSTRLEN + 5, "%s:%d", info.source_ip, info.source_port);
+	snprintf(info.destination_address, INET6_ADDRSTRLEN + 5, "%s:%d", info.destination_ip, info.destination_port);
+
 	return info;
 }
 
@@ -1127,32 +1172,32 @@ void add_sd_entry_labels_to_json(service_discovery_entry *sd_entry, JSON_Value *
 	json_object_set_value(root, "remote", remote_value);
 }
 
-void add_net_conn_info_to_json(net_conn_info conn_info, JSON_Object *json_object)
+void add_net_conn_info_to_json(const tcp_connection_context *conn_ctx, JSON_Object *json_object)
 {
 	if (!json_object)
 	{
 		return;
 	}
 
-	if (conn_info.direction == INPUT)
+	if (conn_ctx->direction == INPUT)
 		json_object_set_boolean(json_object, "direction:input", true);
 	else
 		json_object_set_boolean(json_object, "direction:output", true);
 
 	char buff[256];
 
-	snprintf(buff, sizeof(buff), "source:ip:%s", conn_info.source_ip);
+	snprintf(buff, sizeof(buff), "source:ip:%s", conn_ctx->source_ip);
 	json_object_set_boolean(json_object, buff, true);
-	snprintf(buff, sizeof(buff), "source:port:%d", conn_info.source_port);
+	snprintf(buff, sizeof(buff), "source:port:%d", conn_ctx->source_port);
 	json_object_set_boolean(json_object, buff, true);
 
-	snprintf(buff, sizeof(buff), "destination:ip:%s", conn_info.destination_ip);
+	snprintf(buff, sizeof(buff), "destination:ip:%s", conn_ctx->destination_ip);
 	json_object_set_boolean(json_object, buff, true);
-	snprintf(buff, sizeof(buff), "destination:port:%d", conn_info.destination_port);
+	snprintf(buff, sizeof(buff), "destination:port:%d", conn_ctx->destination_port);
 	json_object_set_boolean(json_object, buff, true);
 }
 
-static command_answer *prepare_opa_input(net_conn_info conn_info, service_discovery_entry *sd_entry, char *augmentation_response_json)
+static command_answer *prepare_opa_input(const tcp_connection_context *conn_ctx, service_discovery_entry *sd_entry, char *augmentation_response_json)
 {
 	if (!augmentation_response_json)
 	{
@@ -1181,7 +1226,7 @@ static command_answer *prepare_opa_input(net_conn_info conn_info, service_discov
 		goto cleanup;
 	}
 
-	add_net_conn_info_to_json(conn_info, labels);
+	add_net_conn_info_to_json(conn_ctx, labels);
 	if (sd_entry)
 	{
 		add_sd_entry_labels_to_json(sd_entry, json);
@@ -1222,7 +1267,7 @@ static int br_low_write(void *ctx, const unsigned char *buf, size_t len)
 	return plain_send_msg((camblet_socket *)ctx, buf, len);
 }
 
-opa_socket_context enriched_socket_eval(direction direction, struct sock *sk, int port)
+opa_socket_context enriched_socket_eval(const tcp_connection_context *conn_ctx, direction direction, struct sock *sk, int port)
 {
 	// we take a shortcut if the socket is already augmented for example through setsockopt
 	if (sk->sk_user_data)
@@ -1233,44 +1278,49 @@ opa_socket_context enriched_socket_eval(direction direction, struct sock *sk, in
 	service_discovery_entry *sd_entry = NULL;
 	opa_socket_context opa_socket_ctx = {0};
 
-	net_conn_info conn_info = get_net_conn_info(direction, sk, port);
-
 	if (direction == OUTPUT)
 	{
-		pr_debug("look for sd entry # command[%s] address[%s]", current->comm, conn_info.destination_ip);
-		sd_entry = sd_table_entry_get(conn_info.destination_ip);
+		pr_debug("look for sd entry # command[%s] address[%s]", current->comm, conn_ctx->destination_ip);
+		sd_entry = sd_table_entry_get(conn_ctx->destination_ip);
 		if (sd_entry == NULL)
 		{
-			char *address = strnprintf("%s:%d", conn_info.destination_ip, conn_info.destination_port);
-			pr_debug("look for sd entry # command[%s] address[%s:%d]", current->comm, conn_info.destination_ip, conn_info.destination_port);
+			char *address = strnprintf("%s:%d", conn_ctx->destination_ip, conn_ctx->destination_port);
+			pr_debug("look for sd entry # command[%s] address[%s:%d]", current->comm, conn_ctx->destination_ip, conn_ctx->destination_port);
 			sd_entry = sd_table_entry_get(address);
 			kfree(address);
 		}
 		if (!sd_entry)
 		{
-			pr_debug("sd entry not found # command[%s] address[%s:%d]", current->comm, conn_info.destination_ip, conn_info.destination_port);
+			trace_warn(conn_ctx, "sd entry not found", 4, "command", current->comm, "address", conn_ctx->destination_address);
+
 			return opa_socket_ctx;
 		}
+
+		trace_debug(conn_ctx, "outgoing connection", 4, "command", current->comm, "address", conn_ctx->destination_address);
+	}
+	else
+	{
+		trace_debug(conn_ctx, "incoming connection", 4, "command", current->comm, "address", conn_ctx->source_address);
 	}
 
 	// augmenting process connection
 	augmentation_response *response = augment_workload();
 	if (response->error)
 	{
-		pr_err("could not augment process connection # err[%s]", response->error);
+		trace_err(conn_ctx, "could not augment process connection", 2, "error", response->error);
 		augmentation_response_put(response);
 	}
 	else
 	{
-		command_answer *answer = prepare_opa_input(conn_info, sd_entry, response->response);
+		command_answer *answer = prepare_opa_input(conn_ctx, sd_entry, response->response);
 		if (answer->error)
 		{
-			pr_err("could not prepare opa input # err[%s]", answer->error);
+			trace_err(conn_ctx, "could not prepare opa input", 2, "error", answer->error);
 		}
 		else
 		{
-			pr_debug("augmentation response # response[%s]", answer->answer);
-			opa_socket_ctx = socket_eval(answer->answer);
+			trace_debug(conn_ctx, "augmentation response", 2, "response", answer->answer);
+			opa_socket_ctx = socket_eval(conn_ctx, answer->answer);
 		}
 		free_command_answer(answer);
 		augmentation_response_put(response);
@@ -1303,7 +1353,7 @@ void camblet_configure_server_tls(camblet_socket *sc)
 		br_ssl_server_set_trust_anchor_names_alt(sc->sc, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
 
 		bool insecure;
-		br_x509_camblet_init(&sc->xc, &sc->sc->eng, &sc->opa_socket_ctx, insecure = false);
+		br_x509_camblet_init(&sc->xc, &sc->sc->eng, &sc->opa_socket_ctx, sc->conn_ctx, insecure = false);
 		br_ssl_engine_set_default_rsavrfy(&sc->sc->eng);
 	}
 
@@ -1366,7 +1416,8 @@ void camblet_configure_client_tls(camblet_socket *sc)
 							 (sizeof suites) / (sizeof suites[0]));
 
 	bool insecure;
-	br_x509_camblet_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx, insecure = trust_anchors_len == 0);
+	pr_info("br_x509_camblet_init # uuid[%pUB]", sc->conn_ctx->uuid.b);
+	br_x509_camblet_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx, sc->conn_ctx, insecure = trust_anchors_len == 0);
 
 	// mTLS enablement
 	if (sc->opa_socket_ctx.mtls)
@@ -1433,19 +1484,18 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	u16 port = (u16)(sk->sk_portpair >> 16);
 
-	opa_socket_context opa_socket_ctx = enriched_socket_eval(INPUT, client_sk, port);
+	const tcp_connection_context conn_ctx = tcp_connection_context_init(INPUT, client_sk, port);
+
+	opa_socket_context opa_socket_ctx = enriched_socket_eval(&conn_ctx, INPUT, client_sk, port);
 
 	if (opa_socket_ctx.allowed)
 	{
-		sc = camblet_new_server_socket(client_sk, opa_socket_ctx);
+		sc = camblet_new_server_socket(client_sk, opa_socket_ctx, &conn_ctx);
 		if (!sc)
 		{
 			pr_err("could not create camblet socket");
 			goto error;
 		}
-
-		u16 client_port = (u16)(client_sk->sk_portpair);
-		pr_debug("accept # command[%s] uid[%d] destination_port[%d] source_port[%d]", current->comm, current_uid().val, port, client_port);
 
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
@@ -1505,21 +1555,21 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		return err;
 	}
 
-	opa_socket_context opa_socket_ctx = enriched_socket_eval(OUTPUT, sk, port);
+	const tcp_connection_context conn_ctx = tcp_connection_context_init(OUTPUT, sk, port);
+
+	opa_socket_context opa_socket_ctx = enriched_socket_eval(&conn_ctx, OUTPUT, sk, port);
 
 	if (opa_socket_ctx.allowed)
 	{
 		if (!sc)
 		{
-			sc = camblet_new_client_socket(sk, opa_socket_ctx);
+			sc = camblet_new_client_socket(sk, opa_socket_ctx, &conn_ctx);
 			if (!sc)
 			{
 				pr_err("could not create camblet socket");
 				goto error;
 			}
 		}
-
-		pr_debug("connect # command[%s] uid[%d] destination_port[%d]", current->comm, current_uid().val, port);
 
 		memcpy(sc->rsa_priv, rsa_priv, sizeof *sc->rsa_priv);
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);

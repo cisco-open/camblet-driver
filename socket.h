@@ -12,6 +12,7 @@
 #define socket_h
 
 #include <linux/inet.h>
+#include <linux/uuid.h>
 
 #include "json.h"
 
@@ -26,13 +27,16 @@ typedef enum
 
 typedef struct
 {
+    uuid_t uuid;
     direction direction;
     char source_ip[INET6_ADDRSTRLEN];
     u16 source_port;
+    char source_address[INET6_ADDRSTRLEN + 5];
     char destination_ip[INET6_ADDRSTRLEN];
     u16 destination_port;
-} net_conn_info;
+    char destination_address[INET6_ADDRSTRLEN + 5];
+} tcp_connection_context;
 
-void add_net_conn_info_to_json(net_conn_info conn_info, JSON_Object *json_object);
+void add_net_conn_info_to_json(const tcp_connection_context *ctx, JSON_Object *json_object);
 
 #endif
