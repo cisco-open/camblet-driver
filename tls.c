@@ -11,6 +11,7 @@
 #define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
 
 #include "tls.h"
+#include "trace.h"
 
 #include <linux/slab.h>
 
@@ -85,6 +86,8 @@ xwc_end_chain(const br_x509_class **ctx)
     camblet_cc = ((br_x509_camblet_context *)(void *)ctx);
     mini_cc = &camblet_cc->ctx;
 
+    pr_info("xwc_end_chain # uuid[%pUB]", camblet_cc->conn_ctx->uuid.b);
+
     unsigned int err = mini_cc->vtable->end_chain(&mini_cc->vtable);
 
     if (err == BR_ERR_X509_NOT_TRUSTED && camblet_cc->insecure)
@@ -105,7 +108,9 @@ xwc_end_chain(const br_x509_class **ctx)
         allowed = false;
     }
 
-    pr_debug("allowed spiffe id # len[%d]", camblet_cc->socket_context->allowed_spiffe_ids_length);
+    pr_debug("allowed spiffe id count # count[%d]", camblet_cc->socket_context->allowed_spiffe_ids_length);
+
+    char *spiffe_id = NULL;
 
     for (i = 0; i < mini_cc->num_name_elts; i++)
     {
@@ -113,11 +118,12 @@ xwc_end_chain(const br_x509_class **ctx)
 
         if (mini_cc->name_elts[i].oid == OID_uniformResourceIdentifier)
         {
+            spiffe_id = mini_cc->name_elts[i].buf;
             for (k = 0; k < camblet_cc->socket_context->allowed_spiffe_ids_length; k++)
             {
                 if (compare_spiffe_ids(camblet_cc->socket_context->allowed_spiffe_ids[k], mini_cc->name_elts[i].buf) == 0)
                 {
-                    pr_debug("spiffe id match # cert_uri[%s] policy_uri[%s]", mini_cc->name_elts[i].buf, camblet_cc->socket_context->allowed_spiffe_ids[k]);
+                    trace_debug(camblet_cc->conn_ctx, "peer certificate allowed", 4, "peer-spiffe-id", mini_cc->name_elts[i].buf, "allowed-spiffe-id", camblet_cc->socket_context->allowed_spiffe_ids[k]);
                     allowed = true;
                     break;
                 }
@@ -127,7 +133,7 @@ xwc_end_chain(const br_x509_class **ctx)
 
     if (!allowed)
     {
-        pr_debug("peer certificate is denied");
+        trace_debug(camblet_cc->conn_ctx, "peer certificate is denied", 2, "peer-spiffe-id", spiffe_id);
 
         return BR_ERR_X509_NOT_TRUSTED;
     }
@@ -153,11 +159,14 @@ static const br_x509_class x509_camblet_vtable = {
     xwc_get_pkey,
 };
 
-void br_x509_camblet_init(br_x509_camblet_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context, bool insecure)
+void br_x509_camblet_init(br_x509_camblet_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context, const tcp_connection_context *conn_ctx, bool insecure)
 {
     ctx->vtable = &x509_camblet_vtable;
     ctx->socket_context = socket_context;
+    ctx->conn_ctx = conn_ctx;
     ctx->insecure = insecure;
+
+    pr_info("br_x509_camblet_init # uuid[%pUB]", ctx->conn_ctx->uuid.b);
 
     br_name_element *name_elts = kmalloc(sizeof(br_name_element) * 3, GFP_KERNEL);
 

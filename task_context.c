@@ -48,7 +48,10 @@ task_context *get_task_context(void)
     context->namespace_ids.cgroup = current->nsproxy->cgroup_ns->ns.inum;
 
     struct css_set *cset = task_css_set(current);
-    cgroup_path(cset->dfl_cgrp, context->cgroup_path, sizeof(context->cgroup_path));
+    if (cset)
+    {
+        cgroup_path(cset->dfl_cgrp, context->cgroup_path, sizeof(context->cgroup_path));
+    }
 
     return context;
 }

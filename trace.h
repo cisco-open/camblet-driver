@@ -13,6 +13,7 @@
 
 #include <linux/types.h>
 #include "task_context.h"
+#include "socket.h"
 
 typedef struct
 {
@@ -28,21 +29,21 @@ void clear_trace_requests(void);
 trace_request *get_trace_request(int pid, int uid, const char *command_name);
 trace_request *get_trace_request_by_partial_match(int pid, int uid, const char *command_name);
 
-int trace_log(const char *message, int log_level, int n, ...);
+int trace_log(const tcp_connection_context *conn_ctx, const char *message, int log_level, int n, ...);
 
-#define trace_err(message, n, ...) \
-    trace_log(message, LOGLEVEL_ERR, n, ##__VA_ARGS__);
+#define trace_err(conn_ctx, message, n, ...) \
+    trace_log(conn_ctx, message, LOGLEVEL_ERR, n, ##__VA_ARGS__);
 
-#define trace_warn(message, n, ...) \
-    trace_log(message, LOGLEVEL_WARNING, n, ##__VA_ARGS__);
+#define trace_warn(conn_ctx, message, n, ...) \
+    trace_log(conn_ctx, message, LOGLEVEL_WARNING, n, ##__VA_ARGS__);
 
-#define trace_info(message, n, ...) \
-    trace_log(message, LOGLEVEL_INFO, n, ##__VA_ARGS__);
+#define trace_info(conn_ctx, message, n, ...) \
+    trace_log(conn_ctx, message, LOGLEVEL_INFO, n, ##__VA_ARGS__);
 
-#define trace_debug(message, n, ...) \
-    trace_log(message, LOGLEVEL_DEBUG, n, ##__VA_ARGS__);
+#define trace_debug(conn_ctx, message, n, ...) \
+    trace_log(conn_ctx, message, LOGLEVEL_DEBUG, n, ##__VA_ARGS__);
 
-#define trace_msg(message, n, ...) \
-    trace_log(message, -1, n, ##__VA_ARGS__);
+#define trace_msg(conn_ctx, message, n, ...) \
+    trace_log(conn_ctx, message, -1, n, ##__VA_ARGS__);
 
 #endif
