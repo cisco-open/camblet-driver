@@ -27,7 +27,7 @@ typedef enum
 
 typedef struct
 {
-    uuid_t uuid;
+    u64 id;
     direction direction;
     char source_ip[INET6_ADDRSTRLEN];
     u16 source_port;

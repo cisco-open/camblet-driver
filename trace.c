@@ -17,6 +17,7 @@
 #include "json.h"
 #include "commands.h"
 #include "socket.h"
+#include "string.h"
 
 // a list to hold trace requests
 static LIST_HEAD(trace_requests);
@@ -314,11 +315,12 @@ int trace_log(const tcp_connection_context *conn_ctx, const char *message, int l
         return -ENOMEM;
     }
 
-    if (!uuid_is_null(&conn_ctx->uuid))
+    if (conn_ctx)
     {
-        char uuid[UUID_STRING_LEN + 1];
-        int uuid_len = snprintf(uuid, UUID_STRING_LEN + 1, "%pUB", conn_ctx->uuid.b);
-        if (uuid_len < 0 || json_object_set_string(root_object, "uuid", uuid) < 0)
+        const char *id_str = strnprintf("%u", conn_ctx->id);
+        int retval = json_object_set_string(root_object, "correlation_id", id_str);
+        kfree(id_str);
+        if (retval < 0)
         {
             json_value_free(root_value);
 

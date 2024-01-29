@@ -86,8 +86,6 @@ xwc_end_chain(const br_x509_class **ctx)
     camblet_cc = ((br_x509_camblet_context *)(void *)ctx);
     mini_cc = &camblet_cc->ctx;
 
-    pr_info("xwc_end_chain # uuid[%pUB]", camblet_cc->conn_ctx->uuid.b);
-
     unsigned int err = mini_cc->vtable->end_chain(&mini_cc->vtable);
 
     if (err == BR_ERR_X509_NOT_TRUSTED && camblet_cc->insecure)
@@ -165,8 +163,6 @@ void br_x509_camblet_init(br_x509_camblet_context *ctx, br_ssl_engine_context *e
     ctx->socket_context = socket_context;
     ctx->conn_ctx = conn_ctx;
     ctx->insecure = insecure;
-
-    pr_info("br_x509_camblet_init # uuid[%pUB]", ctx->conn_ctx->uuid.b);
 
     br_name_element *name_elts = kmalloc(sizeof(br_name_element) * 3, GFP_KERNEL);
 

@@ -347,6 +347,7 @@ static void camblet_socket_free(camblet_socket *s)
 		x509_certificate_put(s->cert);
 
 		kfree(s->parameters);
+		kfree(s->conn_ctx);
 		kfree(s);
 	}
 }
@@ -1085,14 +1086,14 @@ static int cache_and_validate_cert(camblet_socket *sc, char *key)
 	return 0;
 }
 
-static tcp_connection_context tcp_connection_context_init(direction direction, struct sock *s, u16 port)
+static tcp_connection_context *tcp_connection_context_init(direction direction, struct sock *s, u16 port)
 {
-	tcp_connection_context info = {.direction = direction};
+	tcp_connection_context *ctx = kzalloc(sizeof(tcp_connection_context), GFP_KERNEL);
+
+	ctx->direction = direction;
+	ctx->id = s;
+
 	const char *ipformat = "%pI4";
-
-	uuid_gen(&info.uuid);
-
-	pr_info("aa # direction[%d] uuid[%pUB]", direction, info.uuid.b);
 
 	if (s->sk_family == AF_INET6)
 	{
@@ -1105,17 +1106,17 @@ static tcp_connection_context tcp_connection_context_init(direction direction, s
 		{
 			struct in6_addr *ipv6_saddr = &inet6_sk(s)->saddr;
 			struct in6_addr *ipv6_daddr = &s->sk_v6_daddr;
-			snprintf(info.source_ip, INET6_ADDRSTRLEN, ipformat, ipv6_daddr);
-			snprintf(info.destination_ip, INET6_ADDRSTRLEN, ipformat, ipv6_saddr);
+			snprintf(ctx->source_ip, INET6_ADDRSTRLEN, ipformat, ipv6_daddr);
+			snprintf(ctx->destination_ip, INET6_ADDRSTRLEN, ipformat, ipv6_saddr);
 		}
 		else
 		{
-			snprintf(info.source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
-			snprintf(info.destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
+			snprintf(ctx->source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
+			snprintf(ctx->destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
 		}
 
-		info.source_port = s->sk_dport;
-		info.destination_port = s->sk_num;
+		ctx->source_port = s->sk_dport;
+		ctx->destination_port = s->sk_num;
 	}
 	else
 	{
@@ -1123,23 +1124,23 @@ static tcp_connection_context tcp_connection_context_init(direction direction, s
 		{
 			struct in6_addr *ipv6_saddr = &inet6_sk(s)->saddr;
 			struct in6_addr *ipv6_daddr = &s->sk_v6_daddr;
-			snprintf(info.source_ip, INET6_ADDRSTRLEN, ipformat, ipv6_saddr);
-			snprintf(info.destination_ip, INET6_ADDRSTRLEN, ipformat, ipv6_daddr);
+			snprintf(ctx->source_ip, INET6_ADDRSTRLEN, ipformat, ipv6_saddr);
+			snprintf(ctx->destination_ip, INET6_ADDRSTRLEN, ipformat, ipv6_daddr);
 		}
 		else
 		{
-			snprintf(info.source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
-			snprintf(info.destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
+			snprintf(ctx->source_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_rcv_saddr);
+			snprintf(ctx->destination_ip, INET6_ADDRSTRLEN, ipformat, &s->sk_daddr);
 		}
 
-		info.source_port = s->sk_num;
-		info.destination_port = port;
+		ctx->source_port = s->sk_num;
+		ctx->destination_port = port;
 	}
 
-	snprintf(info.source_address, INET6_ADDRSTRLEN + 5, "%s:%d", info.source_ip, info.source_port);
-	snprintf(info.destination_address, INET6_ADDRSTRLEN + 5, "%s:%d", info.destination_ip, info.destination_port);
+	snprintf(ctx->source_address, INET6_ADDRSTRLEN + 5, "%s:%d", ctx->source_ip, ctx->source_port);
+	snprintf(ctx->destination_address, INET6_ADDRSTRLEN + 5, "%s:%d", ctx->destination_ip, ctx->destination_port);
 
-	return info;
+	return ctx;
 }
 
 void add_sd_entry_labels_to_json(service_discovery_entry *sd_entry, JSON_Value *json)
@@ -1291,7 +1292,7 @@ opa_socket_context enriched_socket_eval(const tcp_connection_context *conn_ctx, 
 		}
 		if (!sd_entry)
 		{
-			trace_warn(conn_ctx, "sd entry not found", 4, "command", current->comm, "address", conn_ctx->destination_address);
+			trace_debug(conn_ctx, "sd entry not found", 4, "command", current->comm, "address", conn_ctx->destination_address);
 
 			return opa_socket_ctx;
 		}
@@ -1416,7 +1417,6 @@ void camblet_configure_client_tls(camblet_socket *sc)
 							 (sizeof suites) / (sizeof suites[0]));
 
 	bool insecure;
-	pr_info("br_x509_camblet_init # uuid[%pUB]", sc->conn_ctx->uuid.b);
 	br_x509_camblet_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx, sc->conn_ctx, insecure = trust_anchors_len == 0);
 
 	// mTLS enablement
@@ -1484,13 +1484,13 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	u16 port = (u16)(sk->sk_portpair >> 16);
 
-	const tcp_connection_context conn_ctx = tcp_connection_context_init(INPUT, client_sk, port);
+	const tcp_connection_context *conn_ctx = tcp_connection_context_init(INPUT, client_sk, port);
 
-	opa_socket_context opa_socket_ctx = enriched_socket_eval(&conn_ctx, INPUT, client_sk, port);
+	opa_socket_context opa_socket_ctx = enriched_socket_eval(conn_ctx, INPUT, client_sk, port);
 
 	if (opa_socket_ctx.allowed)
 	{
-		sc = camblet_new_server_socket(client_sk, opa_socket_ctx, &conn_ctx);
+		sc = camblet_new_server_socket(client_sk, opa_socket_ctx, conn_ctx);
 		if (!sc)
 		{
 			pr_err("could not create camblet socket");
@@ -1555,15 +1555,15 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		return err;
 	}
 
-	const tcp_connection_context conn_ctx = tcp_connection_context_init(OUTPUT, sk, port);
+	const tcp_connection_context *conn_ctx = tcp_connection_context_init(OUTPUT, sk, port);
 
-	opa_socket_context opa_socket_ctx = enriched_socket_eval(&conn_ctx, OUTPUT, sk, port);
+	opa_socket_context opa_socket_ctx = enriched_socket_eval(conn_ctx, OUTPUT, sk, port);
 
 	if (opa_socket_ctx.allowed)
 	{
 		if (!sc)
 		{
-			sc = camblet_new_client_socket(sk, opa_socket_ctx, &conn_ctx);
+			sc = camblet_new_client_socket(sk, opa_socket_ctx, conn_ctx);
 			if (!sc)
 			{
 				pr_err("could not create camblet socket");
