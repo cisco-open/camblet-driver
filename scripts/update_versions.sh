@@ -19,6 +19,19 @@ changelog_entry+="\n\n -- Camblet maintainers <team@camblet.io>  $(date -R)"
 escaped_changelog_entry=$(printf "%s" "$changelog_entry" | sed 's/\//\\&/g')
 sed -i '' "1s/^/$escaped_changelog_entry\\n\\n/" debian/changelog
 
+# Prepare RPM changelog entry
+
+formatted_date=$(date +"%a %b %d %Y")
+rpm_chglog_entry+="\n* "$formatted_date" Camblet maintainers <team@camblet.io> - "$new_tag"-1"
+
+while IFS= read -r sline; do
+  rpm_chglog_entry+="\n  - $sline"
+done <<< "$commit_messages"
+
+escaped_rpm_chglog_entry=$(printf "%s" "$rpm_chglog_entry" | sed 's/\//\\&/g')
+sed -i '' "s/%changelog/%changelog$escaped_rpm_chglog_entry\\n/" rpmbuild/SPECS/camblet-driver.spec
+
+
 # Update the dkms.conf
 sed -i '' 's/PACKAGE_VERSION=".*"/PACKAGE_VERSION="'"$new_tag"'"/' dkms.conf
 # Update the kernel-module.spec
