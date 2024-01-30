@@ -109,28 +109,29 @@ trace_request *get_trace_request_by_partial_match(int pid, int uid, const char *
 
         if (tr->pid > 0 && tr->pid != pid)
         {
-            pr_debug("pid continue [%d != %d]", tr->pid, pid);
             continue;
         }
 
         if (tr->uid > 0 && tr->uid != uid)
         {
-            pr_debug("uid continue [%d != %d]", tr->uid, uid);
             continue;
         }
 
         if (strlen(tr->command_name) > 0 && strcmp(command_name, tr->command_name))
         {
-            pr_debug("cn continue [%s != %s]", tr->command_name, command_name);
             continue;
         }
 
         unlock_trace_requests();
 
+        pr_debug("check trace request match found # pid[%d] uid[%d] command_name[%s]", tr->pid, tr->uid, tr->command_name);
+
         return tr;
     }
 
     unlock_trace_requests();
+
+    pr_debug("check trace request match not found # pid[%d] uid[%d] command_name[%s]", tr->pid, tr->uid, tr->command_name);
 
     return 0;
 }
@@ -219,7 +220,7 @@ char *compose_log_message(const char *message, int n, va_list args)
         {
             if (!sep)
             {
-                sprintf(log_message + strlen(log_message), " # ");
+                strcat(log_message, " # ");
                 sep = true;
             }
             sprintf(log_message + strlen(log_message), "%s[%s]", var, value);
@@ -296,7 +297,7 @@ int trace_log(const tcp_connection_context *conn_ctx, const char *message, int l
     JSON_Value *root_value = json_value_init_object();
     JSON_Object *root_object = json_value_get_object(root_value);
 
-    if (!root_object)
+    if (!root_value)
     {
         return -ENOMEM;
     }
@@ -317,7 +318,7 @@ int trace_log(const tcp_connection_context *conn_ctx, const char *message, int l
 
     if (conn_ctx)
     {
-        const char *id_str = strnprintf("%u", conn_ctx->id);
+        const char *id_str = strnprintf("%llu", conn_ctx->id);
         int retval = json_object_set_string(root_object, "correlation_id", id_str);
         kfree(id_str);
         if (retval < 0)

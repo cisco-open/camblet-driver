@@ -35,7 +35,7 @@ static DECLARE_WAIT_QUEUE_HEAD(command_wait_queue);
 // commands that are being processed by the driver
 static LIST_HEAD(in_flight_command_list);
 
-command_answer *this_send_command(char *name, char *data, task_context *context, bool is_message)
+static command_answer *this_send_command(char *name, char *data, task_context *context, bool is_message)
 {
     struct command *cmd = kzalloc(sizeof(struct command), GFP_KERNEL);
 
@@ -97,9 +97,9 @@ command_answer *send_command(char *name, char *data, task_context *context)
 
 // add a message to the command list (to be processed by the driver)
 // this is a non-blocking function
-command_answer *send_message(char *name, char *data, task_context *context)
+void send_message(char *name, char *data, task_context *context)
 {
-    return this_send_command(name, data, context, true);
+    this_send_command(name, data, context, true);
 }
 
 command_answer *send_augment_command()
