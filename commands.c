@@ -104,9 +104,7 @@ void send_message(char *name, char *data, task_context *context)
 
 command_answer *send_augment_command()
 {
-    command_answer *answer = send_command("augment", NULL, get_task_context());
-
-    return answer;
+    return send_command("augment", NULL, get_task_context());
 }
 
 command_answer *send_accept_command(u16 port)
