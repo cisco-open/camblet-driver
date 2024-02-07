@@ -19,6 +19,33 @@ const unsigned char OID_rfc822Name[] = {0, 1};
 const unsigned char OID_dNSName[] = {0, 2};
 const unsigned char OID_uniformResourceIdentifier[] = {0, 6};
 
+#define tlsHandshakeRecord 22
+#define VersionTLS10 0x0301
+#define VersionTLS11 0x0302
+#define VersionTLS12 0x0303
+#define VersionTLS13 0x0304
+
+bool is_tls_handshake(const uint8_t *b)
+{
+    if (b[0] != tlsHandshakeRecord)
+    {
+        return false;
+    }
+
+    uint16_t tlsVersion = (b[1] << 8) | b[2];
+
+    switch (tlsVersion)
+    {
+    case VersionTLS10:
+    case VersionTLS11:
+    case VersionTLS12:
+    case VersionTLS13:
+        return true;
+    default:
+        return false;
+    }
+}
+
 static int compare_spiffe_ids(const char *allowed_id, const char *id)
 {
     int allowed_id_len = strlen(allowed_id);
