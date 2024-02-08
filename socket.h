@@ -12,7 +12,6 @@
 #define socket_h
 
 #include <linux/inet.h>
-#include <linux/uuid.h>
 
 #include "json.h"
 
