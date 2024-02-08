@@ -248,7 +248,7 @@ int trace_log(const tcp_connection_context *conn_ctx, const char *message, int l
 {
     unsigned int i;
     va_list args, args_copy;
-    char level[8];
+    char *level = NULL;
 
     if (n < 0 || (n > 0 && n % 2 != 0))
     {
@@ -267,19 +267,19 @@ int trace_log(const tcp_connection_context *conn_ctx, const char *message, int l
         {
         case LOGLEVEL_ERR:
             pr_err("%s", log_message);
-            strcpy(level, "error");
+            level = "error";
             break;
         case LOGLEVEL_WARNING:
             pr_warn("%s", log_message);
-            strcpy(level, "warning");
+            level = "warning";
             break;
         case LOGLEVEL_INFO:
             pr_info("%s", log_message);
-            strcpy(level, "info");
+            level = "info";
             break;
         case LOGLEVEL_DEBUG:
             pr_debug("%s", log_message);
-            strcpy(level, "debug");
+            level = "debug";
             break;
         default:
             printk("%s", log_message);
