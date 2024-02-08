@@ -99,6 +99,11 @@ trace_request *get_trace_request_by_partial_match(int pid, int uid, const char *
 {
     trace_request *tr;
 
+    if (list_empty(&trace_requests))
+    {
+        return NULL;
+    }
+
     lock_trace_requests();
 
     pr_debug("look for trace request # pid[%d] uid[%d] command_name[%s]", pid, uid, command_name);
@@ -133,7 +138,7 @@ trace_request *get_trace_request_by_partial_match(int pid, int uid, const char *
 
     pr_debug("check trace request match not found # pid[%d] uid[%d] command_name[%s]", tr->pid, tr->uid, tr->command_name);
 
-    return 0;
+    return NULL;
 }
 
 static void free_trace_request(trace_request *tr)
