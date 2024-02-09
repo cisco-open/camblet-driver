@@ -9,6 +9,7 @@ ccflags-y += -foptimize-sibling-calls \
 			 -I$(PWD)/third-party/wasm3/source/ \
 			 -I$(PWD)/third-party/base64 \
 			 -I$(PWD)/third-party/parson \
+			 -I$(PWD)/third-party/picohttpparser \
 			 #-Dd_m3LogCompile=1
 
 # Enable floating point arithmetic
@@ -55,6 +56,7 @@ camblet-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  third-party/wasm3/source/m3_parse.o \
 			  third-party/base64/base64.o \
 			  third-party/parson/json.o \
+			  third-party/picohttpparser/picohttpparser.o \
 			  buffer.o \
 			  device_driver.o \
 			  main.o \
