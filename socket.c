@@ -20,6 +20,7 @@
 #include <net/sock.h>
 #include <net/ip.h>
 #include <linux/inet.h>
+#include <linux/sockptr.h>
 
 #include "bearssl.h"
 #include "commands.h"
@@ -122,7 +123,7 @@ struct camblet_socket
 	camblet_send_msg *send_msg;
 	camblet_recv_msg *recv_msg;
 
-	const tcp_connection_context *conn_ctx;
+	tcp_connection_context *conn_ctx;
 };
 
 static int get_read_buffer_capacity(camblet_socket *s);
@@ -356,6 +357,7 @@ static void camblet_socket_free(camblet_socket *s)
 		x509_certificate_put(s->cert);
 
 		kfree(s->parameters);
+		kfree(s->conn_ctx->peer_spiffe_id);
 		kfree(s->conn_ctx);
 		kfree(s);
 	}
@@ -387,7 +389,7 @@ int proxywasm_attach(proxywasm *p, camblet_socket *s, ListenerDirection directio
 	return 0;
 }
 
-static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_context opa_socket_ctx, const tcp_connection_context *conn_ctx)
+static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_context opa_socket_ctx, tcp_connection_context *conn_ctx)
 {
 	camblet_socket *s = kzalloc(sizeof(camblet_socket), GFP_KERNEL);
 	s->sc = kzalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
@@ -424,7 +426,7 @@ static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_c
 	return s;
 }
 
-static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_context opa_socket_ctx, const tcp_connection_context *conn_ctx)
+static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_context opa_socket_ctx, tcp_connection_context *conn_ctx)
 {
 	camblet_socket *s = kzalloc(sizeof(camblet_socket), GFP_KERNEL);
 	s->cc = kzalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
@@ -934,6 +936,66 @@ int camblet_setsockopt(struct sock *sk, int level,
 	return tcp_setsockopt(sk, level, optname, optval, optlen);
 }
 
+int camblet_getsockopt(struct sock *sk, int level,
+					   int optname, char __user *uoptval,
+					   int __user *uoptlen)
+{
+	if (level != SOL_CAMBLET)
+	{
+		goto out;
+	}
+
+	pr_debug("getsockopt # level[%d] optname[%d]", level, optname);
+
+	int len;
+
+	sockptr_t optlen = USER_SOCKPTR(uoptlen);
+	sockptr_t optval = USER_SOCKPTR(uoptval);
+
+	if (copy_from_sockptr(&len, optlen, sizeof(int)))
+		return -EFAULT;
+
+	len = min_t(unsigned int, len, sizeof(int));
+
+	if (len < 0)
+		return -EINVAL;
+
+	switch (optname)
+	{
+	case CAMBLET_TLS_INFO:
+		camblet_socket *s = sk->sk_user_data;
+		if (s)
+		{
+			struct tls_info
+			{
+				char spiffe_id[256];
+				char peer_spiffe_id[256];
+			} info;
+
+			if (s->opa_socket_ctx.uri)
+			{
+				strncpy(info.spiffe_id, s->opa_socket_ctx.uri, 256);
+			}
+
+			if (s->conn_ctx->peer_spiffe_id)
+			{
+				strncpy(info.peer_spiffe_id, s->conn_ctx->peer_spiffe_id, 256);
+			}
+
+			len = sizeof(info);
+
+			if (copy_to_sockptr_offset(optlen, 0, &len, sizeof(int)))
+				return -EFAULT;
+			if (copy_to_sockptr_offset(optval, 0, &info, len))
+				return -EFAULT;
+		}
+		return 0;
+	}
+
+out:
+	return tcp_getsockopt(sk, level, optname, uoptval, uoptlen);
+}
+
 // a function to evaluate the connection if it should be intercepted, now with opa
 static opa_socket_context socket_eval(const tcp_connection_context *conn_ctx, const char *input)
 {
@@ -1132,7 +1194,7 @@ static tcp_connection_context *tcp_connection_context_init(direction direction, 
 	tcp_connection_context *ctx = kzalloc(sizeof(tcp_connection_context), GFP_KERNEL);
 
 	ctx->direction = direction;
-	ctx->id = s;
+	ctx->id = (u64)s;
 
 	const char *ipformat = "%pI4";
 
@@ -1525,7 +1587,7 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	u16 port = (u16)(sk->sk_portpair >> 16);
 
-	const tcp_connection_context *conn_ctx = tcp_connection_context_init(INPUT, client_sk, port);
+	tcp_connection_context *conn_ctx = tcp_connection_context_init(INPUT, client_sk, port);
 
 	opa_socket_context opa_socket_ctx = enriched_socket_eval(conn_ctx, INPUT, client_sk, port);
 
@@ -1596,7 +1658,7 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		return err;
 	}
 
-	const tcp_connection_context *conn_ctx = tcp_connection_context_init(OUTPUT, sk, port);
+	tcp_connection_context *conn_ctx = tcp_connection_context_init(OUTPUT, sk, port);
 
 	opa_socket_context opa_socket_ctx = enriched_socket_eval(conn_ctx, OUTPUT, sk, port);
 
@@ -1668,10 +1730,12 @@ int socket_init(void)
 	tcp_prot.accept = camblet_accept;
 	tcp_prot.connect = camblet_connect;
 	tcp_prot.setsockopt = camblet_setsockopt;
+	tcp_prot.getsockopt = camblet_getsockopt;
 
 	tcpv6_prot.accept = camblet_accept;
 	tcpv6_prot.connect = camblet_connect;
 	tcpv6_prot.setsockopt = camblet_setsockopt;
+	tcpv6_prot.getsockopt = camblet_getsockopt;
 
 	memcpy(&camblet_prot, &tcp_prot, sizeof(camblet_prot));
 	camblet_prot.recvmsg = camblet_recvmsg;
