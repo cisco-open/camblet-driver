@@ -34,6 +34,7 @@ typedef struct
     char destination_ip[INET6_ADDRSTRLEN];
     u16 destination_port;
     char destination_address[INET6_ADDRSTRLEN + 5];
+    char *peer_spiffe_id;
 } tcp_connection_context;
 
 void add_net_conn_info_to_json(const tcp_connection_context *ctx, JSON_Object *json_object);

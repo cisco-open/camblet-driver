@@ -27,11 +27,11 @@ typedef struct br_x509_camblet_context
     const br_x509_class *vtable;
     br_x509_minimal_context ctx;
     opa_socket_context *socket_context;
-    const tcp_connection_context *conn_ctx;
+    tcp_connection_context *conn_ctx;
     bool insecure;
 } br_x509_camblet_context;
 
-void br_x509_camblet_init(br_x509_camblet_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context, const tcp_connection_context *conn_ctx, bool insecure);
+void br_x509_camblet_init(br_x509_camblet_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context, tcp_connection_context *conn_ctx, bool insecure);
 void br_x509_camblet_free(br_x509_camblet_context *ctx);
 
 bool is_tls_handshake(const uint8_t *b);

@@ -13,9 +13,6 @@
 
 #define SOL_CAMBLET 7891
 #define CAMBLET_HOSTNAME 1
-
-typedef struct camblet_tls
-{
-} camblet_tls;
+#define CAMBLET_TLS_INFO 2
 
 #endif /* camblet_h */
