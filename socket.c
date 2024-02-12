@@ -124,10 +124,10 @@ static br_ssl_engine_context *get_ssl_engine_context(camblet_socket *s)
 	return s->direction == ListenerDirectionInbound ? &s->sc->eng : &s->cc->eng;
 }
 
-static int ktls_sendmsg(camblet_socket *s, void *msg, size_t len)
+static int ktls_sendmsg(camblet_socket *s, void *buf, size_t len)
 {
 	struct msghdr hdr = {0};
-	struct kvec iov = {.iov_base = msg, .iov_len = len};
+	struct kvec iov = {.iov_base = buf, .iov_len = len};
 
 	iov_iter_kvec(&hdr.msg_iter, WRITE, &iov, 1, len);
 
