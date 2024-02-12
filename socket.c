@@ -58,8 +58,8 @@ static br_rsa_public_key *rsa_pub;
 struct camblet_socket;
 typedef struct camblet_socket camblet_socket;
 
-typedef int(camblet_send_msg)(camblet_socket *s, void *msg, size_t len);
-typedef int(camblet_recv_msg)(camblet_socket *s, void *buf, size_t len, int flags);
+typedef int(camblet_sendmsg_t)(camblet_socket *s, void *msg, size_t len);
+typedef int(camblet_recvmsg_t)(camblet_socket *s, void *buf, size_t len, int flags);
 
 struct camblet_socket
 {
@@ -111,8 +111,8 @@ struct camblet_socket
 
 	void (*ktls_close)(struct sock *sk, long timeout);
 
-	camblet_send_msg *send_msg;
-	camblet_recv_msg *recv_msg;
+	camblet_sendmsg_t *sendmsg;
+	camblet_recvmsg_t *recvmsg;
 
 	const tcp_connection_context *conn_ctx;
 };
@@ -124,7 +124,7 @@ static br_ssl_engine_context *get_ssl_engine_context(camblet_socket *s)
 	return s->direction == ListenerDirectionInbound ? &s->sc->eng : &s->cc->eng;
 }
 
-static int ktls_send_msg(camblet_socket *s, void *msg, size_t len)
+static int ktls_sendmsg(camblet_socket *s, void *msg, size_t len)
 {
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = msg, .iov_len = len};
@@ -134,7 +134,7 @@ static int ktls_send_msg(camblet_socket *s, void *msg, size_t len)
 	return s->ktls_sendmsg(s->sock, &hdr, len);
 }
 
-static int ktls_recv_msg(camblet_socket *s, void *buf, size_t size, int flags)
+static int ktls_recvmsg(camblet_socket *s, void *buf, size_t size, int flags)
 {
 	int buf_len = get_read_buffer_capacity(s);
 	struct msghdr hdr = {0};
@@ -150,7 +150,7 @@ static int ktls_recv_msg(camblet_socket *s, void *buf, size_t size, int flags)
 						   flags, &addr_len);
 }
 
-static int bearssl_send_msg(camblet_socket *s, void *src, size_t len)
+static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 {
 	int err = br_sslio_write_all(&s->ioc, src, len);
 	if (err < 0)
@@ -196,7 +196,7 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 	return (int)alen;
 }
 
-static int bearssl_recv_msg(camblet_socket *s, void *dst, size_t len, int flags)
+static int bearssl_recvmsg(camblet_socket *s, void *dst, size_t len, int flags)
 {
 	int ret = br_sslio_read_with_flags(&s->ioc, dst, len, flags);
 	if (ret < 0)
@@ -214,7 +214,7 @@ static int bearssl_recv_msg(camblet_socket *s, void *dst, size_t len, int flags)
 	return ret;
 }
 
-static int plain_send_msg(camblet_socket *s, void *msg, size_t len)
+static int plain_sendmsg(camblet_socket *s, void *msg, size_t len)
 {
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = msg, .iov_len = len};
@@ -224,7 +224,7 @@ static int plain_send_msg(camblet_socket *s, void *msg, size_t len)
 	return tcp_sendmsg(s->sock, &hdr, len);
 }
 
-static int plain_recv_msg(camblet_socket *s, void *buf, size_t size, int flags)
+static int plain_recvmsg(camblet_socket *s, void *buf, size_t size, int flags)
 {
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = buf, .iov_len = size};
@@ -241,11 +241,11 @@ static int plain_recv_msg(camblet_socket *s, void *buf, size_t size, int flags)
 
 static int camblet_socket_read(camblet_socket *s, void *dst, size_t len, int flags)
 {
-	return s->recv_msg(s, dst, len, flags);
+	return s->recvmsg(s, dst, len, flags);
 }
 static int camblet_socket_write(camblet_socket *s, void *src, size_t len)
 {
-	return s->send_msg(s, src, len);
+	return s->sendmsg(s, src, len);
 }
 
 static char *get_read_buffer(camblet_socket *s)
@@ -512,8 +512,8 @@ static int ensure_tls_handshake(camblet_socket *s)
 		if (s->opa_socket_ctx.passthrough)
 		{
 			trace_debug(conn_ctx, "passthrough enabled", 0);
-			s->send_msg = plain_send_msg;
-			s->recv_msg = plain_recv_msg;
+			s->sendmsg = plain_sendmsg;
+			s->recvmsg = plain_recvmsg;
 		}
 		else
 		{
@@ -757,8 +757,8 @@ static int configure_ktls_sock(camblet_socket *s)
 		else
 			pr_warn("configure kTLS error: only ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 cipher suite is supported # requested_suite[%x]", params->cipher_suite);
 
-		s->send_msg = bearssl_send_msg;
-		s->recv_msg = bearssl_recv_msg;
+		s->sendmsg = bearssl_sendmsg;
+		s->recvmsg = bearssl_recvmsg;
 
 		return 0;
 	}
@@ -836,8 +836,8 @@ static int configure_ktls_sock(camblet_socket *s)
 
 	WRITE_ONCE(s->sock->sk_prot, ktls_prot);
 
-	s->send_msg = ktls_send_msg;
-	s->recv_msg = ktls_recv_msg;
+	s->sendmsg = ktls_sendmsg;
+	s->recvmsg = ktls_recvmsg;
 
 	trace_debug(s->conn_ctx, "kTLS configured", 0);
 
@@ -1248,7 +1248,7 @@ cleanup:
 static int br_low_read(void *ctx, unsigned char *buf, size_t len)
 {
 	camblet_socket *s = (camblet_socket *)ctx;
-	int ret = plain_recv_msg(s, buf, len, 0);
+	int ret = plain_recvmsg(s, buf, len, 0);
 	// BearSSL doesn't like 0 return value, but it's not an error
 	// so we return -1 instead and set sock_closed to true to
 	// indicate that the socket is closed without errors.
@@ -1265,7 +1265,7 @@ static int br_low_read(void *ctx, unsigned char *buf, size_t len)
  */
 static int br_low_write(void *ctx, const unsigned char *buf, size_t len)
 {
-	return plain_send_msg((camblet_socket *)ctx, buf, len);
+	return plain_sendmsg((camblet_socket *)ctx, buf, len);
 }
 
 opa_socket_context enriched_socket_eval(const tcp_connection_context *conn_ctx, direction direction, struct sock *sk, int port)
