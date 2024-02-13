@@ -38,12 +38,20 @@
 #include "camblet.h"
 #include "trace.h"
 
+#define CAMBLET_PROTOCOL "camblet"
+#define CAMBLET_PASSTHROUGH_PROTOCOL CAMBLET_PROTOCOL "/passthrough"
+
 const char *ALPNs[] = {
-	"http/1.1",
-	"camblet",
+	CAMBLET_PROTOCOL,
+};
+
+const char *ALPNs_passthrough[] = {
+	CAMBLET_PASSTHROUGH_PROTOCOL,
+	CAMBLET_PROTOCOL,
 };
 
 const size_t ALPNs_NUM = sizeof(ALPNs) / sizeof(ALPNs[0]);
+const size_t ALPNs_passthrough_NUM = sizeof(ALPNs_passthrough) / sizeof(ALPNs_passthrough[0]);
 
 extern bool ktls_available;
 
@@ -243,6 +251,7 @@ static int camblet_socket_read(camblet_socket *s, void *dst, size_t len, int fla
 {
 	return s->recvmsg(s, dst, len, flags);
 }
+
 static int camblet_socket_write(camblet_socket *s, void *src, size_t len)
 {
 	return s->sendmsg(s, src, len);
@@ -393,6 +402,8 @@ static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_c
 
 	s->conn_ctx = conn_ctx;
 
+	s->direction = INPUT;
+
 	mutex_init(&s->lock);
 
 	proxywasm *p = this_cpu_proxywasm();
@@ -427,6 +438,8 @@ static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_c
 	s->opa_socket_ctx = opa_socket_ctx;
 
 	s->conn_ctx = conn_ctx;
+
+	s->direction = OUTPUT;
 
 	mutex_init(&s->lock);
 
@@ -464,7 +477,22 @@ static bool camblet_socket_proxywasm_enabled(camblet_socket *s)
 	return s->pc != NULL;
 }
 
-static int ensure_tls_handshake(camblet_socket *s)
+static bool msghdr_contains_tls_handshake(struct msghdr *msg)
+{
+	struct iov_iter *iter = &msg->msg_iter;
+	char first_3_bytes[3];
+	int ret = copy_from_iter(first_3_bytes, 3, iter);
+	if (ret < 3)
+	{
+		return false;
+	}
+
+	iov_iter_revert(iter, 3);
+
+	return is_tls_handshake(first_3_bytes);
+}
+
+static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 {
 	int ret = 0;
 	char *protocol = READ_ONCE(s->protocol);
@@ -481,6 +509,15 @@ static int ensure_tls_handshake(camblet_socket *s)
 
 	if (protocol == NULL)
 	{
+		// if we are the client, we should check if the transport is already encrypted
+		if (s->direction == OUTPUT && (s->opa_socket_ctx.passthrough || msghdr_contains_tls_handshake(msg)))
+		{
+			trace_info(conn_ctx, "setting passthrough ALPN", 0);
+
+			br_ssl_engine_set_protocol_names(&s->sc->eng, ALPNs_passthrough, ALPNs_passthrough_NUM);
+			br_ssl_client_reset(s->cc, s->hostname, false);
+		}
+
 		ret = br_sslio_flush(&s->ioc);
 		if (ret == 0)
 		{
@@ -503,13 +540,17 @@ static int ensure_tls_handshake(camblet_socket *s)
 		if (protocol)
 		{
 			trace_debug(conn_ctx, "ALPN selected", 2, "alpn", protocol);
+
 			if (camblet_socket_proxywasm_enabled(s))
 				set_property_v(s->pc, "upstream.negotiated_protocol", protocol, strlen(protocol));
 		}
 		else
-			protocol = "no-mtls";
+		{
+			trace_debug(conn_ctx, "ALPN not selected", 0);
+			protocol = "no-camblet";
+		}
 
-		if (s->opa_socket_ctx.passthrough)
+		if (strcmp(protocol, CAMBLET_PASSTHROUGH_PROTOCOL) == 0)
 		{
 			trace_debug(conn_ctx, "passthrough enabled", 0);
 			s->sendmsg = plain_sendmsg;
@@ -574,7 +615,7 @@ int camblet_recvmsg(struct sock *sock,
 
 	camblet_socket *s = sock->sk_user_data;
 
-	ret = ensure_tls_handshake(s);
+	ret = ensure_tls_handshake(s, msg);
 	if (ret != 0)
 	{
 		goto bail;
@@ -644,7 +685,7 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	camblet_socket *s = sock->sk_user_data;
 
-	ret = ensure_tls_handshake(s);
+	ret = ensure_tls_handshake(s, msg);
 	if (ret != 0)
 	{
 		goto bail;
@@ -1368,7 +1409,7 @@ void camblet_configure_server_tls(camblet_socket *sc)
 	 */
 	br_ssl_engine_set_buffer(&sc->sc->eng, &sc->iobuf, BR_SSL_BUFSIZE_BIDI, true);
 
-	br_ssl_engine_set_protocol_names(&sc->sc->eng, ALPNs, ALPNs_NUM);
+	br_ssl_engine_set_protocol_names(&sc->sc->eng, ALPNs_passthrough, ALPNs_passthrough_NUM);
 
 	/*
 	 * Reset the server context, for a new handshake.
