@@ -99,6 +99,11 @@ trace_request *get_trace_request_by_partial_match(int pid, int uid, const char *
 {
     trace_request *tr;
 
+    if (list_empty(&trace_requests))
+    {
+        return NULL;
+    }
+
     lock_trace_requests();
 
     pr_debug("look for trace request # pid[%d] uid[%d] command_name[%s]", pid, uid, command_name);
@@ -133,7 +138,7 @@ trace_request *get_trace_request_by_partial_match(int pid, int uid, const char *
 
     pr_debug("check trace request match not found # pid[%d] uid[%d] command_name[%s]", tr->pid, tr->uid, tr->command_name);
 
-    return 0;
+    return NULL;
 }
 
 static void free_trace_request(trace_request *tr)
@@ -243,7 +248,7 @@ int trace_log(const tcp_connection_context *conn_ctx, const char *message, int l
 {
     unsigned int i;
     va_list args, args_copy;
-    char level[8];
+    char *level = NULL;
 
     if (n < 0 || (n > 0 && n % 2 != 0))
     {
@@ -262,19 +267,19 @@ int trace_log(const tcp_connection_context *conn_ctx, const char *message, int l
         {
         case LOGLEVEL_ERR:
             pr_err("%s", log_message);
-            strcpy(level, "error");
+            level = "error";
             break;
         case LOGLEVEL_WARNING:
             pr_warn("%s", log_message);
-            strcpy(level, "warning");
+            level = "warning";
             break;
         case LOGLEVEL_INFO:
             pr_info("%s", log_message);
-            strcpy(level, "info");
+            level = "info";
             break;
         case LOGLEVEL_DEBUG:
             pr_debug("%s", log_message);
-            strcpy(level, "debug");
+            level = "debug";
             break;
         default:
             printk("%s", log_message);
