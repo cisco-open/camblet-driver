@@ -971,7 +971,7 @@ int camblet_getsockopt(struct sock *sk, int level,
 			// through the socket from the client side
 			// there return value here is not important as it will be handled
 			// at the send/recvmsg calls
-			ensure_tls_handshake(s);
+			ensure_tls_handshake(s, NULL);
 
 			tls_info info = {};
 
