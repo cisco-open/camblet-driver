@@ -509,7 +509,7 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 
 	if (protocol == NULL)
 	{
-		// if we are the client, we have should check if the transport is already encrypted
+		// if we are the client, we should check if the transport is already encrypted
 		if (s->direction == OUTPUT && (s->opa_socket_ctx.passthrough || msghdr_contains_tls_handshake(msg)))
 		{
 			trace_info(conn_ctx, "setting passthrough ALPN", 0);
