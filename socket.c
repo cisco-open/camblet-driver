@@ -481,6 +481,11 @@ static bool camblet_socket_proxywasm_enabled(camblet_socket *s)
 
 static bool msghdr_contains_tls_handshake(struct msghdr *msg)
 {
+	if (msg == NULL)
+	{
+		return false;
+	}
+
 	struct iov_iter *iter = &msg->msg_iter;
 	char first_3_bytes[3];
 	int ret = copy_from_iter(first_3_bytes, 3, iter);
