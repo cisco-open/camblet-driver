@@ -966,6 +966,13 @@ int camblet_getsockopt(struct sock *sk, int level,
 		camblet_socket *s = sk->sk_user_data;
 		if (s)
 		{
+			// trigger tls handshake here to avoid timing issues
+			// caused by calling getsockopt before sending anything
+			// through the socket from the client side
+			// there return value here is not important as it will be handled
+			// at the send/recvmsg calls
+			ensure_tls_handshake(s);
+
 			tls_info info = {};
 
 			info.camblet_enabled = s->opa_socket_ctx.allowed;
