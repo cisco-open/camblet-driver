@@ -15,4 +15,12 @@
 #define CAMBLET_HOSTNAME 1
 #define CAMBLET_TLS_INFO 2
 
+typedef struct
+{
+    bool camblet_enabled;
+    bool mtls_enabled;
+    char spiffe_id[256];
+    char peer_spiffe_id[256];
+} tls_info;
+
 #endif /* camblet_h */
