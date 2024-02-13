@@ -966,11 +966,10 @@ int camblet_getsockopt(struct sock *sk, int level,
 		camblet_socket *s = sk->sk_user_data;
 		if (s)
 		{
-			struct tls_info
-			{
-				char spiffe_id[256];
-				char peer_spiffe_id[256];
-			} info;
+			tls_info info = {};
+
+			info.camblet_enabled = s->opa_socket_ctx.allowed;
+			info.mtls_enabled = s->opa_socket_ctx.mtls;
 
 			if (s->opa_socket_ctx.uri)
 			{
