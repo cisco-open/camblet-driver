@@ -1,0 +1,1 @@
+PicoHTTPParser is a tiny, primitive, fast HTTP request/response parser, taken from https://github.com/h2o/picohttpparser and slightly modified to be able to run in Linux kernel space.

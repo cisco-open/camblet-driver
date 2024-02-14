@@ -10,4 +10,6 @@ do {    if (x) break;                                                   \
                __FILE__, __func__, __LINE__, #x); dump_stack(); BUG();  \
 } while (0)
 
+#define assert(x) ASSERT(x)
+
 #endif
