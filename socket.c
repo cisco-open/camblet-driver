@@ -37,6 +37,7 @@
 #include "sd.h"
 #include "camblet.h"
 #include "trace.h"
+#include "picohttpparser.h"
 
 #define CAMBLET_PROTOCOL "camblet"
 #define CAMBLET_PASSTHROUGH_PROTOCOL CAMBLET_PROTOCOL "/passthrough"
@@ -93,7 +94,8 @@ struct camblet_socket
 	proxywasm *p;
 	proxywasm_context *pc;
 	i64 direction;
-	char *protocol;
+	char *alpn;
+
 	struct mutex lock;
 
 	buffer_t *read_buffer;
@@ -134,6 +136,39 @@ static br_ssl_engine_context *get_ssl_engine_context(camblet_socket *s)
 
 static int ktls_sendmsg(camblet_socket *s, void *buf, size_t len)
 {
+#ifdef HTTP_DEBUG
+	const char *method, *path;
+	int pret, minor_version;
+	struct phr_header headers[16];
+	size_t buflen = 0, prevbuflen = 0, method_len, path_len, num_headers;
+
+	if (s->direction == OUTPUT)
+	{
+		/* parse the request */
+		num_headers = sizeof(headers) / sizeof(headers[0]);
+		pret = phr_parse_request(buf, len, &method, &method_len, &path, &path_len,
+								 &minor_version, headers, &num_headers, prevbuflen);
+		if (pret > 0)
+		{
+		} /* successfully parsed the request */
+		else if (pret == -1)
+			return -1;
+
+		printk("request is %d bytes long\n", pret);
+		printk("method is %.*s\n", (int)method_len, method);
+		printk("path is %.*s\n", (int)path_len, path);
+		printk("HTTP version is 1.%d\n", minor_version);
+		printk("headers: [%ld]\n", num_headers);
+
+		int i;
+		for (i = 0; i != num_headers; ++i)
+		{
+			printk("%.*s: %.*s\n", (int)headers[i].name_len, headers[i].name,
+				   (int)headers[i].value_len, headers[i].value);
+		}
+	}
+#endif
+
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = buf, .iov_len = len};
 
@@ -315,7 +350,7 @@ static void camblet_socket_free(camblet_socket *s)
 			proxywasm_unlock(s->p);
 		}
 
-		if (s->protocol && !s->ktls_sendmsg && !s->opa_socket_ctx.passthrough)
+		if (s->alpn && !s->ktls_sendmsg && !s->opa_socket_ctx.passthrough)
 		{
 			// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
 			if (br_sslio_close(&s->ioc) != BR_ERR_OK)
@@ -495,19 +530,19 @@ static bool msghdr_contains_tls_handshake(struct msghdr *msg)
 static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 {
 	int ret = 0;
-	char *protocol = READ_ONCE(s->protocol);
+	char *alpn = READ_ONCE(s->alpn);
 	const tcp_connection_context *conn_ctx = s->conn_ctx;
 
-	if (protocol != NULL)
+	if (alpn != NULL)
 	{
 		return ret;
 	}
 
 	mutex_lock(&s->lock);
 
-	protocol = READ_ONCE(s->protocol);
+	alpn = READ_ONCE(s->alpn);
 
-	if (protocol == NULL)
+	if (alpn == NULL)
 	{
 		// if we are the client, we should check if the transport is already encrypted
 		if (s->direction == OUTPUT && (s->opa_socket_ctx.passthrough || msghdr_contains_tls_handshake(msg)))
@@ -535,22 +570,22 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 			goto bail;
 		}
 
-		protocol = br_ssl_engine_get_selected_protocol(&s->sc->eng);
+		alpn = br_ssl_engine_get_selected_protocol(&s->sc->eng);
 
-		if (protocol)
+		if (alpn)
 		{
-			trace_debug(conn_ctx, "ALPN selected", 2, "alpn", protocol);
+			trace_debug(conn_ctx, "ALPN selected", 2, "alpn", alpn);
 
 			if (camblet_socket_proxywasm_enabled(s))
-				set_property_v(s->pc, "upstream.negotiated_protocol", protocol, strlen(protocol));
+				set_property_v(s->pc, "upstream.negotiated_protocol", alpn, strlen(alpn));
 		}
 		else
 		{
 			trace_debug(conn_ctx, "ALPN not selected", 0);
-			protocol = "no-camblet";
+			alpn = "no-camblet";
 		}
 
-		if (strcmp(protocol, CAMBLET_PASSTHROUGH_PROTOCOL) == 0)
+		if (strcmp(alpn, CAMBLET_PASSTHROUGH_PROTOCOL) == 0)
 		{
 			trace_debug(conn_ctx, "passthrough enabled", 0);
 			s->sendmsg = plain_sendmsg;
@@ -567,7 +602,7 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 			}
 		}
 
-		WRITE_ONCE(s->protocol, protocol);
+		WRITE_ONCE(s->alpn, alpn);
 	}
 
 bail:

@@ -26,6 +26,7 @@
                 "third-party/base64/",
                 "third-party/BearSSL/inc/",
                 "third-party/parson/",
+                "third-party/picohttpparser/",
                 "third-party/wasm3/source/"
             ],
             "macFrameworkPath": [],
