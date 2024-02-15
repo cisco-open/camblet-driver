@@ -10,6 +10,7 @@ ccflags-y += -foptimize-sibling-calls \
 			 -I$(PWD)/third-party/base64 \
 			 -I$(PWD)/third-party/parson \
 			 -I$(PWD)/third-party/picohttpparser \
+			 -I$(PWD)/third-party/nghttp2/lib/includes \
 			 -Wall -g \
 			 #-Dd_m3LogCompile=1
 
@@ -44,51 +45,82 @@ endif
 
 # obj-m specifies we're a kernel module.
 obj-m += camblet.o
-camblet-objs :=  third-party/wasm3/source/m3_api_libc.o \
-              third-party/wasm3/source/m3_compile.o \
-			  third-party/wasm3/source/m3_api_meta_wasi.o \
-			  third-party/wasm3/source/m3_api_tracer.o \
-			  third-party/wasm3/source/m3_api_uvwasi.o \
-			  third-party/wasm3/source/m3_api_wasi.o \
-			  third-party/wasm3/source/m3_bind.o \
-			  third-party/wasm3/source/m3_code.o \
-			  third-party/wasm3/source/m3_core.o \
-			  third-party/wasm3/source/m3_env.o \
-			  third-party/wasm3/source/m3_exec.o \
-			  third-party/wasm3/source/m3_function.o \
-			  third-party/wasm3/source/m3_info.o \
-			  third-party/wasm3/source/m3_module.o \
-			  third-party/wasm3/source/m3_parse.o \
-			  third-party/base64/base64.o \
-			  third-party/parson/json.o \
-			  third-party/picohttpparser/picohttpparser.o \
-			  buffer.o \
-			  device_driver.o \
-			  main.o \
-			  csr.o \
-			  rsa_tools.o \
-			  cert_tools.o \
-			  wasm.o \
-			  opa.o \
-			  proxywasm.o \
-			  socket.o \
-			  task_context.o \
-			  tls.o \
-			  commands.o \
-			  string.o \
-			  augmentation.o \
-			  config.o \
-			  sd.o \
-			  trace.o
+camblet-objs := third-party/wasm3/source/m3_api_libc.o \
+              	third-party/wasm3/source/m3_compile.o \
+				third-party/wasm3/source/m3_api_meta_wasi.o \
+				third-party/wasm3/source/m3_api_tracer.o \
+				third-party/wasm3/source/m3_api_uvwasi.o \
+				third-party/wasm3/source/m3_api_wasi.o \
+				third-party/wasm3/source/m3_bind.o \
+				third-party/wasm3/source/m3_code.o \
+				third-party/wasm3/source/m3_core.o \
+				third-party/wasm3/source/m3_env.o \
+				third-party/wasm3/source/m3_exec.o \
+				third-party/wasm3/source/m3_function.o \
+				third-party/wasm3/source/m3_info.o \
+				third-party/wasm3/source/m3_module.o \
+				third-party/wasm3/source/m3_parse.o \
+				third-party/base64/base64.o \
+				third-party/parson/json.o \
+				third-party/picohttpparser/picohttpparser.o \
+				third-party/nghttp2/lib/nghttp2_priority_spec.o \
+				third-party/nghttp2/lib/nghttp2_map.o \
+				third-party/nghttp2/lib/nghttp2_ratelim.o \
+				third-party/nghttp2/lib/nghttp2_stream.o \
+				third-party/nghttp2/lib/nghttp2_hd_huffman_data.o \
+				third-party/nghttp2/lib/nghttp2_alpn.o \
+				third-party/nghttp2/lib/nghttp2_buf.o \
+				third-party/nghttp2/lib/nghttp2_outbound_item.o \
+				third-party/nghttp2/lib/nghttp2_helper.o \
+				third-party/nghttp2/lib/nghttp2_queue.o \
+				third-party/nghttp2/lib/nghttp2_submit.o \
+				third-party/nghttp2/lib/nghttp2_session.o \
+				third-party/nghttp2/lib/nghttp2_debug.o \
+				third-party/nghttp2/lib/nghttp2_rcbuf.o \
+				third-party/nghttp2/lib/nghttp2_hd_huffman.o \
+				third-party/nghttp2/lib/nghttp2_hd.o \
+				third-party/nghttp2/lib/sfparse.o \
+				third-party/nghttp2/lib/nghttp2_option.o \
+				third-party/nghttp2/lib/nghttp2_frame.o \
+				third-party/nghttp2/lib/nghttp2_http.o \
+				third-party/nghttp2/lib/nghttp2_pq.o \
+				third-party/nghttp2/lib/nghttp2_extpri.o \
+				third-party/nghttp2/lib/nghttp2_callbacks.o \
+				third-party/nghttp2/lib/nghttp2_version.o \
+				third-party/nghttp2/lib/nghttp2_time.o \
+				third-party/nghttp2/lib/nghttp2_mem.o \
+				buffer.o \
+				device_driver.o \
+				main.o \
+				csr.o \
+				rsa_tools.o \
+				cert_tools.o \
+				wasm.o \
+				opa.o \
+				proxywasm.o \
+				socket.o \
+				task_context.o \
+				tls.o \
+				commands.o \
+				string.o \
+				augmentation.o \
+				config.o \
+				sd.o \
+				trace.o
 
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
 
-default: bearssl
+default: bearssl nghttp
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) modules
 
 bearssl:
 	cd third-party/BearSSL && $(MAKE) VERBOSE=$(VERBOSE) linux-km
+
+third-party/nghttp2/lib/includes/nghttp2/nghttp2ver.h: third-party/nghttp2/lib/includes/nghttp2/nghttp2ver.h.in
+	cd third-party/nghttp2 && autoreconf -i && automake && autoconf && ./configure
+
+nghttp: third-party/nghttp2/lib/includes/nghttp2/nghttp2ver.h
 
 static/socket_wasm.h: socket.rego
 	opa build -t wasm -e "socket/allow" socket.rego -o bundle.tar.gz
@@ -135,7 +167,7 @@ _debian_deps:
 	sudo apt update
 	sudo apt install -y dkms dwarves
 ifndef GITHUB_ACTION
-	sudo apt install -y golang flex bison iperf socat debhelper
+	sudo apt install -y golang flex bison iperf socat debhelper pkg-config libtool autoconf
 endif
 
 _archlinux_deps:

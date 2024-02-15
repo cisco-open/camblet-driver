@@ -6,3 +6,7 @@
 	path = third-party/BearSSL
 	url = https://github.com/bonifaido/BearSSL.git
 	branch = linux-kernel
+[submodule "third-party/nghttp2"]
+	path = third-party/nghttp2
+	url = https://github.com/bonifaido/nghttp2.git
+	branch = linux-kernel
