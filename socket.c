@@ -96,6 +96,7 @@ struct camblet_socket
 	proxywasm_context *pc;
 	i64 direction;
 	char *alpn;
+	bool http_enabled;
 
 	struct mutex lock;
 
@@ -704,20 +705,19 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	set_write_buffer_size(s, get_write_buffer_size(s) + len);
 
-	if (s->direction == OUTPUT)
+	if (s->direction == OUTPUT && !s->http_enabled)
 	{
 		const char *method, *path;
 		int pret, minor_version;
 		struct phr_header headers[16];
-		size_t buflen = 0, prevbuflen = 0, method_len, path_len, num_headers;
+		size_t prevbuflen = 0, method_len, path_len, num_headers;
 
 		/* parse the request */
 		num_headers = sizeof(headers) / sizeof(headers[0]);
-		pret = phr_parse_request(get_write_buffer(s), len, &method, &method_len, &path, &path_len,
+		pret = phr_parse_request(get_write_buffer(s), get_write_buffer_size(s), &method, &method_len, &path, &path_len,
 								 &minor_version, headers, &num_headers, prevbuflen);
 
-		/* successfully parsed the request */
-		if (pret > 0)
+		if (pret > 0) /* successfully parsed the request */
 		{
 			printk("request is %d bytes long\n", pret);
 			printk("method is %.*s\n", (int)method_len, method);
@@ -731,6 +731,33 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 				printk("%.*s: %.*s\n", (int)headers[i].name_len, headers[i].name,
 					   (int)headers[i].value_len, headers[i].value);
 			}
+
+			// inject a header after the last one
+			char *new_header = "X-Camblet: true";
+			size_t new_header_len = strlen(new_header);
+			size_t new_size = get_write_buffer_size(s) + new_header_len + 2;
+			char *new_buf = get_write_buffer_for_write(s, new_size); // resize the buffer if necessary
+
+			new_buf = headers[num_headers - 1].value + headers[num_headers - 1].value_len + 2;
+
+			// shift the rest of the buffer
+			memmove(new_buf + new_header_len + 2, new_buf, get_write_buffer_size(s) - (new_buf - get_write_buffer(s)));
+
+			memcpy(new_buf, new_header, new_header_len);
+			new_buf[new_header_len] = '\r';
+			new_buf[new_header_len + 1] = '\n';
+			set_write_buffer_size(s, new_size);
+
+			printk("sendmsg [%s]: data to send:\n%*.s\n", current->comm, get_write_buffer_size(s), get_write_buffer(s));
+		}
+		else if (pret == -2) /* request is incomplete, wait for more data */
+		{
+			ret = len;
+			goto bail;
+		}
+		else
+		{
+			printk("phr_parse_request: parse error %d\n", pret);
 		}
 	}
 
