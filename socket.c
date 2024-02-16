@@ -693,21 +693,19 @@ bail:
 void inject_headers(camblet_socket *s, struct phr_header *headers, size_t num_headers)
 {
 	// inject a header after the last one
-	char *new_header = "X-Camblet: true";
+	char *new_header = "X-Camblet: true\r\n";
 	size_t new_header_len = strlen(new_header);
-	size_t new_size = get_write_buffer_size(s) + new_header_len + 2;
+	size_t new_size = get_write_buffer_size(s) + new_header_len;
 
 	// find the new header's position
 	char *new_buf = headers[num_headers - 1].value + headers[num_headers - 1].value_len + 2;
 
 	// shift the rest of the buffer
-	get_write_buffer_for_write(s, new_header_len + 2); // resize the buffer if necessary
-	memmove(new_buf + new_header_len + 2, new_buf, get_write_buffer_size(s) - (new_buf - get_write_buffer(s)));
+	get_write_buffer_for_write(s, new_header_len); // resize the buffer if necessary
+	memmove(new_buf + new_header_len, new_buf, get_write_buffer_size(s) - (new_buf - get_write_buffer(s)));
 
 	// inject the new header
 	memcpy(new_buf, new_header, new_header_len);
-	new_buf[new_header_len] = '\r';
-	new_buf[new_header_len + 1] = '\n';
 
 	set_write_buffer_size(s, new_size);
 
