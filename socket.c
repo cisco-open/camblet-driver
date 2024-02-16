@@ -695,19 +695,19 @@ void inject_headers(camblet_socket *s, struct phr_header *headers, size_t num_he
 	// inject a header after the last one
 	char *new_header = "X-Camblet: true\r\n";
 	size_t new_header_len = strlen(new_header);
-	size_t new_size = get_write_buffer_size(s) + new_header_len;
+	size_t new_buffer_size = get_write_buffer_size(s) + new_header_len;
 
 	// find the new header's position
-	char *new_buf = headers[num_headers - 1].value + headers[num_headers - 1].value_len + 2;
+	char *new_header_pos = headers[num_headers - 1].value + headers[num_headers - 1].value_len + 2;
 
 	// shift the rest of the buffer
 	get_write_buffer_for_write(s, new_header_len); // resize the buffer if necessary
-	memmove(new_buf + new_header_len, new_buf, get_write_buffer_size(s) - (new_buf - get_write_buffer(s)));
+	memmove(new_header_pos + new_header_len, new_header_pos, get_write_buffer_size(s) - (new_header_pos - get_write_buffer(s)));
 
 	// inject the new header
-	memcpy(new_buf, new_header, new_header_len);
+	memcpy(new_header_pos, new_header, new_header_len);
 
-	set_write_buffer_size(s, new_size);
+	set_write_buffer_size(s, new_buffer_size);
 
 	printk("sendmsg [%s]: after inject headers:\n\"%*.s\"\n", current->comm, get_write_buffer_size(s), get_write_buffer(s));
 }
