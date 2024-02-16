@@ -291,6 +291,7 @@ static char *get_write_buffer(camblet_socket *s)
 	return s->write_buffer->data;
 }
 
+// returns a pointer to the buffer where the caller can write len long data
 static char *get_write_buffer_for_write(camblet_socket *s, int len)
 {
 	return buffer_access(s->write_buffer, len);
@@ -689,6 +690,30 @@ bail:
 	return ret;
 }
 
+void inject_headers(camblet_socket *s, struct phr_header *headers, size_t num_headers)
+{
+	// inject a header after the last one
+	char *new_header = "X-Camblet: true";
+	size_t new_header_len = strlen(new_header);
+	size_t new_size = get_write_buffer_size(s) + new_header_len + 2;
+
+	// find the new header's position
+	char *new_buf = headers[num_headers - 1].value + headers[num_headers - 1].value_len + 2;
+
+	// shift the rest of the buffer
+	get_write_buffer_for_write(s, new_header_len + 2); // resize the buffer if necessary
+	memmove(new_buf + new_header_len + 2, new_buf, get_write_buffer_size(s) - (new_buf - get_write_buffer(s)));
+
+	// inject the new header
+	memcpy(new_buf, new_header, new_header_len);
+	new_buf[new_header_len] = '\r';
+	new_buf[new_header_len + 1] = '\n';
+
+	set_write_buffer_size(s, new_size);
+
+	printk("sendmsg [%s]: after inject headers:\n\"%*.s\"\n", current->comm, get_write_buffer_size(s), get_write_buffer(s));
+}
+
 int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 {
 	int ret, len;
@@ -732,23 +757,7 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 					   (int)headers[i].value_len, headers[i].value);
 			}
 
-			// inject a header after the last one
-			char *new_header = "X-Camblet: true";
-			size_t new_header_len = strlen(new_header);
-			size_t new_size = get_write_buffer_size(s) + new_header_len + 2;
-			char *new_buf = get_write_buffer_for_write(s, new_size); // resize the buffer if necessary
-
-			new_buf = headers[num_headers - 1].value + headers[num_headers - 1].value_len + 2;
-
-			// shift the rest of the buffer
-			memmove(new_buf + new_header_len + 2, new_buf, get_write_buffer_size(s) - (new_buf - get_write_buffer(s)));
-
-			memcpy(new_buf, new_header, new_header_len);
-			new_buf[new_header_len] = '\r';
-			new_buf[new_header_len + 1] = '\n';
-			set_write_buffer_size(s, new_size);
-
-			printk("sendmsg [%s]: data to send:\n%*.s\n", current->comm, get_write_buffer_size(s), get_write_buffer(s));
+			inject_headers(s, headers, num_headers);
 		}
 		else if (pret == -2) /* request is incomplete, wait for more data */
 		{
