@@ -137,39 +137,6 @@ static br_ssl_engine_context *get_ssl_engine_context(camblet_socket *s)
 
 static int ktls_sendmsg(camblet_socket *s, void *buf, size_t len)
 {
-#ifdef HTTP_DEBUG
-	const char *method, *path;
-	int pret, minor_version;
-	struct phr_header headers[16];
-	size_t buflen = 0, prevbuflen = 0, method_len, path_len, num_headers;
-
-	if (s->direction == OUTPUT)
-	{
-		/* parse the request */
-		num_headers = sizeof(headers) / sizeof(headers[0]);
-		pret = phr_parse_request(buf, len, &method, &method_len, &path, &path_len,
-								 &minor_version, headers, &num_headers, prevbuflen);
-		if (pret > 0)
-		{
-		} /* successfully parsed the request */
-		else if (pret == -1)
-			return -1;
-
-		printk("request is %d bytes long\n", pret);
-		printk("method is %.*s\n", (int)method_len, method);
-		printk("path is %.*s\n", (int)path_len, path);
-		printk("HTTP version is 1.%d\n", minor_version);
-		printk("headers: [%ld]\n", num_headers);
-
-		int i;
-		for (i = 0; i != num_headers; ++i)
-		{
-			printk("%.*s: %.*s\n", (int)headers[i].name_len, headers[i].name,
-				   (int)headers[i].value_len, headers[i].value);
-		}
-	}
-#endif
-
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = buf, .iov_len = len};
 
@@ -736,6 +703,36 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	len = copy_from_iter(get_write_buffer_for_write(s, size), size, &msg->msg_iter);
 
 	set_write_buffer_size(s, get_write_buffer_size(s) + len);
+
+	if (s->direction == OUTPUT)
+	{
+		const char *method, *path;
+		int pret, minor_version;
+		struct phr_header headers[16];
+		size_t buflen = 0, prevbuflen = 0, method_len, path_len, num_headers;
+
+		/* parse the request */
+		num_headers = sizeof(headers) / sizeof(headers[0]);
+		pret = phr_parse_request(get_write_buffer(s), len, &method, &method_len, &path, &path_len,
+								 &minor_version, headers, &num_headers, prevbuflen);
+
+		/* successfully parsed the request */
+		if (pret > 0)
+		{
+			printk("request is %d bytes long\n", pret);
+			printk("method is %.*s\n", (int)method_len, method);
+			printk("path is %.*s\n", (int)path_len, path);
+			printk("HTTP version is 1.%d\n", minor_version);
+			printk("headers: [%ld]\n", num_headers);
+
+			int i;
+			for (i = 0; i != num_headers; ++i)
+			{
+				printk("%.*s: %.*s\n", (int)headers[i].name_len, headers[i].name,
+					   (int)headers[i].value_len, headers[i].value);
+			}
+		}
+	}
 
 	if (camblet_socket_proxywasm_enabled(s))
 	{
