@@ -723,6 +723,8 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 		goto bail;
 	}
 
+	size_t prevbuflen = get_write_buffer_size(s);
+
 	len = copy_from_iter(get_write_buffer_for_write(s, size), size, &msg->msg_iter);
 
 	set_write_buffer_size(s, get_write_buffer_size(s) + len);
@@ -732,7 +734,7 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 		const char *method, *path;
 		int pret, minor_version;
 		struct phr_header headers[16];
-		size_t prevbuflen = 0, method_len, path_len, num_headers;
+		size_t method_len, path_len, num_headers;
 
 		/* parse the request */
 		num_headers = sizeof(headers) / sizeof(headers[0]);
