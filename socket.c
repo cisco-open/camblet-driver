@@ -690,10 +690,9 @@ bail:
 	return ret;
 }
 
-void inject_headers(camblet_socket *s, struct phr_header *headers, size_t num_headers)
+void inject_header(camblet_socket *s, struct phr_header *headers, size_t num_headers, const char *new_header)
 {
 	// inject a header after the last one
-	char *new_header = "X-Camblet: true\r\n";
 	size_t new_header_len = strlen(new_header);
 	size_t new_buffer_size = get_write_buffer_size(s) + new_header_len;
 
@@ -755,7 +754,8 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 					   (int)headers[i].value_len, headers[i].value);
 			}
 
-			inject_headers(s, headers, num_headers);
+			const char *new_header = "X-Camblet: true\r\n";
+			inject_header(s, headers, num_headers, new_header);
 		}
 		else if (pret == -2) /* request is incomplete, wait for more data */
 		{
