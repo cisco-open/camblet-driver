@@ -378,6 +378,7 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
         ret.mtls = true;
         ret.allowed = true;
         ret.passthrough = false;
+        ret.http = false;
 
         JSON_Array *allowed_spiffe_ids = json_object_dotget_array(matched_policy, "egress.connection.allowedSPIFFEIDs");
         if (allowed_spiffe_ids == NULL)
@@ -405,6 +406,14 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             ret.passthrough = false;
         else if (passthrough == 1)
             ret.passthrough = true;
+
+        int http = json_object_dotget_boolean(matched_policy, "egress.connection.http");
+        if (http == -1)
+            http = json_object_dotget_boolean(matched_policy, "connection.http");
+        if (http == 0)
+            ret.http = false;
+        else if (http == 1)
+            ret.http = true;
 
         const char *workload_id = json_object_dotget_string(matched_policy, "egress.certificate.workloadID");
         if (workload_id == NULL)

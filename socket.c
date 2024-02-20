@@ -729,7 +729,7 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	set_write_buffer_size(s, get_write_buffer_size(s) + len);
 
-	if (s->direction == OUTPUT && !s->http_enabled)
+	if (s->direction == OUTPUT && s->opa_socket_ctx.http)
 	{
 		const char *method, *path;
 		int pret, minor_version;
