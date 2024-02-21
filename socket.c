@@ -38,7 +38,7 @@
 #include "sd.h"
 #include "camblet.h"
 #include "trace.h"
-#include "picohttpparser.h"
+#include "http.h"
 
 #define CAMBLET_PROTOCOL "camblet"
 #define CAMBLET_PASSTHROUGH_PROTOCOL CAMBLET_PROTOCOL "/passthrough"
@@ -64,9 +64,6 @@ static struct proto camblet_v6_ktls_prot;
 
 static br_rsa_private_key *rsa_priv;
 static br_rsa_public_key *rsa_pub;
-
-struct camblet_socket;
-typedef struct camblet_socket camblet_socket;
 
 typedef int(camblet_sendmsg_t)(camblet_socket *s, void *msg, size_t len);
 typedef int(camblet_recvmsg_t)(camblet_socket *s, void *buf, size_t len, int flags);
@@ -286,23 +283,22 @@ static void set_read_buffer_size(camblet_socket *s, int size)
 	s->read_buffer->size = size;
 }
 
-static char *get_write_buffer(camblet_socket *s)
+char *get_write_buffer(camblet_socket *s)
 {
 	return s->write_buffer->data;
 }
 
-// returns a pointer to the buffer where the caller can write len long data
-static char *get_write_buffer_for_write(camblet_socket *s, int len)
+char *get_write_buffer_for_write(camblet_socket *s, int len)
 {
 	return buffer_access(s->write_buffer, len);
 }
 
-static int get_write_buffer_size(camblet_socket *s)
+int get_write_buffer_size(camblet_socket *s)
 {
 	return s->write_buffer->size;
 }
 
-static void set_write_buffer_size(camblet_socket *s, int size)
+void set_write_buffer_size(camblet_socket *s, int size)
 {
 	s->write_buffer->size = size;
 }
@@ -642,6 +638,10 @@ int camblet_recvmsg(struct sock *sock,
 	bool end_of_stream = false;
 	int action = Pause;
 
+	if (s->direction == INPUT && s->opa_socket_ctx.http)
+	{
+		}
+
 	while (action != Continue)
 	{
 		ret = camblet_socket_read(s, get_read_buffer_for_read(s, len), len, flags);
@@ -690,27 +690,6 @@ bail:
 	return ret;
 }
 
-void inject_header(camblet_socket *s, struct phr_header *headers, size_t num_headers, const char *new_header)
-{
-	// inject a header after the last one
-	size_t new_header_len = strlen(new_header);
-	size_t new_buffer_size = get_write_buffer_size(s) + new_header_len;
-
-	// find the new header's position
-	char *new_header_pos = headers[num_headers - 1].value + headers[num_headers - 1].value_len + 2;
-
-	// shift the rest of the buffer
-	get_write_buffer_for_write(s, new_header_len); // resize the buffer if necessary
-	memmove(new_header_pos + new_header_len, new_header_pos, get_write_buffer_size(s) - (new_header_pos - get_write_buffer(s)));
-
-	// inject the new header
-	memcpy(new_header_pos, new_header, new_header_len);
-
-	set_write_buffer_size(s, new_buffer_size);
-
-	printk("sendmsg [%s]: after inject headers:\n\"%*.s\"\n", current->comm, get_write_buffer_size(s), get_write_buffer(s));
-}
-
 int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 {
 	int ret, len;
@@ -729,7 +708,7 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	set_write_buffer_size(s, get_write_buffer_size(s) + len);
 
-	if (s->direction == OUTPUT && s->opa_socket_ctx.http)
+	if (s->direction == OUTPUT && !s->opa_socket_ctx.http)
 	{
 		const char *method, *path;
 		int pret, minor_version;
@@ -766,7 +745,7 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 		}
 		else
 		{
-			printk("phr_parse_request: parse error %d\n", pret);
+			trace_debug(s->conn_ctx, "phr_parse_request: parse error %d\n", 1, pret);
 		}
 	}
 
