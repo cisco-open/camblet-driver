@@ -640,7 +640,7 @@ int camblet_recvmsg(struct sock *sock,
 
 	if (s->direction == INPUT && s->opa_socket_ctx.http)
 	{
-		}
+	}
 
 	while (action != Continue)
 	{
@@ -708,7 +708,7 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	set_write_buffer_size(s, get_write_buffer_size(s) + len);
 
-	if (s->direction == OUTPUT && !s->opa_socket_ctx.http)
+	if (s->direction == OUTPUT && s->opa_socket_ctx.http)
 	{
 		const char *method, *path;
 		int pret, minor_version;
@@ -1068,13 +1068,13 @@ static opa_socket_context socket_eval(const tcp_connection_context *conn_ctx, co
 		trace_msg(conn_ctx, "policy match not found", 0);
 	}
 
-	char is_mtls_enabled[] = "false";
+	char *is_mtls_enabled = "false";
 	if (ctx.mtls)
-		strcpy(is_mtls_enabled, "true");
+		is_mtls_enabled = "true";
 
-	char is_camblet_enabled[] = "false";
+	char *is_camblet_enabled = "false";
 	if (ctx.allowed)
-		strcpy(is_camblet_enabled, "true");
+		is_camblet_enabled = "true";
 
 	trace_debug(conn_ctx, "policy evaluation result", 10, "id", ctx.id, "uri", ctx.uri, "ttl", ctx.ttl, "mtls", is_mtls_enabled, "camblet_enabled", is_camblet_enabled);
 
