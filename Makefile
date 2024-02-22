@@ -10,6 +10,7 @@ ccflags-y += -foptimize-sibling-calls \
 			 -I$(PWD)/third-party/base64 \
 			 -I$(PWD)/third-party/parson \
 			 -I$(PWD)/third-party/picohttpparser \
+			 -Wall -g \
 			 #-Dd_m3LogCompile=1
 
 # Enable floating point arithmetic
@@ -31,7 +32,6 @@ ifeq ($(ARCH), aarch64)
 endif
 
 KBUILD_EXTRA_SYMBOLS = $(PWD)/third-party/BearSSL/Module.symvers
-EXTRA_CFLAGS = -Wall -g
 
 ccflags-remove-y += -Wdeclaration-after-statement
 
