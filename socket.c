@@ -93,7 +93,6 @@ struct camblet_socket
 	proxywasm_context *pc;
 	i64 direction;
 	char *alpn;
-	bool http_enabled;
 
 	struct mutex lock;
 
@@ -638,9 +637,7 @@ int camblet_recvmsg(struct sock *sock,
 	bool end_of_stream = false;
 	int action = Pause;
 
-	if (s->direction == INPUT && s->opa_socket_ctx.http)
-	{
-	}
+	int prevbuflen = get_read_buffer_size(s);
 
 	while (action != Continue)
 	{
@@ -658,6 +655,44 @@ int camblet_recvmsg(struct sock *sock,
 		}
 
 		set_read_buffer_size(s, get_read_buffer_size(s) + ret);
+
+		if (s->direction == INPUT && s->opa_socket_ctx.http)
+		{
+			const char *method, *path;
+			int pret, minor_version;
+			struct phr_header headers[16];
+			size_t method_len, path_len, num_headers;
+
+			/* parse the request */
+			num_headers = sizeof(headers) / sizeof(headers[0]);
+			pret = phr_parse_request(get_read_buffer(s), get_read_buffer_size(s), &method, &method_len, &path, &path_len,
+									 &minor_version, headers, &num_headers, prevbuflen);
+
+			if (pret > 0) /* successfully parsed the request */
+			{
+				printk("request is %d bytes long\n", pret);
+				printk("method is %.*s\n", (int)method_len, method);
+				printk("path is %.*s\n", (int)path_len, path);
+				printk("HTTP version is 1.%d\n", minor_version);
+				printk("headers: [%ld]\n", num_headers);
+
+				int i;
+				for (i = 0; i != num_headers; ++i)
+				{
+					printk("%.*s: %.*s\n", (int)headers[i].name_len, headers[i].name,
+						   (int)headers[i].value_len, headers[i].value);
+				}
+			}
+			else if (pret == -2) /* request is incomplete, wait for more data */
+			{
+				ret = -EAGAIN; // TODO
+				goto bail;
+			}
+			else
+			{
+				trace_debug(s->conn_ctx, "phr_parse_request: parse error %d\n", 1, pret);
+			}
+		}
 
 		if (camblet_socket_proxywasm_enabled(s))
 		{
