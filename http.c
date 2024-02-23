@@ -18,7 +18,6 @@ void inject_header(camblet_socket *s, struct phr_header *headers, size_t num_hea
 	{
 		if (headers[i].name_len == strlen(name) && strncasecmp(headers[i].name, name, headers[i].name_len) == 0)
 		{
-			printk("found header %s: %s updating it", name, value);
 			// if it already exists, update it in place if possible
 			size_t new_value_len = strlen(value);
 			if (new_value_len <= headers[i].value_len)
