@@ -12,9 +12,10 @@
 #define http_h
 
 #include <linux/types.h>
+#include "buffer.h"
 #include "picohttpparser.h"
 #include "socket.h"
 
-void inject_header(camblet_socket *s, struct phr_header *headers, size_t num_headers, const char *name, const char *value);
+void inject_header(buffer_t *buffer, struct phr_header *headers, size_t num_headers, const char *name, const char *value);
 
 #endif
