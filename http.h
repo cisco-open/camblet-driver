@@ -15,6 +15,6 @@
 #include "picohttpparser.h"
 #include "socket.h"
 
-void inject_header(camblet_socket *s, struct phr_header *headers, size_t num_headers, const char *new_header);
+void inject_header(camblet_socket *s, struct phr_header *headers, size_t num_headers, const char *name, const char *value);
 
 #endif

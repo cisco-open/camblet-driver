@@ -770,8 +770,7 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 					   (int)headers[i].value_len, headers[i].value);
 			}
 
-			const char *new_header = "X-Camblet: true\r\n";
-			inject_header(s, headers, num_headers, new_header);
+			inject_header(s, headers, num_headers, "X-Camblet", "true");
 		}
 		else if (pret == -2) /* request is incomplete, wait for more data */
 		{
