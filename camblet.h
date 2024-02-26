@@ -15,6 +15,8 @@
 #define CAMBLET_HOSTNAME 1
 #define CAMBLET_TLS_INFO 2
 
+#define CAMBLET_EINVALIDSPIFFEID 1001
+
 typedef struct
 {
     bool camblet_enabled;

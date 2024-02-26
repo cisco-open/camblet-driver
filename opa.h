@@ -26,7 +26,8 @@ typedef struct
     char *matched_policy_json;
     char *id;
     char *dns;
-    char *uri;
+    char *workload_id;
+    bool workload_id_is_valid;
     char *ttl;
     char *allowed_spiffe_ids[MAX_ALLOWED_SPIFFE_ID];
     int allowed_spiffe_ids_length;
