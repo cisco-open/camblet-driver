@@ -35,7 +35,12 @@ KBUILD_EXTRA_SYMBOLS = $(PWD)/third-party/BearSSL/Module.symvers
 
 ccflags-remove-y += -Wdeclaration-after-statement
 
-VERBOSE := 1
+VERBOSE ?= 
+DYNDBG ?= dyndbg==_
+
+ifeq ($(VERBOSE), 1)
+	DYNDBG = 
+endif
 
 # obj-m specifies we're a kernel module.
 obj-m += camblet.o
@@ -83,7 +88,7 @@ default: bearssl
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) modules
 
 bearssl:
-	cd third-party/BearSSL && $(MAKE) linux-km
+	cd third-party/BearSSL && $(MAKE) VERBOSE=$(VERBOSE) linux-km
 
 static/socket_wasm.h: socket.rego
 	opa build -t wasm -e "socket/allow" socket.rego -o bundle.tar.gz
@@ -117,7 +122,7 @@ insmod-bearssl: insmod-tls
 
 insmod: insmod-bearssl
 	$(eval ktls_available := $(shell lsmod | grep -w tls > /dev/null && echo 1 || echo 0))
-	sudo insmod camblet.ko dyndbg==_ ktls_available=$(ktls_available)
+	sudo insmod camblet.ko $(DYNDBG) ktls_available=$(ktls_available)
 
 insmod-with-proxywasm: insmod-bearssl
 	sudo insmod camblet.ko proxywasm_modules=1
