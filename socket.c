@@ -1062,9 +1062,9 @@ int camblet_getsockopt(struct sock *sk, int level,
 			info.camblet_enabled = s->opa_socket_ctx.allowed;
 			info.mtls_enabled = s->opa_socket_ctx.mtls;
 
-			if (s->opa_socket_ctx.uri)
+			if (s->opa_socket_ctx.workload_id)
 			{
-				strncpy(info.spiffe_id, s->opa_socket_ctx.uri, 256);
+				strncpy(info.spiffe_id, s->opa_socket_ctx.workload_id, 256);
 			}
 
 			if (s->conn_ctx->peer_spiffe_id)
@@ -1109,7 +1109,11 @@ static opa_socket_context socket_eval(const tcp_connection_context *conn_ctx, co
 	if (ctx.allowed)
 		is_camblet_enabled = "true";
 
-	trace_debug(conn_ctx, "policy evaluation result", 10, "id", ctx.id, "uri", ctx.uri, "ttl", ctx.ttl, "mtls", is_mtls_enabled, "camblet_enabled", is_camblet_enabled);
+	char *workload_id_is_valid = "false";
+	if (ctx.workload_id_is_valid)
+		workload_id_is_valid = "true";
+
+	trace_debug(conn_ctx, "policy evaluation result", 12, "id", ctx.id, "workload_id", ctx.workload_id, "workload_id_is_valid", workload_id_is_valid, "ttl", ctx.ttl, "mtls", is_mtls_enabled, "camblet_enabled", is_camblet_enabled);
 
 	return ctx;
 }
@@ -1185,9 +1189,9 @@ static int handle_cert_gen_locked(camblet_socket *sc)
 	{
 		sc->parameters->dns = sc->opa_socket_ctx.dns;
 	}
-	if (sc->opa_socket_ctx.uri)
+	if (sc->opa_socket_ctx.workload_id)
 	{
-		sc->parameters->uri = sc->opa_socket_ctx.uri;
+		sc->parameters->uri = sc->opa_socket_ctx.workload_id;
 	}
 
 	csr_result generated_csr = csr_gen(csr, addr, len, sc->parameters);
@@ -1688,6 +1692,12 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	if (opa_socket_ctx.allowed)
 	{
+		if (!opa_socket_ctx.workload_id_is_valid)
+		{
+			*err = -CAMBLET_EINVALIDSPIFFEID;
+			goto error;
+		}
+
 		sc = camblet_new_server_socket(client_sk, opa_socket_ctx, conn_ctx);
 		if (!sc)
 		{
@@ -1759,6 +1769,11 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	if (opa_socket_ctx.allowed)
 	{
+		if (!opa_socket_ctx.workload_id_is_valid)
+		{
+			return -CAMBLET_EINVALIDSPIFFEID;
+		}
+
 		if (!sc)
 		{
 			sc = camblet_new_client_socket(sk, opa_socket_ctx, conn_ctx);

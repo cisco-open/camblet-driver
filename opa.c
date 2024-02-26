@@ -272,7 +272,7 @@ void opa_socket_context_free(opa_socket_context ctx)
     kfree(ctx.matched_policy_json);
     kfree(ctx.id);
     kfree(ctx.dns);
-    kfree(ctx.uri);
+    kfree(ctx.workload_id);
     kfree(ctx.ttl);
 
     int i;
@@ -437,10 +437,18 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             camblet_config_lock();
             camblet_config *config = camblet_config_get_locked();
             int workload_id_len = snprintf(NULL, 0, "spiffe://%s/%s", config->trust_domain, workload_id);
-            ret.uri = kzalloc(workload_id_len + 1, GFP_KERNEL);
-            snprintf(ret.uri, workload_id_len + 1, "spiffe://%s/%s", config->trust_domain, workload_id);
+            ret.workload_id = kzalloc(workload_id_len + 1, GFP_KERNEL);
+            snprintf(ret.workload_id, workload_id_len + 1, "spiffe://%s/%s", config->trust_domain, workload_id);
             camblet_config_unlock();
         }
+
+        int workload_id_is_valid = json_object_dotget_boolean(matched_policy, "egress.certificate.workloadIDIsValid");
+        if (workload_id_is_valid == -1)
+            workload_id_is_valid = json_object_dotget_boolean(matched_policy, "certificate.workloadIDIsValid");
+        if (workload_id_is_valid == 1)
+            ret.workload_id_is_valid = true;
+        else
+            ret.workload_id_is_valid = false;
 
         JSON_Array *dns = json_object_dotget_array(matched_policy, "egress.certificate.dnsNames");
         if (dns == NULL)
