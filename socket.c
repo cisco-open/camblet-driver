@@ -1474,10 +1474,10 @@ opa_socket_context enriched_socket_eval(const tcp_connection_context *conn_ctx, 
 		sd_entry = sd_table_entry_get(conn_ctx->destination_ip);
 		if (sd_entry == NULL)
 		{
-			char *address = strnprintf("%s:%d", conn_ctx->destination_ip, conn_ctx->destination_port);
-			pr_debug("look for sd entry # command[%s] address[%s:%d]", current->comm, conn_ctx->destination_ip, conn_ctx->destination_port);
+			char address[INET6_ADDRSTRLEN + 6];
+			sprintf(address, "%s:%d", conn_ctx->destination_ip, conn_ctx->destination_port);
+			pr_debug("look for sd entry # command[%s] address[%s]", current->comm, address);
 			sd_entry = sd_table_entry_get(address);
-			kfree(address);
 		}
 		if (!sd_entry)
 		{

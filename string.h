@@ -15,6 +15,6 @@
 
 char *strdup(const char *str);
 char *strndup(const char *str, size_t size);
-char *strnprintf(const char *fmt, ...);
+char *strprintf(const char *fmt, ...);
 
 #endif
