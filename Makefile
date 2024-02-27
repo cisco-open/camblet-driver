@@ -191,7 +191,7 @@ rpm:
 
 .PHONY: bump_version
 bump_version:
-	$(eval latest_tag :=0.4.0)
+	$(eval latest_tag :=$(shell git fetch origin; git describe --tags --abbrev=0))
 	$(eval major := $(shell echo $(latest_tag) | cut -d. -f1))
 	$(eval minor := $(shell echo $(latest_tag) | cut -d. -f2))
 	$(eval patch := $(shell echo $(latest_tag) | cut -d. -f3))
