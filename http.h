@@ -16,6 +16,6 @@
 #include "picohttpparser.h"
 #include "socket.h"
 
-void inject_header(tcp_connection_context *conn_ctx, buffer_t *buffer, struct phr_header *headers, size_t num_headers, const char *name, const char *value);
+void inject_header(buffer_t *buffer, struct phr_header *headers, size_t num_headers, const char *name, const char *value);
 
 #endif

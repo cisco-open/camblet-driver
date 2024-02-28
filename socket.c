@@ -675,7 +675,7 @@ int camblet_recvmsg(struct sock *sock,
 			{
 				// currently we only inject the spiffe id of the peer into the request
 				if (s->conn_ctx->peer_spiffe_id)
-					inject_header(s->conn_ctx, s->read_buffer, headers, num_headers, "X-Camblet-Spiffe-ID", s->conn_ctx->peer_spiffe_id);
+					inject_header(s->read_buffer, headers, num_headers, "X-Camblet-Spiffe-ID", s->conn_ctx->peer_spiffe_id);
 			}
 			else if (pret == -2) /* request is incomplete, wait for more data */
 			{
