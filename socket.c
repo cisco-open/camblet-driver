@@ -267,7 +267,7 @@ static char *get_read_buffer(camblet_socket *s)
 
 static char *get_read_buffer_for_read(camblet_socket *s, int len)
 {
-	return buffer_access(s->read_buffer, len);
+	return buffer_grow(s->read_buffer, len);
 }
 
 static int get_read_buffer_capacity(camblet_socket *s)
@@ -292,7 +292,7 @@ static char *get_write_buffer(camblet_socket *s)
 
 static char *get_write_buffer_for_write(camblet_socket *s, int len)
 {
-	return buffer_access(s->write_buffer, len);
+	return buffer_grow(s->write_buffer, len);
 }
 
 static int get_write_buffer_size(camblet_socket *s)

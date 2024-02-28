@@ -21,6 +21,6 @@ typedef struct buffer_t {
 buffer_t *buffer_new(int capacity);
 void buffer_free(buffer_t *buffer);
 // returns a pointer to the buffer where the caller can write len long data (possibly resizing the buffer)
-char *buffer_access(buffer_t *buffer, int len);
+char *buffer_grow(buffer_t *buffer, int len);
 
 #endif
