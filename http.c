@@ -15,7 +15,8 @@ void inject_header(tcp_connection_context *conn_ctx, buffer_t *buffer, struct ph
 {
 	// check if the header already exists and update it in place if possible
 	bool updated = false;
-	for (size_t i = 0; i < num_headers; i++)
+	size_t i;
+	for (i = 0; i < num_headers; i++)
 	{
 		if (headers[i].name_len == strlen(name) && strncasecmp(headers[i].name, name, headers[i].name_len) == 0)
 		{
@@ -74,5 +75,5 @@ void inject_header(tcp_connection_context *conn_ctx, buffer_t *buffer, struct ph
 	buffer->size = new_buffer_size;
 
 end:
-	trace_debug(conn_ctx, "inject_header [%s]: after update header:\n\"%.*s\"\n", current->comm, buffer->size, buffer->data);
+	trace_debug(conn_ctx, "inject_header modified request:\n\"%.*s\"\n", 2, buffer->size, buffer->data);
 }
