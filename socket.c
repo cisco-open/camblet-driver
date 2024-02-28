@@ -675,7 +675,7 @@ int camblet_recvmsg(struct sock *sock,
 			{
 				// currently we only inject the spiffe id of the peer into the request
 				if (s->conn_ctx->peer_spiffe_id)
-					inject_header(s->read_buffer, headers, num_headers, "X-Camblet-Spiffe-ID", s->conn_ctx->peer_spiffe_id);
+					inject_header(s->conn_ctx, s->read_buffer, headers, num_headers, "X-Camblet-Spiffe-ID", s->conn_ctx->peer_spiffe_id);
 			}
 			else if (pret == -2) /* request is incomplete, wait for more data */
 			{
@@ -751,20 +751,7 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 		if (pret > 0) /* successfully parsed the request */
 		{
-			printk("request is %d bytes long\n", pret);
-			printk("method is %.*s\n", (int)method_len, method);
-			printk("path is %.*s\n", (int)path_len, path);
-			printk("HTTP version is 1.%d\n", minor_version);
-			printk("headers: [%ld]\n", num_headers);
-
-			int i;
-			for (i = 0; i != num_headers; ++i)
-			{
-				printk("%.*s: %.*s\n", (int)headers[i].name_len, headers[i].name,
-					   (int)headers[i].value_len, headers[i].value);
-			}
-
-			// inject_header(s->write_buffer, headers, num_headers, "X-Camblet", "true");
+			trace_debug(s->conn_ctx, "request is %d bytes long currently, not handling it\n", 1, pret);
 		}
 		else if (pret == -2) /* request is incomplete, wait for more data */
 		{

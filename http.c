@@ -9,8 +9,9 @@
  */
 
 #include "http.h"
+#include "trace.h"
 
-void inject_header(buffer_t *buffer, struct phr_header *headers, size_t num_headers, const char *name, const char *value)
+void inject_header(tcp_connection_context *conn_ctx, buffer_t *buffer, struct phr_header *headers, size_t num_headers, const char *name, const char *value)
 {
 	// check if the header already exists and update it in place if possible
 	bool updated = false;
@@ -73,5 +74,5 @@ void inject_header(buffer_t *buffer, struct phr_header *headers, size_t num_head
 	buffer->size = new_buffer_size;
 
 end:
-	printk("inject_header [%s]: after update header:\n\"%.*s\"\n", current->comm, buffer->size, buffer->data);
+	trace_debug(conn_ctx, "inject_header [%s]: after update header:\n\"%.*s\"\n", current->comm, buffer->size, buffer->data);
 }
