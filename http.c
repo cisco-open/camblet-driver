@@ -75,5 +75,5 @@ void inject_header(tcp_connection_context *conn_ctx, buffer_t *buffer, struct ph
 	buffer->size = new_buffer_size;
 
 end:
-	pr_debug("inject_header # command[%d] request:\n\"%s\"\n", buffer->size, buffer->data);
+	pr_debug("inject_header # command[%s] request:\n\"%.*s\"\n", current->comm, buffer->size, buffer->data);
 }
