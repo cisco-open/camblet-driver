@@ -323,7 +323,7 @@ int trace_log(const tcp_connection_context *conn_ctx, const char *message, int l
 
     if (conn_ctx)
     {
-        const char *id_str = strnprintf("%llu", conn_ctx->id);
+        const char *id_str = strprintf("%llu", conn_ctx->id);
         int retval = json_object_set_string(root_object, "correlation_id", id_str);
         kfree(id_str);
         if (retval < 0)

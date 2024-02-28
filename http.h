@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Cisco and/or its affiliates. All rights reserved.
+ * Copyright (c) 2024 Cisco and/or its affiliates. All rights reserved.
  *
  * SPDX-License-Identifier: MIT OR GPL-2.0-only
  *
@@ -8,13 +8,14 @@
  * modified, or distributed except according to those terms.
  */
 
-#ifndef string_h
-#define string_h
+#ifndef http_h
+#define http_h
 
 #include <linux/types.h>
+#include "buffer.h"
+#include "picohttpparser.h"
+#include "socket.h"
 
-char *strdup(const char *str);
-char *strndup(const char *str, size_t size);
-char *strprintf(const char *fmt, ...);
+void inject_header(buffer_t *buffer, struct phr_header *headers, size_t num_headers, const char *name, const char *value);
 
 #endif

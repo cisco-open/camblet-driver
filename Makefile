@@ -79,7 +79,8 @@ camblet-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  augmentation.o \
 			  config.o \
 			  sd.o \
-			  trace.o
+			  trace.o \
+			  http.o
 
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
@@ -116,7 +117,7 @@ logs:
 
 insmod-tls:
 	@find /lib/modules/$(uname -r) -type f -name '*.ko*' | grep -w tls > /dev/null && sudo modprobe tls || echo "tls module not available"
-	
+
 insmod-bearssl: insmod-tls
 	sudo insmod third-party/BearSSL/bearssl.ko
 

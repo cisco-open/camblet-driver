@@ -38,7 +38,7 @@
 #include "sd.h"
 #include "camblet.h"
 #include "trace.h"
-#include "picohttpparser.h"
+#include "http.h"
 
 #define CAMBLET_PROTOCOL "camblet"
 #define CAMBLET_PASSTHROUGH_PROTOCOL CAMBLET_PROTOCOL "/passthrough"
@@ -137,39 +137,6 @@ static br_ssl_engine_context *get_ssl_engine_context(camblet_socket *s)
 
 static int ktls_sendmsg(camblet_socket *s, void *buf, size_t len)
 {
-#ifdef HTTP_DEBUG
-	const char *method, *path;
-	int pret, minor_version;
-	struct phr_header headers[16];
-	size_t buflen = 0, prevbuflen = 0, method_len, path_len, num_headers;
-
-	if (s->direction == OUTPUT)
-	{
-		/* parse the request */
-		num_headers = sizeof(headers) / sizeof(headers[0]);
-		pret = phr_parse_request(buf, len, &method, &method_len, &path, &path_len,
-								 &minor_version, headers, &num_headers, prevbuflen);
-		if (pret > 0)
-		{
-		} /* successfully parsed the request */
-		else if (pret == -1)
-			return -1;
-
-		printk("request is %d bytes long\n", pret);
-		printk("method is %.*s\n", (int)method_len, method);
-		printk("path is %.*s\n", (int)path_len, path);
-		printk("HTTP version is 1.%d\n", minor_version);
-		printk("headers: [%ld]\n", num_headers);
-
-		int i;
-		for (i = 0; i != num_headers; ++i)
-		{
-			printk("%.*s: %.*s\n", (int)headers[i].name_len, headers[i].name,
-				   (int)headers[i].value_len, headers[i].value);
-		}
-	}
-#endif
-
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = buf, .iov_len = len};
 
@@ -300,7 +267,7 @@ static char *get_read_buffer(camblet_socket *s)
 
 static char *get_read_buffer_for_read(camblet_socket *s, int len)
 {
-	return buffer_access(s->read_buffer, len);
+	return buffer_grow(s->read_buffer, len);
 }
 
 static int get_read_buffer_capacity(camblet_socket *s)
@@ -325,7 +292,7 @@ static char *get_write_buffer(camblet_socket *s)
 
 static char *get_write_buffer_for_write(camblet_socket *s, int len)
 {
-	return buffer_access(s->write_buffer, len);
+	return buffer_grow(s->write_buffer, len);
 }
 
 static int get_write_buffer_size(camblet_socket *s)
@@ -673,6 +640,8 @@ int camblet_recvmsg(struct sock *sock,
 	bool end_of_stream = false;
 	int action = Pause;
 
+	int prevbuflen = get_read_buffer_size(s);
+
 	while (action != Continue)
 	{
 		ret = camblet_socket_read(s, get_read_buffer_for_read(s, len), len, flags);
@@ -689,6 +658,35 @@ int camblet_recvmsg(struct sock *sock,
 		}
 
 		set_read_buffer_size(s, get_read_buffer_size(s) + ret);
+
+		if (s->direction == INPUT && s->opa_socket_ctx.http)
+		{
+			const char *method, *path;
+			int pret, minor_version;
+			struct phr_header headers[16];
+			size_t method_len, path_len, num_headers;
+
+			/* parse the request */
+			num_headers = sizeof(headers) / sizeof(headers[0]);
+			pret = phr_parse_request(get_read_buffer(s), get_read_buffer_size(s), &method, &method_len, &path, &path_len,
+									 &minor_version, headers, &num_headers, prevbuflen);
+
+			if (pret > 0) /* successfully parsed the request */
+			{
+				// currently we only inject the spiffe id of the peer into the request
+				if (s->conn_ctx->peer_spiffe_id)
+					inject_header(s->read_buffer, headers, num_headers, "X-Camblet-Spiffe-ID", s->conn_ctx->peer_spiffe_id);
+			}
+			else if (pret == -2) /* request is incomplete, wait for more data */
+			{
+				ret = -EAGAIN; // TODO
+				goto bail;
+			}
+			else
+			{
+				trace_debug(s->conn_ctx, "phr_parse_request: parse error %d\n", 1, pret);
+			}
+		}
 
 		if (camblet_socket_proxywasm_enabled(s))
 		{
@@ -733,9 +731,38 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 		goto bail;
 	}
 
+	size_t prevbuflen = get_write_buffer_size(s);
+
 	len = copy_from_iter(get_write_buffer_for_write(s, size), size, &msg->msg_iter);
 
 	set_write_buffer_size(s, get_write_buffer_size(s) + len);
+
+	if (s->direction == OUTPUT && s->opa_socket_ctx.http)
+	{
+		const char *method, *path;
+		int pret, minor_version;
+		struct phr_header headers[16];
+		size_t method_len, path_len, num_headers;
+
+		/* parse the request */
+		num_headers = sizeof(headers) / sizeof(headers[0]);
+		pret = phr_parse_request(get_write_buffer(s), get_write_buffer_size(s), &method, &method_len, &path, &path_len,
+								 &minor_version, headers, &num_headers, prevbuflen);
+
+		if (pret > 0) /* successfully parsed the request */
+		{
+			trace_debug(s->conn_ctx, "request is %d bytes long currently, not handling it\n", 1, pret);
+		}
+		else if (pret == -2) /* request is incomplete, wait for more data */
+		{
+			ret = len;
+			goto bail;
+		}
+		else
+		{
+			trace_debug(s->conn_ctx, "phr_parse_request: parse error %d\n", 1, pret);
+		}
+	}
 
 	if (camblet_socket_proxywasm_enabled(s))
 	{
@@ -1056,13 +1083,13 @@ static opa_socket_context socket_eval(const tcp_connection_context *conn_ctx, co
 		trace_msg(conn_ctx, "policy match not found", 0);
 	}
 
-	char is_mtls_enabled[] = "false";
+	char *is_mtls_enabled = "false";
 	if (ctx.mtls)
-		strcpy(is_mtls_enabled, "true");
+		is_mtls_enabled = "true";
 
-	char is_camblet_enabled[] = "false";
+	char *is_camblet_enabled = "false";
 	if (ctx.allowed)
-		strcpy(is_camblet_enabled, "true");
+		is_camblet_enabled = "true";
 
 	trace_debug(conn_ctx, "policy evaluation result", 10, "id", ctx.id, "uri", ctx.uri, "ttl", ctx.ttl, "mtls", is_mtls_enabled, "camblet_enabled", is_camblet_enabled);
 
@@ -1434,10 +1461,10 @@ opa_socket_context enriched_socket_eval(const tcp_connection_context *conn_ctx, 
 		sd_entry = sd_table_entry_get(conn_ctx->destination_ip);
 		if (sd_entry == NULL)
 		{
-			char *address = strnprintf("%s:%d", conn_ctx->destination_ip, conn_ctx->destination_port);
-			pr_debug("look for sd entry # command[%s] address[%s:%d]", current->comm, conn_ctx->destination_ip, conn_ctx->destination_port);
+			char address[INET6_ADDRSTRLEN + 6];
+			sprintf(address, "%s:%d", conn_ctx->destination_ip, conn_ctx->destination_port);
+			pr_debug("look for sd entry # command[%s] address[%s]", current->comm, address);
 			sd_entry = sd_table_entry_get(address);
-			kfree(address);
 		}
 		if (!sd_entry)
 		{
