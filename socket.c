@@ -793,6 +793,22 @@ bail:
 	return ret;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 5, 0)
+int camblet_sendpage(struct sock *sock, struct page *page, int offset, size_t size, int flags)
+{
+	ssize_t res;
+	struct msghdr msg = {.msg_flags = flags};
+	struct kvec iov;
+	char *kaddr = kmap(page);
+	iov.iov_base = kaddr + offset;
+	iov.iov_len = size;
+	iov_iter_kvec(&msg.msg_iter, WRITE, &iov, 1, size);
+	res = camblet_sendmsg(sock, &msg, size);
+	kunmap(page);
+	return res;
+}
+#endif
+
 void camblet_close(struct sock *sk, long timeout)
 {
 	void (*close)(struct sock *sk, long timeout) = tcp_close;
@@ -1101,12 +1117,16 @@ int (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 int (*setsockopt)(struct sock *sk, int level,
 				  int optname, sockptr_t optval,
 				  unsigned int optlen);
+int (*sendpage)(struct sock *sk, struct page *page,
+				int offset, size_t size, int flags);
 
 struct sock *(*accept_v6)(struct sock *sk, int flags, int *err, bool kern);
 int (*connect_v6)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 int (*setsockopt_v6)(struct sock *sk, int level,
 					 int optname, sockptr_t optval,
 					 unsigned int optlen);
+int (*sendpage_v6)(struct sock *sk, struct page *page,
+				   int offset, size_t size, int flags);
 
 // lock cert generation
 static DEFINE_MUTEX(cert_gen_lock);
@@ -1799,6 +1819,11 @@ int socket_init(void)
 	connect_v6 = tcpv6_prot.connect;
 	setsockopt_v6 = tcpv6_prot.setsockopt;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 5, 0)
+	sendpage = tcp_prot.sendpage;
+	sendpage_v6 = tcpv6_prot.sendpage;
+#endif
+
 	// overwrite tcp_prot with our methods
 	tcp_prot.accept = camblet_accept;
 	tcp_prot.connect = camblet_connect;
@@ -1822,6 +1847,11 @@ int socket_init(void)
 	camblet_v6_prot.recvmsg = camblet_recvmsg;
 	camblet_v6_prot.sendmsg = camblet_sendmsg;
 	camblet_v6_prot.close = camblet_close;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 5, 0)
+	camblet_prot.sendpage = camblet_sendpage;
+	camblet_v6_prot.sendpage = camblet_sendpage;
+#endif
 
 	memcpy(&camblet_v6_ktls_prot, &camblet_v6_prot, sizeof(camblet_v6_prot));
 	camblet_v6_ktls_prot.close = NULL; // mark it as uninitialized
@@ -1850,6 +1880,11 @@ void socket_exit(void)
 	tcpv6_prot.accept = accept_v6;
 	tcpv6_prot.connect = connect_v6;
 	tcpv6_prot.setsockopt = setsockopt_v6;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 5, 0)
+	tcp_prot.sendpage = sendpage;
+	tcpv6_prot.sendpage = sendpage_v6;
+#endif
 
 	//- free global tls key
 	free_rsa_private_key(rsa_priv);
