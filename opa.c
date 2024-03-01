@@ -216,14 +216,14 @@ static i32 trace(opa_wrapper *opa, i32 _ctx, i32 arg1)
     return addr;
 }
 
-static int parse_opa_builtins(opa_wrapper *opa, char *json)
+static wasm_vm_result parse_opa_builtins(opa_wrapper *opa, char *json)
 {
     JSON_Value *root_value = json_parse_string(json);
     if (root_value)
     {
         JSON_Object *object = json_object(root_value);
         int builtins = json_object_get_count(object);
-        pr_debug("builtins[%s]", json);
+        pr_debug("opa builtins # json[%s]", json);
 
         // indexing starts from 1 for some reason, so we need one bigger array
         opa->builtins = kzalloc(builtins + 1 * sizeof(void *), GFP_KERNEL);
@@ -248,9 +248,11 @@ static int parse_opa_builtins(opa_wrapper *opa, char *json)
         }
 
         json_value_free(root_value);
-        return builtins;
+
+        return wasm_vm_ok;
     }
-    return 0;
+
+    return wasm_vm_error("could not parse opa builtins");
 }
 
 void opa_socket_context_free(opa_socket_context ctx)
@@ -532,7 +534,82 @@ m3ApiRawFunction(opa_builtin1)
     m3ApiReturn(builtin(opa, ctx, _1));
 }
 
-static wasm_vm_result link_opa_builtins(opa_wrapper *opa, wasm_vm_module *module)
+m3ApiRawFunction(opa_builtin2)
+{
+    m3ApiReturnType(i32);
+
+    m3ApiGetArg(i32, builtin_id);
+    m3ApiGetArg(i32, ctx);
+    m3ApiGetArg(i32, _1);
+    m3ApiGetArg(i32, _2);
+
+    opa_wrapper *opa = (opa_wrapper *)_ctx->userdata;
+
+    pr_debug("call opa_builtin2 # id[%d]", builtin_id);
+
+    i32 (*builtin)(opa_wrapper *, i32, i32, i32) = opa->builtins[builtin_id];
+
+    if (!builtin)
+    {
+        pr_err("opa_builtin2 not found # id[%d]", builtin_id);
+        m3ApiTrap(m3Err_trapAbort);
+    }
+
+    m3ApiReturn(builtin(opa, ctx, _1, _2));
+}
+
+m3ApiRawFunction(opa_builtin3)
+{
+    m3ApiReturnType(i32);
+
+    m3ApiGetArg(i32, builtin_id);
+    m3ApiGetArg(i32, ctx);
+    m3ApiGetArg(i32, _1);
+    m3ApiGetArg(i32, _2);
+    m3ApiGetArg(i32, _3);
+
+    opa_wrapper *opa = (opa_wrapper *)_ctx->userdata;
+
+    pr_debug("call opa_builtin3 # id[%d]", builtin_id);
+
+    i32 (*builtin)(opa_wrapper *, i32, i32, i32, i32) = opa->builtins[builtin_id];
+
+    if (!builtin)
+    {
+        pr_err("opa_builtin3 not found # id[%d]", builtin_id);
+        m3ApiTrap(m3Err_trapAbort);
+    }
+
+    m3ApiReturn(builtin(opa, ctx, _1, _2, _3));
+}
+
+m3ApiRawFunction(opa_builtin4)
+{
+    m3ApiReturnType(i32);
+
+    m3ApiGetArg(i32, builtin_id);
+    m3ApiGetArg(i32, ctx);
+    m3ApiGetArg(i32, _1);
+    m3ApiGetArg(i32, _2);
+    m3ApiGetArg(i32, _3);
+    m3ApiGetArg(i32, _4);
+
+    opa_wrapper *opa = (opa_wrapper *)_ctx->userdata;
+
+    pr_debug("call opa_builtin4 # id[%d]", builtin_id);
+
+    i32 (*builtin)(opa_wrapper *, i32, i32, i32, i32, i32) = opa->builtins[builtin_id];
+
+    if (!builtin)
+    {
+        pr_err("opa_builtin4 not found # id[%d]", builtin_id);
+        m3ApiTrap(m3Err_trapAbort);
+    }
+
+    m3ApiReturn(builtin(opa, ctx, _1, _2, _3, _4));
+}
+
+static wasm_vm_result link_opa_host_functions(opa_wrapper *opa, wasm_vm_module *module)
 {
     M3Result result = m3Err_none;
 
@@ -542,6 +619,9 @@ static wasm_vm_result link_opa_builtins(opa_wrapper *opa, wasm_vm_module *module
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_println", "(i)", opa_println, opa)));
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_builtin0", "i(ii)", opa_builtin0, opa)));
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_builtin1", "i(iii)", opa_builtin1, opa)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_builtin2", "i(iiii)", opa_builtin2, opa)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_builtin3", "i(iiiii)", opa_builtin3, opa)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "opa_builtin4", "i(iiiiii)", opa_builtin4, opa)));
 
 _catch:
     return (wasm_vm_result){.err = result};
@@ -588,18 +668,20 @@ wasm_vm_result init_opa_for(wasm_vm *vm, wasm_vm_module *module)
 
     // parse and link
     char *builtins = wasm_vm_memory(opa->eval->module) + builtinsJson;
-    if (parse_opa_builtins(opa, builtins) > 0)
+    result = parse_opa_builtins(opa, builtins);
+    if (result.err)
     {
-        result = link_opa_builtins(opa, module);
-        if (result.err)
-        {
-            kfree(opa->builtins);
-            kfree(opa);
-            return result;
-        }
+        kfree(opa->builtins);
+        goto error;
     }
 
     opa_free(opa, builtinsJson);
+
+    result = link_opa_host_functions(opa, module);
+    if (result.err)
+    {
+        goto error;
+    }
 
     opas[wasm_vm_cpu(vm)] = opa;
 
@@ -610,7 +692,7 @@ error:
         return result;
     }
 
-    return wasm_vm_result_ok;
+    return wasm_vm_ok;
 }
 
 opa_socket_context this_cpu_opa_socket_eval(const char *input)
