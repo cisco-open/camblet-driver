@@ -168,7 +168,7 @@ opa_wrapper *this_cpu_opa(void)
     return opas[cpu];
 }
 
-static i32 time_now_ns(opa_wrapper *opa, i32 _ctx)
+static i32 builtin_time_now_ns(opa_wrapper *opa, i32 _ctx)
 {
     u64 now = ktime_get_real_ns();
 
@@ -187,7 +187,7 @@ static i32 time_now_ns(opa_wrapper *opa, i32 _ctx)
     return addr;
 }
 
-static i32 trace(opa_wrapper *opa, i32 _ctx, i32 arg1)
+static i32 builtin_trace(opa_wrapper *opa, i32 _ctx, i32 arg1)
 {
     uint8_t *mem = wasm_vm_memory(opa->eval->module);
 
@@ -235,11 +235,11 @@ static wasm_vm_result parse_opa_builtins(opa_wrapper *opa, char *json)
             const int64_t builtin_id = json_object_get_number(object, name);
             if (strcmp(name, "time.now_ns") == 0)
             {
-                opa->builtins[builtin_id] = time_now_ns;
+                opa->builtins[builtin_id] = builtin_time_now_ns;
             }
             else if (strcmp(name, "trace") == 0)
             {
-                opa->builtins[builtin_id] = trace;
+                opa->builtins[builtin_id] = builtin_trace;
             }
             else
             {
