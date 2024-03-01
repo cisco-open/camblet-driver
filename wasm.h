@@ -16,8 +16,8 @@
 #include "m3_exception.h"
 #include "wasm3.h"
 
-#define FATAL(msg, ...)                                                    \
-    {                                                                      \
+#define FATAL(msg, ...)                                                       \
+    {                                                                         \
         printk(KERN_CRIT "camblet: Error: [Fatal] " msg "\n", ##__VA_ARGS__); \
     }
 
@@ -50,7 +50,10 @@ typedef struct wasm_vm_result
     const char *err;
 } wasm_vm_result;
 
-extern const wasm_vm_result wasm_vm_result_ok;
+extern const wasm_vm_result wasm_vm_ok;
+
+#define wasm_vm_error(msg) \
+    (wasm_vm_result) { .err = msg }
 
 #define wasm_vm_try_get_function(VAR, CALL) \
     {                                       \
