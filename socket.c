@@ -127,7 +127,9 @@ struct camblet_socket
 
 	tcp_connection_context *conn_ctx;
 
-	bool handshake_completed;
+	camblet_sendmsg_t *br_low_sendmsg;
+	camblet_recvmsg_t *br_low_recvmsg;
+
 };
 
 static int get_read_buffer_capacity(camblet_socket *s);
@@ -402,7 +404,6 @@ static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_c
 	s->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
 	s->read_buffer = buffer_new(16 * 1024);
 	s->write_buffer = buffer_new(16 * 1024);
-	s->handshake_completed = false;
 
 	s->sock = sock;
 	s->opa_socket_ctx = opa_socket_ctx;
@@ -529,6 +530,12 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 			br_ssl_engine_set_protocol_names(&s->sc->eng, ALPNs_passthrough, ALPNs_passthrough_NUM);
 			br_ssl_client_reset(s->cc, s->hostname, false);
 		}
+
+		// Initialize the low_read and low_write functions 
+	 	// with tcp_sendmsg and recvmsg. These will be used 
+		// by BearSSL to read and write data to socket.
+		s->br_low_recvmsg = plain_recvmsg; 
+		s->br_low_sendmsg = plain_sendmsg;
 
 		ret = br_sslio_flush(&s->ioc);
 		if (ret == 0)
@@ -979,7 +986,8 @@ static int configure_ktls_sock(camblet_socket *s)
 		br_ssl_engine_context *ec = get_ssl_engine_context(s);
 		ec->out.vtable = &br_sslrec_out_clear_vtable;
 		ec->incrypt = 0;
-		s->handshake_completed= true;
+		s->br_low_recvmsg=ktls_recvmsg;
+		s->br_low_sendmsg=ktls_sendmsg;
 	}
 
 	s->sendmsg = bearssl_sendmsg;
@@ -1464,15 +1472,7 @@ cleanup:
 static int br_low_read(void *ctx, unsigned char *buf, size_t len)
 {
 	camblet_socket *s = (camblet_socket *)ctx;
-	int ret = 0;
-	if (s->handshake_completed && ktls_available)
-	{
-		ret = ktls_recvmsg(s, buf, len, 0);
-	}
-	else
-	{
-		ret = plain_recvmsg(s, buf, len, 0);
-	}
+	int ret = s->br_low_recvmsg(s, buf, len, 0);
 	// BearSSL doesn't like 0 return value, but it's not an error
 	// so we return -1 instead and set sock_closed to true to
 	// indicate that the socket is closed without errors.
@@ -1490,7 +1490,7 @@ static int br_low_read(void *ctx, unsigned char *buf, size_t len)
 static int br_low_write(void *ctx, const unsigned char *buf, size_t len)
 {
 	camblet_socket *s = (camblet_socket *)ctx;
-	return s->handshake_completed && ktls_available ? ktls_sendmsg(s, buf, len) : plain_sendmsg(s, buf, len);
+	return s->br_low_sendmsg(s, buf, len);
 }
 
 opa_socket_context enriched_socket_eval(const tcp_connection_context *conn_ctx, direction direction, struct sock *sk, int port)
