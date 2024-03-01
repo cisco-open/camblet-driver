@@ -226,6 +226,11 @@ static wasm_vm_result parse_opa_builtins(opa_wrapper *opa, char *json)
         int builtin_count = json_object_get_count(object);
         pr_debug("opa builtins # json[%s]", json);
 
+        if (builtin_count == 0)
+        {
+            goto bail;
+        }
+
         // indexing starts from 1 for some reason, so we need one bigger array
         opa->builtins = kzalloc(builtin_count + 1 * sizeof(void *), GFP_KERNEL);
 
