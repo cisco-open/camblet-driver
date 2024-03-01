@@ -223,17 +223,18 @@ static wasm_vm_result parse_opa_builtins(opa_wrapper *opa, char *json)
     {
         wasm_vm_result result = wasm_vm_ok;
         JSON_Object *object = json_object(root_value);
-        int builtins = json_object_get_count(object);
+        int builtin_count = json_object_get_count(object);
         pr_debug("opa builtins # json[%s]", json);
 
         // indexing starts from 1 for some reason, so we need one bigger array
-        opa->builtins = kzalloc(builtins + 1 * sizeof(void *), GFP_KERNEL);
+        opa->builtins = kzalloc(builtin_count + 1 * sizeof(void *), GFP_KERNEL);
 
         int i;
-        for (i = 0; i < builtins; i++)
+        for (i = 0; i < builtin_count; i++)
         {
             const char *name = json_object_get_name(object, i);
             const int64_t builtin_id = json_object_get_number(object, name);
+
             if (strcmp(name, "time.now_ns") == 0)
             {
                 opa->builtins[builtin_id] = builtin_time_now_ns;
