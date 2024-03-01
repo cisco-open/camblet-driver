@@ -169,7 +169,7 @@ wasm_vm_result load_module(const char *name, const char *code, unsigned length, 
             result = init_opa_for(vm, module);
             if (result.err)
             {
-                pr_crit("could not init opa module # err[%s]", result.err);
+                pr_crit("could not init opa module # err[%s: %s]", result.err, wasm_vm_last_error(module));
                 wasm_vm_unlock(vm);
                 return result;
             }
@@ -180,7 +180,7 @@ wasm_vm_result load_module(const char *name, const char *code, unsigned length, 
             result = init_proxywasm_for(vm, module);
             if (result.err)
             {
-                pr_crit("could not init proxywasm module # err[%s]", result.err);
+                pr_crit("could not init proxywasm module # err[%s: %s]", result.err, wasm_vm_last_error(module));
                 wasm_vm_unlock(vm);
                 return result;
             }
