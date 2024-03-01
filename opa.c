@@ -221,6 +221,7 @@ static wasm_vm_result parse_opa_builtins(opa_wrapper *opa, char *json)
     JSON_Value *root_value = json_parse_string(json);
     if (root_value)
     {
+        wasm_vm_result result = wasm_vm_ok;
         JSON_Object *object = json_object(root_value);
         int builtins = json_object_get_count(object);
         pr_debug("opa builtins # json[%s]", json);
@@ -243,13 +244,18 @@ static wasm_vm_result parse_opa_builtins(opa_wrapper *opa, char *json)
             }
             else
             {
-                pr_warn("unsupported builtin function # name[%s]", name);
+                result = wasm_vm_error("unsupported opa builtin function");
+                snprintf(opa->malloc->module->runtime->error_message, 256, "unsupported opa builtin function: %s", name);
+                kfree(opa->builtins);
+
+                goto bail;
             }
         }
 
+    bail:
         json_value_free(root_value);
 
-        return wasm_vm_ok;
+        return result;
     }
 
     return wasm_vm_error("could not parse opa builtins");
@@ -671,7 +677,6 @@ wasm_vm_result init_opa_for(wasm_vm *vm, wasm_vm_module *module)
     result = parse_opa_builtins(opa, builtins);
     if (result.err)
     {
-        kfree(opa->builtins);
         goto error;
     }
 
