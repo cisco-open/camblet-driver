@@ -743,7 +743,7 @@ opa_socket_context this_cpu_opa_socket_eval(const char *input)
     result = opa_eval(opa, inputAddr, inputLen, opa->dataValueAddr, heapAddr);
     if (result.err)
     {
-        pr_crit("opa eval error # name[%s] err[%s]", opa->eval->module->name, result.err);
+        pr_crit("opa eval error # name[%s] err[%s: %s]", opa->eval->module->name, result.err, wasm_vm_last_error(opa->eval->module));
         goto cleanup;
     }
 
