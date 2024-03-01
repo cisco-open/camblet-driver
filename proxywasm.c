@@ -24,20 +24,23 @@
 #define hash_for_each_possible(name, obj, member, key, bits) \
     hlist_for_each_entry(obj, &name[hash_min(key, bits)], member)
 
-#define FOR_ALL_FILTERS(CALL)                                                          \
-    wasm_vm_result result;                                                             \
-    proxywasm_filter *f;                                                               \
-    for (f = p->filters; f != NULL; f = f->next)                                       \
-    {                                                                                  \
-        pr_info("camblet: calling %s " #CALL, f->name);                                \
-        result = CALL;                                                                 \
-        if (result.err != NULL)                                                        \
-        {                                                                              \
-            pr_err("camblet: calling %s " #CALL " error: %s\n", f->name, result.err);  \
-            return result;                                                             \
-        }                                                                              \
-        pr_info("camblet: result of calling %s " #CALL ": %d", f->name, result.data->i32); \
-    }                                                                                  \
+#define FOR_ALL_FILTERS(CALL)                                              \
+    wasm_vm_result result;                                                 \
+    proxywasm_filter *f;                                                   \
+    for (f = p->filters; f != NULL; f = f->next)                           \
+    {                                                                      \
+        pr_info("camblet: calling %s " #CALL, f->name);                    \
+        result = CALL;                                                     \
+        if (result.err != NULL)                                            \
+        {                                                                  \
+            pr_err("camblet: calling %s " #CALL " # err[%s: %s]", f->name, \
+                   result.err,                                             \
+                   wasm_vm_last_error(f->proxy_on_vm_start->module));      \
+            return result;                                                 \
+        }                                                                  \
+        pr_info("camblet: result of calling %s " #CALL ": %d", f->name,    \
+                result.data->i32);                                         \
+    }                                                                      \
     return result;
 
 typedef struct property_h_node
