@@ -29,11 +29,11 @@
     proxywasm_filter *f;                                                               \
     for (f = p->filters; f != NULL; f = f->next)                                       \
     {                                                                                  \
-        pr_info("camblet: calling %s " #CALL, f->name);                                    \
+        pr_info("camblet: calling %s " #CALL, f->name);                                \
         result = CALL;                                                                 \
         if (result.err != NULL)                                                        \
         {                                                                              \
-            pr_err("camblet: calling %s " #CALL " error: %s\n", f->name, result.err);     \
+            pr_err("camblet: calling %s " #CALL " error: %s\n", f->name, result.err);  \
             return result;                                                             \
         }                                                                              \
         pr_info("camblet: result of calling %s " #CALL ": %d", f->name, result.data->i32); \
@@ -464,7 +464,7 @@ error:
     result = wasm_vm_call_direct(vm, filter->proxy_on_context_create, proxywasm->root_context->id, 0);
     if (result.err)
     {
-        pr_crit("proxy_on_context_create for module %s failed: %s -> %s", module->name, result.err, wasm_vm_last_error(module));
+        pr_crit("proxy_on_context_create for module %s failed # err[%s: %s]", module->name, result.err, wasm_vm_last_error(module));
         kfree(proxywasm);
         return result;
     }
@@ -472,7 +472,7 @@ error:
     result = wasm_vm_call_direct(vm, filter->proxy_on_vm_start, proxywasm->root_context->id, 0);
     if (result.err)
     {
-        pr_crit("proxy_on_vm_start for module %s failed: %s", module->name, result.err);
+        pr_crit("proxy_on_vm_start for module %s failed # err[%s: %s]", module->name, result.err, wasm_vm_last_error(module));
         kfree(proxywasm);
         return result;
     }
@@ -482,7 +482,7 @@ error:
     result = wasm_vm_call_direct(vm, filter->proxy_on_configure, proxywasm->root_context->id, plugin_configuration_size);
     if (result.err)
     {
-        pr_crit("proxy_on_configure for module %s failed: %s", module->name, result.err);
+        pr_crit("proxy_on_configure for module %s failed # err[%s: %s]", module->name, result.err, wasm_vm_last_error(module));
         kfree(proxywasm);
         return result;
     }
@@ -520,13 +520,13 @@ wasm_vm_result proxywasm_destroy_context(proxywasm *p)
         result = wasm_vm_call_direct(p->vm, f->proxy_on_done, p->current_context->id);
         if (result.err != NULL)
         {
-            pr_err("camblet: calling %s.proxy_on_done errored %s", f->name, result.err);
+            pr_err("camblet: calling %s.proxy_on_done errored # err[%s: %s]", f->name, result.err, wasm_vm_last_error(f->proxy_on_done->module));
         }
 
         result = wasm_vm_call_direct(p->vm, f->proxy_on_delete, p->current_context->id);
         if (result.err != NULL)
         {
-            pr_err("camblet: calling %s.proxy_on_delete errored %s", f->name, result.err);
+            pr_err("camblet: calling %s.proxy_on_delete errored # err[%s: %s]", f->name, result.err, wasm_vm_last_error(f->proxy_on_delete->module));
         }
     }
 
