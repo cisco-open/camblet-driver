@@ -13,14 +13,15 @@
 
 #include "jwt.h"
 
-typedef struct jwt {
-char *alg;
-char *typ;
+typedef struct jwt
+{
+    char *alg;
+    char *typ;
 
-char *iss;
-char *sub;
-char *aud;
-u64 exp;
+    char *iss;
+    char *sub;
+    char *aud;
+    u64 exp;
 
 } jwt_t;
 
