@@ -91,6 +91,6 @@ jobs:
         sudo modprobe camblet
         sudo dmesg -T
 
-     - name: Run proxy-wasm smoke test with bearSSL
+    - name: Run proxy-wasm smoke test with bearSSL
       uses: ./camblet-driver/.github/actions/smoketest
       timeout-minutes: 1
