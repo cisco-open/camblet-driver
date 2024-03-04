@@ -63,7 +63,7 @@ jobs:
         sudo cp config.yaml /etc/camblet/config.yaml
         sudo cp build/camblet /usr/local/bin/
   
-    - name: Run the kernel module
+    - name: Run the kernel module with kTLS
       working-directory: camblet-driver 
       run: |
         sudo modprobe tls
@@ -76,6 +76,21 @@ jobs:
     #     ## limits ssh access and adds the ssh public key for the user which triggered the workflow
     #     limit-access-to-actor: true
 
-    - name: Run proxy-wasm smoke test
+    - name: Run proxy-wasm smoke test with kTLS
+      uses: ./camblet-driver/.github/actions/smoketest
+      timeout-minutes: 1
+ 
+    - name: Remove kernel module with kTLS
+      working-directory: camblet-driver
+      run: sudo rmmod camblet
+
+    - name: Run the kernel module with bearSSL
+      working-directory: camblet-driver 
+      run: |
+        sudo rmmod tls
+        sudo modprobe camblet
+        sudo dmesg -T
+
+     - name: Run proxy-wasm smoke test with bearSSL
       uses: ./camblet-driver/.github/actions/smoketest
       timeout-minutes: 1
