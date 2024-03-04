@@ -6,7 +6,6 @@ runs:
   steps:
     - name: Run smoke tests
       working-directory: camblet-driver
-      timeout-minutes: 1
       run: |
         touch /tmp/camblet.log /tmp/file-server.log /tmp/python.log
         echo "Run processes"

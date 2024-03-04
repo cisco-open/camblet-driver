@@ -78,3 +78,4 @@ jobs:
 
     - name: Run proxy-wasm smoke test
       uses: ./camblet-driver/.github/actions/smoketest
+      timeout-minutes: 1
