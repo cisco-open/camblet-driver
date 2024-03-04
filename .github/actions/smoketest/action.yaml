@@ -46,6 +46,7 @@ runs:
         echo "Stop processes"
         sudo kill -9 $(jobs -p)
         sudo pkill -9 camblet
+        docker kill $(docker ps -q)
 
     - name: Kernel log
       if: always()
