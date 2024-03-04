@@ -19,6 +19,7 @@
 #include "config.h"
 #include "sd.h"
 #include "string.h"
+#include "jwt.h"
 
 #include "static/filter_stats.h"
 #include "static/filter_tcp_metadata.h"
@@ -87,6 +88,18 @@ static int __init camblet_init(void)
     {
         FATAL("load_module -> socket_opa: %s", result.err);
         return -1;
+    }
+
+    // test jwt
+    jwt_t *jwt = jwt_parse("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.kGWDzjy0MXc1UiDVSZNAoFQMeVKBievVdGmTE1fOEXg", "no");
+    if (jwt)
+    {
+        pr_info("jwt: alg=%s, typ=%s, iss=%s, sub=%s, aud=%s, exp=%llu", jwt->alg, jwt->typ, jwt->iss, jwt->sub, jwt->aud, jwt->exp);
+        jwt_free(jwt);
+    }
+    else
+    {
+        pr_err("jwt: failed to parse");
     }
 
     return ret;
