@@ -11,7 +11,8 @@ runs:
         touch /tmp/camblet.log /tmp/file-server.log /tmp/python.log
         echo "Run processes"
         sudo AGENT_METADATACOLLECTORS_DOCKER_ENABLED=true camblet agent > /tmp/camblet.log &
-        go run test/file-server.go >/tmp/file-server.log &
+        go build test/file-server.go
+        ./file-server >/tmp/file-server.log &
         docker run -d --rm -p 8080:80 nginx
         sleep 2
 
