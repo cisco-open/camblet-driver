@@ -4,22 +4,40 @@ import future.keywords
 
 default allow := false
 
-replacements[key] := value if {
+input_labels_organized[name] contains value if {
 	some k, _ in input.labels
 
-	s := split(k, ":")
+	s := split(k, "=")
+	name := concat("", array.slice(s, 0, 1))
+	val := concat("=", array.slice(s, 1, count(s)))
+	name != val
+	value := val
+}
 
-	key := concat("", ["[[", concat(":", array.slice(s, 0, count(s) - 1)), "]]"])
-	value := s[count(s) - 1]
+replacements[key] := value if {
+	some name, values in input_labels_organized
+
+	key := concat("", ["[", name, "]"])
+	count(values) == 1
+	value := concat("", values)
+}
+
+input_remote_labels_organized[name] contains value if {
+	some k, _ in input.remote.labels
+
+	s := split(k, "=")
+	name := concat("", array.slice(s, 0, 1))
+	val := concat("=", array.slice(s, 1, count(s)))
+	name != val
+	value := val
 }
 
 egress_replacements[key] := value if {
-	some k, _ in input.remote.labels
+	some name, values in input_remote_labels_organized
 
-	s := split(k, ":")
-
-	key := concat("", ["[[", concat(":", array.slice(s, 0, count(s) - 1)), "]]"])
-	value := s[count(s) - 1]
+	key := concat("", ["[", name, "]"])
+	count(values) == 1
+	value := concat("", values)
 }
 
 replace_selectors(p, _) := policy if {
@@ -32,7 +50,7 @@ replace_selectors(p, r) := policy if {
 
 	wid := strings.replace_n(r, p.certificate.workloadID)
 
-	spiffe_id_path_regex := `^(?:\/?(?:(?:[[:alnum:]][a-z0-9\-_]*[[:alnum:]]|[[:alnum:]]+)\.)*(?:[a-z-_0-9]*[[:alnum:]]))*$`
+	spiffe_id_path_regex := `^(?:\/?(?:(?:[a-zA-Z0-9][a-zA-Z0-9-_]*[a-zA-Z0-9]|[a-zA-Z0-9]*)\.)*(?:[a-zA-Z0-9][a-zA-Z0-9-_]*[a-zA-Z0-9]|[a-zA-Z0-9]))*$`
 
 	policy := object.union(
 		p,

@@ -1395,20 +1395,20 @@ void add_net_conn_info_to_json(const tcp_connection_context *conn_ctx, JSON_Obje
 	}
 
 	if (conn_ctx->direction == INPUT)
-		json_object_set_boolean(json_object, "direction:input", true);
+		json_object_set_boolean(json_object, "direction=input", true);
 	else
-		json_object_set_boolean(json_object, "direction:output", true);
+		json_object_set_boolean(json_object, "direction=output", true);
 
 	char buff[256];
 
-	snprintf(buff, sizeof(buff), "source:ip:%s", conn_ctx->source_ip);
+	snprintf(buff, sizeof(buff), "source:ip=%s", conn_ctx->source_ip);
 	json_object_set_boolean(json_object, buff, true);
-	snprintf(buff, sizeof(buff), "source:port:%d", conn_ctx->source_port);
+	snprintf(buff, sizeof(buff), "source:port=%d", conn_ctx->source_port);
 	json_object_set_boolean(json_object, buff, true);
 
-	snprintf(buff, sizeof(buff), "destination:ip:%s", conn_ctx->destination_ip);
+	snprintf(buff, sizeof(buff), "destination:ip=%s", conn_ctx->destination_ip);
 	json_object_set_boolean(json_object, buff, true);
-	snprintf(buff, sizeof(buff), "destination:port:%d", conn_ctx->destination_port);
+	snprintf(buff, sizeof(buff), "destination:port=%d", conn_ctx->destination_port);
 	json_object_set_boolean(json_object, buff, true);
 }
 
