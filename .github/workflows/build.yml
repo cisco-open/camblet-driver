@@ -88,7 +88,7 @@ jobs:
       working-directory: camblet-driver 
       run: |
         sudo rmmod tls
-        sudo modprobe camblet
+        sudo modprobe camblet ktls_available=0
         sudo dmesg -T
 
     - name: Run proxy-wasm smoke test with bearSSL
