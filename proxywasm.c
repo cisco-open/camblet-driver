@@ -504,7 +504,7 @@ error:
         cur->next = filter;
     }
 
-    return wasm_vm_result_ok;
+    return wasm_vm_ok;
 }
 
 wasm_vm_result proxywasm_create_context(proxywasm *p, buffer_t *upstream_buffer, buffer_t *downstream_buffer)
@@ -535,7 +535,7 @@ wasm_vm_result proxywasm_destroy_context(proxywasm *p)
 
     free_proxywasm_context(p->current_context);
 
-    return wasm_vm_result_ok;
+    return wasm_vm_ok;
 }
 
 wasm_vm_result proxy_on_context_create(proxywasm *p, i32 context_id, i32 root_context_id)

@@ -2,7 +2,7 @@ name: Makefile CI
 
 on:
   push:
-    branches: [ "*" ]
+    branches: [ "main" ]
   pull_request:
 
 jobs:
