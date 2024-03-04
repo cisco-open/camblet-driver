@@ -6,6 +6,7 @@ runs:
   steps:
     - name: Run smoke tests
       working-directory: camblet-driver
+      shell: bash
       run: |
         touch /tmp/camblet.log /tmp/file-server.log /tmp/python.log
         echo "Run processes"
@@ -47,20 +48,24 @@ runs:
 
     - name: Kernel log
       if: always()
+      shell: bash
       run: |
         sudo dmesg -T
 
     - name: Camblet agent log
       if: always()
+      shell: bash
       run: |
         cat /tmp/camblet.log
 
     - name: File server log
       if: always()
+      shell: bash
       run: |
         cat /tmp/file-server.log
 
     - name: Python log
       if: always()
+      shell: bash
       run: |
         cat /tmp/python.log
