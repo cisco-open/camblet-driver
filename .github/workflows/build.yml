@@ -77,4 +77,4 @@ jobs:
     #     limit-access-to-actor: true
 
     - name: Run proxy-wasm smoke test
-      uses: actions/smoketest
+      uses: ./.github/actions/smoketest
