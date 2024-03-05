@@ -112,7 +112,7 @@ jwt_t *jwt_parse(const char *jwt, const char *secret)
 
     printk("calculating hash for [%d bytes]: %.*s", payload_end - jwt, payload_end - jwt, jwt);
 
-    char *hash = hmac_sha256(jwt, payload_end - jwt, secret);
+    char *hash = hmac_sha256(jwt, payload_end - jwt, secret, strlen(secret));
     if (!hash)
     {
         printk(KERN_ERR "failed to calculate hmac");

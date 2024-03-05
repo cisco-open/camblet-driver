@@ -11,6 +11,6 @@
 #ifndef crypto_h
 #define crypto_h
 
-char *hmac_sha256(const char *data, unsigned data_len, const char *key);
+char *hmac_sha256(const char *data, unsigned data_len, const char *key, unsigned key_len);
 
 #endif

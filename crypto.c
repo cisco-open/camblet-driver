@@ -37,6 +37,8 @@ u8 *hmac_sha256(const u8 *data, unsigned data_len, const char *key, unsigned key
         return PTR_ERR(shash);
     }
 
+    printk("setkey: %.*s\n", key_len, key);
+
     err = crypto_shash_setkey(shash, key, key_len);
     if (err < 0)
     {
@@ -48,6 +50,8 @@ u8 *hmac_sha256(const u8 *data, unsigned data_len, const char *key, unsigned key
     struct shash_desc *desc = init_sdesc(shash);
 
     u8 *out = kmalloc(crypto_shash_digestsize(shash), GFP_KERNEL);
+
+    printk("data: %.*s\n", data_len, data);
 
     err = crypto_shash_digest(desc, data, data_len, out);
 
