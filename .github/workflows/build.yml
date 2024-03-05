@@ -63,11 +63,11 @@ jobs:
         sudo cp config.yaml /etc/camblet/config.yaml
         sudo cp build/camblet /usr/local/bin/
   
-    - name: Run the kernel module
+    - name: Run the kernel module with kTLS
       working-directory: camblet-driver 
       run: |
         sudo modprobe tls
-        sudo modprobe camblet
+        sudo modprobe camblet ktls_available=1
         sudo dmesg -T
 
     # - name: Setup upterm session
@@ -76,67 +76,21 @@ jobs:
     #     ## limits ssh access and adds the ssh public key for the user which triggered the workflow
     #     limit-access-to-actor: true
 
-    - name: Run proxy-wasm smoke test
-      working-directory: camblet-driver
+    - name: Run proxy-wasm smoke test with kTLS
+      uses: ./camblet-driver/.github/actions/smoketest
       timeout-minutes: 1
+ 
+    - name: Remove kernel module with kTLS
+      working-directory: camblet-driver
+      run: sudo rmmod camblet
+
+    - name: Run the kernel module with bearSSL
+      working-directory: camblet-driver 
       run: |
-        touch /tmp/camblet.log /tmp/file-server.log /tmp/python.log
-        echo "Run processes"
-        sudo AGENT_METADATACOLLECTORS_DOCKER_ENABLED=true camblet agent > /tmp/camblet.log &
-        go run test/file-server.go >/tmp/file-server.log &
-        docker run -d --rm -p 8080:80 nginx
-        sleep 2
-
-        echo "Test downloading a bigger file"
-        head -c 2M </dev/urandom > bigfile.o
-        curl -v -o /tmp/bigfile_downloaded.o http://localhost:8000/bigfile.o
-
-        echo "Test uploading this file"
-        curl -v -F "bigfile_downloaded.o=@/tmp/bigfile_downloaded.o" http://localhost:8000/upload
-        diff bigfile.o bigfile_downloaded.o
-
-        echo "Test bearssl with non-bearssl compatibility"
-        python3 -m http.server 7000 >/tmp/python.log &
-        sleep 1
-        echo "testing with curl..."
-        curl -k -v https://localhost:7000/
-        echo "testing with wget..."
-        wget --no-check-certificate https://localhost:7000/
-
-        echo "Test openssl client connect to python with default cipher"
-        openssl s_client -connect 127.0.0.1:7000
-        echo "Test openssl client connect to python with ECDHE-RSA-CHACHA20-POLY1305 cipher"
-        openssl s_client -cipher ECDHE-RSA-CHACHA20-POLY1305 -connect 127.0.0.1:7000
-
-        echo "Test sendfile with NGiNX using curl"
-        curl -v http://localhost:8080
-
-        echo "Test sendfile with NGiNX using wget"
-        wget -v http://localhost:8000
-
-        echo "Stop processes"
-        sudo kill -9 $(jobs -p)
-        sudo pkill -9 camblet
-
-    - name: kernel log
-      if: always()
-      run: |
+        sudo rmmod tls
+        sudo modprobe camblet ktls_available=0
         sudo dmesg -T
 
-    - name: Camblet agent log
-      if: always()
-      run: |
-        cat /tmp/camblet.log
-
-    - name: File server log
-      if: always()
-      run: |
-        cat /tmp/file-server.log
-
-    - name: Python log
-      if: always()
-      run: |
-        cat /tmp/python.log
-
-    - name: Cleanup module
-      run: sudo modprobe -r camblet
+    - name: Run proxy-wasm smoke test with bearSSL
+      uses: ./camblet-driver/.github/actions/smoketest
+      timeout-minutes: 1
