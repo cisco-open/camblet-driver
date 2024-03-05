@@ -67,7 +67,7 @@ jobs:
       working-directory: camblet-driver 
       run: |
         sudo modprobe tls
-        sudo modprobe camblet
+        sudo modprobe camblet ktls_available=1
         sudo dmesg -T
 
     # - name: Setup upterm session
