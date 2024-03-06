@@ -129,9 +129,9 @@ int jwt_verify(jwt_t *jwt, const char *secret, const unsigned secret_len)
         return -1;
     }
 
-    char hash_base64[256];
+    char signature[32];
 
-    int bytes = base64_encode(hash_base64, 256, hash, 32);
+    int bytes = base64_decode(signature, sizeof(signature), jwt->signature, jwt->signature_len);
     if (bytes < 0)
     {
         printk(KERN_ERR "failed to base64 encode signature");
@@ -140,10 +140,17 @@ int jwt_verify(jwt_t *jwt, const char *secret, const unsigned secret_len)
         return -1;
     }
 
+    if (bytes != 32)
+    {
+        printk(KERN_ERR "signature is not 32 bytes");
+
+        kfree(hash);
+        return -1;
+    }
+
+    int ret = memcmp(hash, signature, bytes);
+    
     kfree(hash);
 
-    printk("signature   [%d bytes]: %s", jwt->signature_len, jwt->signature);
-    printk("hash_base64 [%d bytes]: %s", bytes, hash_base64);
-
-    return strncmp(jwt->signature, hash_base64, bytes);
+    return ret;
 }
