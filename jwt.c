@@ -23,8 +23,7 @@ jwt_t *jwt_parse(const char *jwt, const unsigned len)
         return NULL;
     }
 
-    char *header_end = strchr(jwt, '.');
-
+    char *header_end = memchr(jwt, '.', len);
     if (!header_end)
     {
         kfree(j);
@@ -59,7 +58,7 @@ jwt_t *jwt_parse(const char *jwt, const unsigned len)
     j->alg = json_raw(json_object_get(header, "alg"));
     j->typ = json_raw(json_object_get(header, "typ"));
 
-    char *payload_end = strchr(header_end + 1, '.');
+    char *payload_end = memchr(header_end + 1, '.', len - (header_end - jwt) - 1);
     if (!payload_end)
     {
         kfree(j);
@@ -114,6 +113,11 @@ jwt_t *jwt_parse(const char *jwt, const unsigned len)
 
 void jwt_free(jwt_t *jwt)
 {
+    // kfree(jwt->alg);
+    // kfree(jwt->typ);
+    // kfree(jwt->iss);
+    // kfree(jwt->sub);
+
     kfree(jwt);
 }
 
@@ -129,7 +133,7 @@ int jwt_verify(jwt_t *jwt, const char *secret, const unsigned secret_len)
         return -1;
     }
 
-    char signature[32];
+    char signature[64];
 
     int bytes = base64_decode(signature, sizeof(signature), jwt->signature, jwt->signature_len);
     if (bytes < 0)

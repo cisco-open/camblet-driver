@@ -173,7 +173,7 @@ static int __init camblet_init(void)
         }
         else
         {
-            pr_err("jwt: failed to verify");
+            pr_err("jwt: failed to verify: %d", ret);
         }
 
         jwt_free(jwt);
