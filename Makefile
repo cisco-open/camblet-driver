@@ -64,6 +64,7 @@ camblet-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  third-party/wasm3/source/m3_module.o \
 			  third-party/wasm3/source/m3_parse.o \
 			  third-party/base64/base64.o \
+			  third-party/fastjson/json.o \
 			  third-party/parson/json.o \
 			  third-party/picohttpparser/picohttpparser.o \
 			  src/buffer.o \

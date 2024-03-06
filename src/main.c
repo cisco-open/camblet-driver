@@ -159,10 +159,23 @@ static int __init camblet_init(void)
     __camblet_init_status.wasm_opa = true;
 
     // test jwt
-    jwt_t *jwt = jwt_parse("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.kGWDzjy0MXc1UiDVSZNAoFQMeVKBievVdGmTE1fOEXg", "no");
+    const char *token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.kGWDzjy0MXc1UiDVSZNAoFQMeVKBievVdGmTE1fOEXg";
+    jwt_t *jwt = jwt_parse(token, strlen(token));
     if (jwt)
     {
         pr_info("jwt: alg=%s, typ=%s, iss=%s, sub=%s, aud=%s, exp=%llu", jwt->alg, jwt->typ, jwt->iss, jwt->sub, jwt->aud, jwt->exp);
+
+        const char *secret = "no";
+        int ret = jwt_verify(jwt, secret, strlen(secret));
+        if (ret == 0)
+        {
+            pr_info("jwt: verified");
+        }
+        else
+        {
+            pr_err("jwt: failed to verify");
+        }
+
         jwt_free(jwt);
     }
     else
