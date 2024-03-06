@@ -23,8 +23,10 @@
                 "${linux-src}/arch/arm64/include/generated/",
                 "${linux-src}/arch/arm64/include/uapi/",
                 "${linux-src}/arch/arm64/include/generated/uapi/",
+                "third-party/",
                 "third-party/base64/",
                 "third-party/BearSSL/inc/",
+                "third-party/fastjson/",
                 "third-party/parson/",
                 "third-party/picohttpparser/",
                 "third-party/wasm3/source/"

@@ -2306,9 +2306,9 @@ int json_value_equals(const JSON_Value *a, const JSON_Value *b) {
     }
 }
 
-JSON_Value_Type json_type(const JSON_Value *value) {
-    return json_value_get_type(value);
-}
+// JSON_Value_Type json_type(const JSON_Value *value) {
+//     return json_value_get_type(value);
+// }
 
 JSON_Object * json_object (const JSON_Value *value) {
     return json_value_get_object(value);

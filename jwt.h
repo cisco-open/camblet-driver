@@ -23,9 +23,17 @@ typedef struct jwt
     char *aud;
     u64 exp;
 
+    // data is the base64url encoded JSON header.payload part of the JWT
+    const char *data;
+    unsigned data_len;
+
+    const char *signature;
+    unsigned signature_len;
+
 } jwt_t;
 
-jwt_t *jwt_parse(const char *jwt, const char *secret);
+jwt_t *jwt_parse(const char *jwt, const unsigned len);
+int jwt_verify(jwt_t *jwt, const char *secret, const unsigned secret_len);
 void jwt_free(jwt_t *jwt);
 
 #endif

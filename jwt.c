@@ -11,10 +11,11 @@
 #include "base64.h"
 #include "crypto.h"
 #include "jwt.h"
-#include "json.h"
+#include "fastjson/json.h"
+
 #include <linux/slab.h>
 
-jwt_t *jwt_parse(const char *jwt, const char *secret)
+jwt_t *jwt_parse(const char *jwt, const unsigned len)
 {
     jwt_t *j = kzalloc(sizeof(jwt_t), GFP_KERNEL);
     if (!j)
@@ -47,25 +48,22 @@ jwt_t *jwt_parse(const char *jwt, const char *secret)
 
     printk(KERN_INFO "header_json: '%s'\n", header_json);
 
-    JSON_Value *header = json_parse_string(header_json);
-    if (!header)
+    struct json header = json_parse(header_json);
+    if (!json_exists(header))
     {
         kfree(j);
         kfree(header_json);
         return NULL;
     }
 
-    JSON_Object *header_obj = json_value_get_object(header);
-
-    j->alg = json_object_get_string(header_obj, "alg");
-    j->typ = json_object_get_string(header_obj, "typ");
+    j->alg = json_raw(json_object_get(header, "alg"));
+    j->typ = json_raw(json_object_get(header, "typ"));
 
     char *payload_end = strchr(header_end + 1, '.');
     if (!payload_end)
     {
         kfree(j);
         kfree(header_json);
-        json_value_free(header);
         return NULL;
     }
 
@@ -74,7 +72,6 @@ jwt_t *jwt_parse(const char *jwt, const char *secret)
     {
         kfree(j);
         kfree(header_json);
-        json_value_free(header);
         return NULL;
     }
 
@@ -84,65 +81,33 @@ jwt_t *jwt_parse(const char *jwt, const char *secret)
         kfree(j);
         kfree(header_json);
         kfree(payload_json);
-        json_value_free(header);
         return NULL;
     }
 
     printk(KERN_INFO "payload_json: '%s'\n", payload_json);
 
-    JSON_Value *payload = json_parse_string(payload_json);
-    if (!payload)
+    struct json payload = json_parse(payload_json);
+    if (!json_exists(payload))
     {
         kfree(j);
         kfree(header_json);
         kfree(payload_json);
-        json_value_free(header);
         return NULL;
     }
 
-    JSON_Object *payload_obj = json_value_get_object(payload);
-
-    j->iss = json_object_get_string(payload_obj, "iss");
-    j->sub = json_object_get_string(payload_obj, "sub");
-    j->aud = json_object_get_string(payload_obj, "aud");
-    j->exp = json_object_get_number(payload_obj, "exp");
+    j->iss = json_raw(json_object_get(payload, "iss"));
+    j->sub = json_raw(json_object_get(payload, "sub"));
+    j->aud = json_raw(json_object_get(payload, "aud"));
+    j->exp = json_raw(json_object_get(payload, "exp"));
 
     // signature parsing
-    char *signature = payload_end + 1;
+    j->signature = payload_end + 1;
+    j->signature_len = jwt + len - j->signature;
 
-    printk("calculating hash for [%d bytes]: %.*s", payload_end - jwt, payload_end - jwt, jwt);
+    j->data = jwt;
+    j->data_len = payload_end - jwt;
 
-    char *hash = hmac_sha256(jwt, payload_end - jwt, secret, strlen(secret));
-    if (!hash)
-    {
-        printk(KERN_ERR "failed to calculate hmac");
-
-        kfree(j);
-        kfree(header_json);
-        kfree(payload_json);
-        json_value_free(header);
-
-        return NULL;
-    }
-
-    char hash_base64[256];
-
-    int bytes = base64_encode(hash_base64, 256, hash, 32);
-
-    if (bytes < 0)
-    {
-        printk(KERN_ERR "failed to base64 encode signature");
-
-        kfree(j);
-        kfree(header_json);
-        kfree(payload_json);
-        json_value_free(header);
-
-        return NULL;
-    }
-
-    printk("signature   [%d bytes]: %s", strlen(signature), signature);
-    printk("hash_base64 [%d bytes]: %s", bytes, hash_base64);
+    //  TODO free all values
 
     return j;
 }
@@ -150,4 +115,35 @@ jwt_t *jwt_parse(const char *jwt, const char *secret)
 void jwt_free(jwt_t *jwt)
 {
     kfree(jwt);
+}
+
+int jwt_verify(jwt_t *jwt, const char *secret, const unsigned secret_len)
+{
+    printk("calculating hash for [%d bytes]: %.*s", jwt->data_len, jwt->data_len, jwt->data);
+
+    char *hash = hmac_sha256(jwt->data, jwt->data_len, secret, strlen(secret));
+    if (!hash)
+    {
+        printk(KERN_ERR "failed to calculate hmac for jwt");
+
+        return -1;
+    }
+
+    char hash_base64[256];
+
+    int bytes = base64_encode(hash_base64, 256, hash, 32);
+    if (bytes < 0)
+    {
+        printk(KERN_ERR "failed to base64 encode signature");
+
+        kfree(hash);
+        return -1;
+    }
+
+    kfree(hash);
+
+    printk("signature   [%d bytes]: %s", jwt->signature_len, jwt->signature);
+    printk("hash_base64 [%d bytes]: %s", bytes, hash_base64);
+
+    return strncmp(jwt->signature, hash_base64, bytes);
 }

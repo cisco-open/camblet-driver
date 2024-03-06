@@ -5,6 +5,7 @@ ccflags-y += -foptimize-sibling-calls \
 			 -DDEBUG=1 \
 			 -Dd_m3HasFloat=$(EMULATE_FLOATS) \
 			 -I$(PWD) \
+			 -I$(PWD)/third-party/ \
 			 -I$(PWD)/third-party/BearSSL/inc/ \
 			 -I$(PWD)/third-party/wasm3/source/ \
 			 -I$(PWD)/third-party/base64 \
@@ -60,6 +61,7 @@ camblet-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  third-party/wasm3/source/m3_module.o \
 			  third-party/wasm3/source/m3_parse.o \
 			  third-party/base64/base64.o \
+			  third-party/fastjson/json.o \
 			  third-party/parson/json.o \
 			  third-party/picohttpparser/picohttpparser.o \
 			  buffer.o \
