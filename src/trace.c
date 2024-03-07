@@ -14,7 +14,7 @@
 #include <linux/slab.h>
 #include "trace.h"
 #include "task_context.h"
-#include "json.h"
+#include "parson/json.h"
 #include "commands.h"
 #include "socket.h"
 #include "string.h"

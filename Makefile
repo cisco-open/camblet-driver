@@ -8,7 +8,6 @@ ccflags-y += -foptimize-sibling-calls \
 			 -I$(PWD)/third-party/BearSSL/inc/ \
 			 -I$(PWD)/third-party/wasm3/source/ \
 			 -I$(PWD)/third-party/base64 \
-			 -I$(PWD)/third-party/parson \
 			 -I$(PWD)/third-party/picohttpparser \
 			 -Wall -g \
 			 #-Dd_m3LogCompile=1

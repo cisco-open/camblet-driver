@@ -11,7 +11,7 @@
 #define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
 
 #include "opa.h"
-#include "json.h"
+#include "parson/json.h"
 #include "string.h"
 #include "config.h"
 #include "spiffe.h"
