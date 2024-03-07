@@ -34,7 +34,7 @@
 #include "string.h"
 #include "cert_tools.h"
 #include "augmentation.h"
-#include "json.h"
+#include "parson/json.h"
 #include "sd.h"
 #include "camblet.h"
 #include "trace.h"
@@ -1384,7 +1384,7 @@ static tcp_connection_context *tcp_connection_context_init(direction direction, 
 	return ctx;
 }
 
-void add_sd_entry_labels_to_json(service_discovery_entry *sd_entry, JSON_Value *json)
+static void add_sd_entry_labels_to_json(service_discovery_entry *sd_entry, JSON_Value *json)
 {
 	if (!json)
 	{
@@ -1414,7 +1414,7 @@ void add_sd_entry_labels_to_json(service_discovery_entry *sd_entry, JSON_Value *
 	json_object_set_value(root, "remote", remote_value);
 }
 
-void add_net_conn_info_to_json(const tcp_connection_context *conn_ctx, JSON_Object *json_object)
+static void add_net_conn_info_to_json(const tcp_connection_context *conn_ctx, JSON_Object *json_object)
 {
 	if (!json_object)
 	{
