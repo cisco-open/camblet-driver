@@ -129,7 +129,6 @@ struct camblet_socket
 
 	camblet_sendmsg_t *br_low_sendmsg;
 	camblet_recvmsg_t *br_low_recvmsg;
-
 };
 
 static int get_read_buffer_capacity(camblet_socket *s);
@@ -531,10 +530,10 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 			br_ssl_client_reset(s->cc, s->hostname, false);
 		}
 
-		// Initialize the low_read and low_write functions 
-	 	// with tcp_sendmsg and recvmsg. These will be used 
+		// Initialize the low_read and low_write functions
+		// with tcp_sendmsg and recvmsg. These will be used
 		// by BearSSL to read and write data to socket.
-		s->br_low_recvmsg = plain_recvmsg; 
+		s->br_low_recvmsg = plain_recvmsg;
 		s->br_low_sendmsg = plain_sendmsg;
 
 		ret = br_sslio_flush(&s->ioc);
@@ -986,8 +985,8 @@ static int configure_ktls_sock(camblet_socket *s)
 		br_ssl_engine_context *ec = get_ssl_engine_context(s);
 		ec->out.vtable = &br_sslrec_out_clear_vtable;
 		ec->incrypt = 0;
-		s->br_low_recvmsg=ktls_recvmsg;
-		s->br_low_sendmsg=ktls_sendmsg;
+		s->br_low_recvmsg = ktls_recvmsg;
+		s->br_low_sendmsg = ktls_sendmsg;
 	}
 
 	s->sendmsg = bearssl_sendmsg;
@@ -1074,6 +1073,7 @@ int camblet_getsockopt(struct sock *sk, int level,
 	switch (optname)
 	{
 	case CAMBLET_TLS_INFO:
+	{
 		camblet_socket *s = sk->sk_user_data;
 		if (s)
 		{
@@ -1107,6 +1107,7 @@ int camblet_getsockopt(struct sock *sk, int level,
 				return -EFAULT;
 		}
 		return 0;
+	}
 	}
 
 out:
