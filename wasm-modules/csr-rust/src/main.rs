@@ -25,7 +25,6 @@ use x509_cert::der::EncodePem;
 use x509_cert::der::asn1::Ia5String;
 use x509_cert::ext::pkix::SubjectAltName;
 use x509_cert::ext::pkix::name::GeneralName;
-use x509_cert::ext::pkix::name::GeneralName::{DnsName, UniformResourceIdentifier, Rfc822Name};
 use x509_cert::name::Name;
 use rsa::pkcs1v15::SigningKey;
 use rsa::pkcs8::{DecodePrivateKey, LineEnding};
