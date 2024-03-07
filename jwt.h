@@ -16,12 +16,14 @@
 typedef struct jwt
 {
     char *alg;
-    char *typ;
 
     char *iss;
     char *sub;
     char *aud;
+
     u64 exp;
+    u64 nbf;
+    u64 iat;
 
     // data is the base64url encoded JSON header.payload part of the JWT
     const char *data;
