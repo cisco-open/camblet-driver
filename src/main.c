@@ -163,7 +163,7 @@ static int __init camblet_init(void)
     jwt_t *jwt = jwt_parse(token, strlen(token));
     if (jwt)
     {
-        pr_info("jwt: alg=%s, typ=%s, iss=%s, sub=%s, aud=%s, exp=%llu", jwt->alg, jwt->typ, jwt->iss, jwt->sub, jwt->aud, jwt->exp);
+        pr_info("jwt: alg=%s, iss=%s, sub=%s, aud=%s, iat=%llu, exp=%llu", jwt->alg, jwt->iss, jwt->sub, jwt->aud, jwt->iat, jwt->exp);
 
         const char *secret = "no";
         int ret = jwt_verify(jwt, secret, strlen(secret));
