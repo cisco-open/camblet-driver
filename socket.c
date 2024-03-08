@@ -1046,6 +1046,7 @@ int camblet_getsockopt(struct sock *sk, int level,
 	switch (optname)
 	{
 	case CAMBLET_TLS_INFO:
+	{
 		camblet_socket *s = sk->sk_user_data;
 		if (s)
 		{
@@ -1079,6 +1080,7 @@ int camblet_getsockopt(struct sock *sk, int level,
 				return -EFAULT;
 		}
 		return 0;
+	}
 	}
 
 out:
