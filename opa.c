@@ -285,7 +285,7 @@ void opa_socket_context_free(opa_socket_context ctx)
 opa_socket_context parse_opa_socket_eval_result(char *json)
 {
     JSON_Value *root_value = json_parse_string(json);
-    opa_socket_context ret = {};
+    opa_socket_context ret = {0};
 
     if (root_value)
     {
