@@ -178,7 +178,7 @@ char *compose_log_message(const char *message, int n, va_list args)
 {
     int i;
     va_list args_copy;
-    char *retval;
+    char *retval = NULL;
 
     va_copy(args_copy, args);
 
@@ -189,20 +189,27 @@ char *compose_log_message(const char *message, int n, va_list args)
         goto out;
     }
 
-    int size = strlen(message) + 3;
-    for (i = 0; i < n; i++)
+    int size = strlen(message);
+    if (n > 0)
+        size += 3; // for the separator
+
+    for (i = 0; i < n; i += 2)
     {
-        const char *arg = va_arg(args, const char *);
-        if (arg == NULL)
+        const char *var = va_arg(args, const char *);
+        const char *value = va_arg(args, const char *);
+
+        if (!var)
         {
-            if (i % 2 == 0)
-            {
-                retval = ERR_PTR(-EINVAL);
-                goto out;
-            }
-            continue;
+            retval = ERR_PTR(-EINVAL);
+            goto out;
         }
-        size += strlen(arg) + 1;
+
+        if (var && value)
+        {
+            size += strlen(var) + strlen(value) + 2; // +2 for []
+            if (i < n - 2)
+                size += 1; // +1 for a space
+        }
     }
 
     char *log_message = kzalloc(size + 1, GFP_KERNEL);
