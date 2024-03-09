@@ -1,0 +1,55 @@
+#!/bin/bash
+
+set -euo pipefail
+
+echo "Building file server"
+go build test/file-server.go
+
+echo "Starting file server"
+./file-server >/tmp/file-server.log 2>&1 &
+
+echo "Starting NGiNX in docker"
+sudo docker run -d --rm -p 8080:80 nginx
+
+sleep 2
+
+echo "Test downloading a bigger file"
+head -c 2M </dev/urandom > bigfile.o
+curl -v -o /tmp/bigfile_downloaded.o http://localhost:8000/bigfile.o
+
+echo "Test uploading this file"
+curl -v -F "bigfile_downloaded.o=@/tmp/bigfile_downloaded.o" http://localhost:8000/upload
+diff bigfile.o bigfile_downloaded.o
+
+echo "Test bearssl with non-bearssl compatibility"
+python3 -m http.server 7000 >/tmp/python.log &
+sleep 1
+echo "testing with curl..."
+curl -k -v https://localhost:7000/
+echo "testing with wget..."
+wget --no-check-certificate https://localhost:7000/
+
+echo "Test openssl client connect to python with default cipher"
+echo -e "GET / HTTP/1.1\r\n\r\n" | openssl s_client -connect 127.0.0.1:7000
+echo "Test openssl client connect to python with ECDHE-RSA-CHACHA20-POLY1305 cipher"
+echo -e "GET / HTTP/1.1\r\n\r\n" | openssl s_client -cipher ECDHE-RSA-CHACHA20-POLY1305 -connect 127.0.0.1:7000
+
+# turn off because of know issue
+# echo "Test file-server using curl"
+# rm -f testfile test.output
+# echo "response" > testfile
+# echo -e "    100 0\n    100 response" > test.output
+# for i in `seq 1 100`; do curl -s localhost:8000/testfile; echo $?; done |sort|uniq -c|diff - test.output
+
+echo "Test sendfile with NGiNX using curl"
+echo -e "    100 0" > test.output
+for i in `seq 1 100`; do curl -s -o/dev/null localhost:8080; echo $?; done |sort|uniq -c|diff - test.output
+
+echo "Test sendfile with NGiNX using wget"
+echo -e "    100 0" > test.output
+for i in `seq 1 100`; do wget -q -O/dev/null localhost:8080; echo $?; done |sort|uniq -c|diff - test.output
+
+echo "Stop processes"
+sudo pkill python3
+sudo pkill file-server
+sudo docker kill $(sudo docker ps -q)
