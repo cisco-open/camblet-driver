@@ -512,6 +512,8 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 		return ret;
 	}
 
+	pr_debug("TLS handshake # command[%s] sock[%p]", current->comm, s->sock);
+
 	mutex_lock(&s->lock);
 
 	alpn = READ_ONCE(s->alpn);
@@ -533,11 +535,25 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 			pr_debug("TLS handshake done # command[%s] sk[%p]", current->comm, s->sock);
 			trace_msg(conn_ctx, "TLS handshake done", 0);
 		}
+		else if (ret == -ERESTARTSYS)
+		{
+			pr_debug("TLS handshake got interrupted by signal # command[%s] sk[%p]", current->comm, s->sock);
+			ret = -EINTR;
+			goto bail;
+		}
+		else if (s->sock->sk_err || s->sock->sk_state == TCP_CLOSE ||
+				 (s->sock->sk_shutdown & RCV_SHUTDOWN))
+		{
+			pr_debug("TLS handshake got interrupted by connection close # command[%s] sk[%p]", current->comm, s->sock);
+			trace_msg(conn_ctx, "TLS handshake got interrupted by connection close", 0);
+			ret = -ECONNRESET;
+			goto bail;
+		}
 		else
 		{
 			const br_ssl_engine_context *ec = get_ssl_engine_context(s);
 			int last_err = br_ssl_engine_last_error(ec);
-			pr_err("TLS handshake error # command[%s] err[%d]", current->comm, last_err);
+			pr_err("TLS handshake error # command[%s] ret[%d] err[%d]", current->comm, ret, last_err);
 			char last_err_str[8];
 			snprintf(last_err_str, 8, "%d", last_err);
 			trace_err(conn_ctx, "TLS handshake error", 2, "error_code", last_err_str);
