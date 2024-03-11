@@ -50,13 +50,14 @@ replace_selectors(p, r) := policy if {
 
 	wid := strings.replace_n(r, p.certificate.workloadID)
 
-	spiffe_id_path_regex := `^(?:\/?(?:(?:[a-zA-Z0-9][a-zA-Z0-9-_]*[a-zA-Z0-9]|[a-zA-Z0-9]*)\.)*(?:[a-zA-Z0-9][a-zA-Z0-9-_]*[a-zA-Z0-9]|[a-zA-Z0-9]))*$`
+	# TODO this regex stuff doesn't work on ARM on older, like 5.15 kernels
+	# spiffe_id_path_regex := `^(?:\/?(?:(?:[a-zA-Z0-9][a-zA-Z0-9-_]*[a-zA-Z0-9]|[a-zA-Z0-9]*)\.)*(?:[a-zA-Z0-9][a-zA-Z0-9-_]*[a-zA-Z0-9]|[a-zA-Z0-9]))*$`
+	# workloadIDIsValid := regex.match(wid, spiffe_id_path_regex)
 
 	policy := object.union(
 		p,
 		{"certificate": {
 			"workloadID": wid,
-			"workloadIDIsValid": regex.match(spiffe_id_path_regex, wid),
 		}},
 	)
 }
