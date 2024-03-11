@@ -73,11 +73,11 @@ jobs:
         sudo modprobe camblet dyndbg==_ ktls_available=1
         sudo dmesg -T
 
-    # - name: Setup upterm session
-    #   uses: lhotari/action-upterm@v1
-    #   with:
-    #     ## limits ssh access and adds the ssh public key for the user which triggered the workflow
-    #     limit-access-to-actor: true
+    - name: Setup upterm session
+      uses: lhotari/action-upterm@v1
+      with:
+        ## limits ssh access and adds the ssh public key for the user which triggered the workflow
+        limit-access-to-actor: true
 
     - name: Run proxy-wasm smoke test with kTLS
       uses: ./camblet-driver/.github/actions/smoketest
