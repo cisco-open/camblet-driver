@@ -99,6 +99,11 @@ trace_request *get_trace_request_by_partial_match(int pid, int uid, const char *
 {
     trace_request *tr;
 
+    if (list_empty(&trace_requests))
+    {
+        return NULL;
+    }
+
     lock_trace_requests();
 
     pr_debug("look for trace request # pid[%d] uid[%d] command_name[%s]", pid, uid, command_name);
@@ -133,7 +138,7 @@ trace_request *get_trace_request_by_partial_match(int pid, int uid, const char *
 
     pr_debug("check trace request match not found # pid[%d] uid[%d] command_name[%s]", tr->pid, tr->uid, tr->command_name);
 
-    return 0;
+    return NULL;
 }
 
 static void free_trace_request(trace_request *tr)
@@ -173,7 +178,7 @@ char *compose_log_message(const char *message, int n, va_list args)
 {
     int i;
     va_list args_copy;
-    char *retval;
+    char *retval = NULL;
 
     va_copy(args_copy, args);
 
@@ -184,20 +189,27 @@ char *compose_log_message(const char *message, int n, va_list args)
         goto out;
     }
 
-    int size = strlen(message) + 3;
-    for (i = 0; i < n; i++)
+    int size = strlen(message);
+    if (n > 0)
+        size += 3; // for the separator
+
+    for (i = 0; i < n; i += 2)
     {
-        const char *arg = va_arg(args, const char *);
-        if (arg == NULL)
+        const char *var = va_arg(args, const char *);
+        const char *value = va_arg(args, const char *);
+
+        if (!var)
         {
-            if (i % 2 == 0)
-            {
-                retval = ERR_PTR(-EINVAL);
-                goto out;
-            }
-            continue;
+            retval = ERR_PTR(-EINVAL);
+            goto out;
         }
-        size += strlen(arg) + 1;
+
+        if (var && value)
+        {
+            size += strlen(var) + strlen(value) + 2; // +2 for []
+            if (i < n - 2)
+                size += 1; // +1 for a space
+        }
     }
 
     char *log_message = kzalloc(size + 1, GFP_KERNEL);
@@ -243,7 +255,7 @@ int trace_log(const tcp_connection_context *conn_ctx, const char *message, int l
 {
     unsigned int i;
     va_list args, args_copy;
-    char level[8];
+    char *level = NULL;
 
     if (n < 0 || (n > 0 && n % 2 != 0))
     {
@@ -262,19 +274,19 @@ int trace_log(const tcp_connection_context *conn_ctx, const char *message, int l
         {
         case LOGLEVEL_ERR:
             pr_err("%s", log_message);
-            strcpy(level, "error");
+            level = "error";
             break;
         case LOGLEVEL_WARNING:
             pr_warn("%s", log_message);
-            strcpy(level, "warning");
+            level = "warning";
             break;
         case LOGLEVEL_INFO:
             pr_info("%s", log_message);
-            strcpy(level, "info");
+            level = "info";
             break;
         case LOGLEVEL_DEBUG:
             pr_debug("%s", log_message);
-            strcpy(level, "debug");
+            level = "debug";
             break;
         default:
             printk("%s", log_message);
@@ -318,7 +330,7 @@ int trace_log(const tcp_connection_context *conn_ctx, const char *message, int l
 
     if (conn_ctx)
     {
-        const char *id_str = strnprintf("%llu", conn_ctx->id);
+        const char *id_str = strprintf("%llu", conn_ctx->id);
         int retval = json_object_set_string(root_object, "correlation_id", id_str);
         kfree(id_str);
         if (retval < 0)

@@ -11,7 +11,6 @@
 #define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
 
 #include <linux/slab.h>
-#include <linux/uuid.h>
 #include <linux/inet.h>
 #include <linux/ipv6.h>
 

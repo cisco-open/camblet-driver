@@ -20,6 +20,7 @@
 #include <net/sock.h>
 #include <net/ip.h>
 #include <linux/inet.h>
+#include <linux/sockptr.h>
 
 #include "bearssl.h"
 #include "commands.h"
@@ -37,13 +38,22 @@
 #include "sd.h"
 #include "camblet.h"
 #include "trace.h"
+#include "http.h"
+
+#define CAMBLET_PROTOCOL "camblet"
+#define CAMBLET_PASSTHROUGH_PROTOCOL CAMBLET_PROTOCOL "/passthrough"
 
 const char *ALPNs[] = {
-	"http/1.1",
-	"camblet",
+	CAMBLET_PROTOCOL,
+};
+
+const char *ALPNs_passthrough[] = {
+	CAMBLET_PASSTHROUGH_PROTOCOL,
+	CAMBLET_PROTOCOL,
 };
 
 const size_t ALPNs_NUM = sizeof(ALPNs) / sizeof(ALPNs[0]);
+const size_t ALPNs_passthrough_NUM = sizeof(ALPNs_passthrough) / sizeof(ALPNs_passthrough[0]);
 
 extern bool ktls_available;
 
@@ -58,8 +68,8 @@ static br_rsa_public_key *rsa_pub;
 struct camblet_socket;
 typedef struct camblet_socket camblet_socket;
 
-typedef int(camblet_send_msg)(camblet_socket *s, void *msg, size_t len);
-typedef int(camblet_recv_msg)(camblet_socket *s, void *buf, size_t len, int flags);
+typedef int(camblet_sendmsg_t)(camblet_socket *s, void *msg, size_t len);
+typedef int(camblet_recvmsg_t)(camblet_socket *s, void *buf, size_t len, int flags);
 
 struct camblet_socket
 {
@@ -85,7 +95,8 @@ struct camblet_socket
 	proxywasm *p;
 	proxywasm_context *pc;
 	i64 direction;
-	char *protocol;
+	char *alpn;
+
 	struct mutex lock;
 
 	buffer_t *read_buffer;
@@ -111,10 +122,10 @@ struct camblet_socket
 
 	void (*ktls_close)(struct sock *sk, long timeout);
 
-	camblet_send_msg *send_msg;
-	camblet_recv_msg *recv_msg;
+	camblet_sendmsg_t *sendmsg;
+	camblet_recvmsg_t *recvmsg;
 
-	const tcp_connection_context *conn_ctx;
+	tcp_connection_context *conn_ctx;
 };
 
 static int get_read_buffer_capacity(camblet_socket *s);
@@ -124,17 +135,17 @@ static br_ssl_engine_context *get_ssl_engine_context(camblet_socket *s)
 	return s->direction == ListenerDirectionInbound ? &s->sc->eng : &s->cc->eng;
 }
 
-static int ktls_send_msg(camblet_socket *s, void *msg, size_t len)
+static int ktls_sendmsg(camblet_socket *s, void *buf, size_t len)
 {
 	struct msghdr hdr = {0};
-	struct kvec iov = {.iov_base = msg, .iov_len = len};
+	struct kvec iov = {.iov_base = buf, .iov_len = len};
 
 	iov_iter_kvec(&hdr.msg_iter, WRITE, &iov, 1, len);
 
 	return s->ktls_sendmsg(s->sock, &hdr, len);
 }
 
-static int ktls_recv_msg(camblet_socket *s, void *buf, size_t size, int flags)
+static int ktls_recvmsg(camblet_socket *s, void *buf, size_t size, int flags)
 {
 	int buf_len = get_read_buffer_capacity(s);
 	struct msghdr hdr = {0};
@@ -150,7 +161,7 @@ static int ktls_recv_msg(camblet_socket *s, void *buf, size_t size, int flags)
 						   flags, &addr_len);
 }
 
-static int bearssl_send_msg(camblet_socket *s, void *src, size_t len)
+static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 {
 	int err = br_sslio_write_all(&s->ioc, src, len);
 	if (err < 0)
@@ -196,7 +207,7 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 	return (int)alen;
 }
 
-static int bearssl_recv_msg(camblet_socket *s, void *dst, size_t len, int flags)
+static int bearssl_recvmsg(camblet_socket *s, void *dst, size_t len, int flags)
 {
 	int ret = br_sslio_read_with_flags(&s->ioc, dst, len, flags);
 	if (ret < 0)
@@ -214,7 +225,7 @@ static int bearssl_recv_msg(camblet_socket *s, void *dst, size_t len, int flags)
 	return ret;
 }
 
-static int plain_send_msg(camblet_socket *s, void *msg, size_t len)
+static int plain_sendmsg(camblet_socket *s, void *msg, size_t len)
 {
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = msg, .iov_len = len};
@@ -224,7 +235,7 @@ static int plain_send_msg(camblet_socket *s, void *msg, size_t len)
 	return tcp_sendmsg(s->sock, &hdr, len);
 }
 
-static int plain_recv_msg(camblet_socket *s, void *buf, size_t size, int flags)
+static int plain_recvmsg(camblet_socket *s, void *buf, size_t size, int flags)
 {
 	struct msghdr hdr = {0};
 	struct kvec iov = {.iov_base = buf, .iov_len = size};
@@ -241,11 +252,12 @@ static int plain_recv_msg(camblet_socket *s, void *buf, size_t size, int flags)
 
 static int camblet_socket_read(camblet_socket *s, void *dst, size_t len, int flags)
 {
-	return s->recv_msg(s, dst, len, flags);
+	return s->recvmsg(s, dst, len, flags);
 }
+
 static int camblet_socket_write(camblet_socket *s, void *src, size_t len)
 {
-	return s->send_msg(s, src, len);
+	return s->sendmsg(s, src, len);
 }
 
 static char *get_read_buffer(camblet_socket *s)
@@ -255,7 +267,7 @@ static char *get_read_buffer(camblet_socket *s)
 
 static char *get_read_buffer_for_read(camblet_socket *s, int len)
 {
-	return buffer_access(s->read_buffer, len);
+	return buffer_grow(s->read_buffer, len);
 }
 
 static int get_read_buffer_capacity(camblet_socket *s)
@@ -280,7 +292,7 @@ static char *get_write_buffer(camblet_socket *s)
 
 static char *get_write_buffer_for_write(camblet_socket *s, int len)
 {
-	return buffer_access(s->write_buffer, len);
+	return buffer_grow(s->write_buffer, len);
 }
 
 static int get_write_buffer_size(camblet_socket *s)
@@ -306,7 +318,7 @@ static void camblet_socket_free(camblet_socket *s)
 			proxywasm_unlock(s->p);
 		}
 
-		if (s->protocol && !s->ktls_sendmsg && !s->opa_socket_ctx.passthrough)
+		if (s->alpn && !s->ktls_sendmsg && !s->opa_socket_ctx.passthrough)
 		{
 			// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
 			if (br_sslio_close(&s->ioc) != BR_ERR_OK)
@@ -347,6 +359,7 @@ static void camblet_socket_free(camblet_socket *s)
 		x509_certificate_put(s->cert);
 
 		kfree(s->parameters);
+		kfree(s->conn_ctx->peer_spiffe_id);
 		kfree(s->conn_ctx);
 		kfree(s);
 	}
@@ -378,7 +391,7 @@ int proxywasm_attach(proxywasm *p, camblet_socket *s, ListenerDirection directio
 	return 0;
 }
 
-static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_context opa_socket_ctx, const tcp_connection_context *conn_ctx)
+static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_context opa_socket_ctx, tcp_connection_context *conn_ctx)
 {
 	camblet_socket *s = kzalloc(sizeof(camblet_socket), GFP_KERNEL);
 	s->sc = kzalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
@@ -392,6 +405,8 @@ static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_c
 	s->opa_socket_ctx = opa_socket_ctx;
 
 	s->conn_ctx = conn_ctx;
+
+	s->direction = INPUT;
 
 	mutex_init(&s->lock);
 
@@ -413,7 +428,7 @@ static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_c
 	return s;
 }
 
-static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_context opa_socket_ctx, const tcp_connection_context *conn_ctx)
+static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_context opa_socket_ctx, tcp_connection_context *conn_ctx)
 {
 	camblet_socket *s = kzalloc(sizeof(camblet_socket), GFP_KERNEL);
 	s->cc = kzalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
@@ -427,6 +442,8 @@ static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_c
 	s->opa_socket_ctx = opa_socket_ctx;
 
 	s->conn_ctx = conn_ctx;
+
+	s->direction = OUTPUT;
 
 	mutex_init(&s->lock);
 
@@ -464,23 +481,52 @@ static bool camblet_socket_proxywasm_enabled(camblet_socket *s)
 	return s->pc != NULL;
 }
 
-static int ensure_tls_handshake(camblet_socket *s)
+static bool msghdr_contains_tls_handshake(struct msghdr *msg)
+{
+	if (msg == NULL)
+	{
+		return false;
+	}
+
+	struct iov_iter *iter = &msg->msg_iter;
+	char first_3_bytes[3];
+	int ret = copy_from_iter(first_3_bytes, 3, iter);
+	if (ret < 3)
+	{
+		return false;
+	}
+
+	iov_iter_revert(iter, 3);
+
+	return is_tls_handshake(first_3_bytes);
+}
+
+static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 {
 	int ret = 0;
-	char *protocol = READ_ONCE(s->protocol);
+	char *alpn = READ_ONCE(s->alpn);
 	const tcp_connection_context *conn_ctx = s->conn_ctx;
 
-	if (protocol != NULL)
+	if (alpn != NULL)
 	{
 		return ret;
 	}
 
 	mutex_lock(&s->lock);
 
-	protocol = READ_ONCE(s->protocol);
+	alpn = READ_ONCE(s->alpn);
 
-	if (protocol == NULL)
+	if (alpn == NULL)
 	{
+		// if we are the client, we should check if the transport is already encrypted
+		if (s->direction == OUTPUT && (s->opa_socket_ctx.passthrough || msghdr_contains_tls_handshake(msg)))
+		{
+			trace_info(conn_ctx, "setting passthrough ALPN", 0);
+
+			br_ssl_engine_set_protocol_names(&s->sc->eng, ALPNs_passthrough, ALPNs_passthrough_NUM);
+			br_ssl_client_reset(s->cc, s->hostname, false);
+		}
+
 		ret = br_sslio_flush(&s->ioc);
 		if (ret == 0)
 		{
@@ -498,22 +544,26 @@ static int ensure_tls_handshake(camblet_socket *s)
 			goto bail;
 		}
 
-		protocol = br_ssl_engine_get_selected_protocol(&s->sc->eng);
+		alpn = br_ssl_engine_get_selected_protocol(&s->sc->eng);
 
-		if (protocol)
+		if (alpn)
 		{
-			trace_debug(conn_ctx, "ALPN selected", 2, "alpn", protocol);
+			trace_debug(conn_ctx, "ALPN selected", 2, "alpn", alpn);
+
 			if (camblet_socket_proxywasm_enabled(s))
-				set_property_v(s->pc, "upstream.negotiated_protocol", protocol, strlen(protocol));
+				set_property_v(s->pc, "upstream.negotiated_protocol", alpn, strlen(alpn));
 		}
 		else
-			protocol = "no-mtls";
+		{
+			trace_debug(conn_ctx, "ALPN not selected", 0);
+			alpn = "no-camblet";
+		}
 
-		if (s->opa_socket_ctx.passthrough)
+		if (strcmp(alpn, CAMBLET_PASSTHROUGH_PROTOCOL) == 0)
 		{
 			trace_debug(conn_ctx, "passthrough enabled", 0);
-			s->send_msg = plain_send_msg;
-			s->recv_msg = plain_recv_msg;
+			s->sendmsg = plain_sendmsg;
+			s->recvmsg = plain_recvmsg;
 		}
 		else
 		{
@@ -526,7 +576,7 @@ static int ensure_tls_handshake(camblet_socket *s)
 			}
 		}
 
-		WRITE_ONCE(s->protocol, protocol);
+		WRITE_ONCE(s->alpn, alpn);
 	}
 
 bail:
@@ -574,7 +624,7 @@ int camblet_recvmsg(struct sock *sock,
 
 	camblet_socket *s = sock->sk_user_data;
 
-	ret = ensure_tls_handshake(s);
+	ret = ensure_tls_handshake(s, msg);
 	if (ret != 0)
 	{
 		goto bail;
@@ -589,6 +639,8 @@ int camblet_recvmsg(struct sock *sock,
 
 	bool end_of_stream = false;
 	int action = Pause;
+
+	int prevbuflen = get_read_buffer_size(s);
 
 	while (action != Continue)
 	{
@@ -606,6 +658,35 @@ int camblet_recvmsg(struct sock *sock,
 		}
 
 		set_read_buffer_size(s, get_read_buffer_size(s) + ret);
+
+		if (s->direction == INPUT && s->opa_socket_ctx.http)
+		{
+			const char *method, *path;
+			int pret, minor_version;
+			struct phr_header headers[16];
+			size_t method_len, path_len, num_headers;
+
+			/* parse the request */
+			num_headers = sizeof(headers) / sizeof(headers[0]);
+			pret = phr_parse_request(get_read_buffer(s), get_read_buffer_size(s), &method, &method_len, &path, &path_len,
+									 &minor_version, headers, &num_headers, prevbuflen);
+
+			if (pret > 0) /* successfully parsed the request */
+			{
+				// currently we only inject the spiffe id of the peer into the request
+				if (s->conn_ctx->peer_spiffe_id)
+					inject_header(s->read_buffer, headers, num_headers, "X-Camblet-Spiffe-ID", s->conn_ctx->peer_spiffe_id);
+			}
+			else if (pret == -2) /* request is incomplete, wait for more data */
+			{
+				ret = -EAGAIN; // TODO
+				goto bail;
+			}
+			else
+			{
+				trace_debug(s->conn_ctx, "phr_parse_request: parse error %d\n", 1, pret);
+			}
+		}
 
 		if (camblet_socket_proxywasm_enabled(s))
 		{
@@ -644,15 +725,44 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	camblet_socket *s = sock->sk_user_data;
 
-	ret = ensure_tls_handshake(s);
+	ret = ensure_tls_handshake(s, msg);
 	if (ret != 0)
 	{
 		goto bail;
 	}
 
+	size_t prevbuflen = get_write_buffer_size(s);
+
 	len = copy_from_iter(get_write_buffer_for_write(s, size), size, &msg->msg_iter);
 
 	set_write_buffer_size(s, get_write_buffer_size(s) + len);
+
+	if (s->direction == OUTPUT && s->opa_socket_ctx.http)
+	{
+		const char *method, *path;
+		int pret, minor_version;
+		struct phr_header headers[16];
+		size_t method_len, path_len, num_headers;
+
+		/* parse the request */
+		num_headers = sizeof(headers) / sizeof(headers[0]);
+		pret = phr_parse_request(get_write_buffer(s), get_write_buffer_size(s), &method, &method_len, &path, &path_len,
+								 &minor_version, headers, &num_headers, prevbuflen);
+
+		if (pret > 0) /* successfully parsed the request */
+		{
+			trace_debug(s->conn_ctx, "request is %d bytes long currently, not handling it\n", 1, pret);
+		}
+		else if (pret == -2) /* request is incomplete, wait for more data */
+		{
+			ret = len;
+			goto bail;
+		}
+		else
+		{
+			trace_debug(s->conn_ctx, "phr_parse_request: parse error %d\n", 1, pret);
+		}
+	}
 
 	if (camblet_socket_proxywasm_enabled(s))
 	{
@@ -682,6 +792,22 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 bail:
 	return ret;
 }
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 5, 0)
+int camblet_sendpage(struct sock *sock, struct page *page, int offset, size_t size, int flags)
+{
+	ssize_t res;
+	struct msghdr msg = {.msg_flags = flags};
+	struct kvec iov;
+	char *kaddr = kmap(page);
+	iov.iov_base = kaddr + offset;
+	iov.iov_len = size;
+	iov_iter_kvec(&msg.msg_iter, WRITE, &iov, 1, size);
+	res = camblet_sendmsg(sock, &msg, size);
+	kunmap(page);
+	return res;
+}
+#endif
 
 void camblet_close(struct sock *sk, long timeout)
 {
@@ -757,8 +883,8 @@ static int configure_ktls_sock(camblet_socket *s)
 		else
 			pr_warn("configure kTLS error: only ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 cipher suite is supported # requested_suite[%x]", params->cipher_suite);
 
-		s->send_msg = bearssl_send_msg;
-		s->recv_msg = bearssl_recv_msg;
+		s->sendmsg = bearssl_sendmsg;
+		s->recvmsg = bearssl_recvmsg;
 
 		return 0;
 	}
@@ -836,8 +962,8 @@ static int configure_ktls_sock(camblet_socket *s)
 
 	WRITE_ONCE(s->sock->sk_prot, ktls_prot);
 
-	s->send_msg = ktls_send_msg;
-	s->recv_msg = ktls_recv_msg;
+	s->sendmsg = ktls_sendmsg;
+	s->recvmsg = ktls_recvmsg;
 
 	trace_debug(s->conn_ctx, "kTLS configured", 0);
 
@@ -893,6 +1019,74 @@ int camblet_setsockopt(struct sock *sk, int level,
 	return tcp_setsockopt(sk, level, optname, optval, optlen);
 }
 
+int camblet_getsockopt(struct sock *sk, int level,
+					   int optname, char __user *uoptval,
+					   int __user *uoptlen)
+{
+	if (level != SOL_CAMBLET)
+	{
+		goto out;
+	}
+
+	pr_debug("getsockopt # level[%d] optname[%d]", level, optname);
+
+	int len;
+
+	sockptr_t optlen = USER_SOCKPTR(uoptlen);
+	sockptr_t optval = USER_SOCKPTR(uoptval);
+
+	if (copy_from_sockptr(&len, optlen, sizeof(int)))
+		return -EFAULT;
+
+	len = min_t(unsigned int, len, sizeof(int));
+
+	if (len < 0)
+		return -EINVAL;
+
+	switch (optname)
+	{
+	case CAMBLET_TLS_INFO:
+	{
+		camblet_socket *s = sk->sk_user_data;
+		if (s)
+		{
+			// trigger tls handshake here to avoid timing issues
+			// caused by calling getsockopt before sending anything
+			// through the socket from the client side
+			// there return value here is not important as it will be handled
+			// at the send/recvmsg calls
+			ensure_tls_handshake(s, NULL);
+
+			tls_info info = {};
+
+			info.camblet_enabled = s->opa_socket_ctx.allowed;
+			info.mtls_enabled = s->opa_socket_ctx.mtls;
+
+			if (s->opa_socket_ctx.uri)
+			{
+				strncpy(info.spiffe_id, s->opa_socket_ctx.uri, 256);
+			}
+
+			if (s->conn_ctx->peer_spiffe_id)
+			{
+				strncpy(info.peer_spiffe_id, s->conn_ctx->peer_spiffe_id, 256);
+			}
+
+			len = sizeof(info);
+
+			if (copy_to_sockptr_offset(optlen, 0, &len, sizeof(int)))
+				return -EFAULT;
+			if (copy_to_sockptr_offset(optval, 0, &info, len))
+				return -EFAULT;
+		}
+		return 0;
+	}
+	}
+
+out:
+	return tcp_getsockopt(sk, level, optname, uoptval, uoptlen);
+}
+
 // a function to evaluate the connection if it should be intercepted, now with opa
 static opa_socket_context socket_eval(const tcp_connection_context *conn_ctx, const char *input)
 {
@@ -907,13 +1101,13 @@ static opa_socket_context socket_eval(const tcp_connection_context *conn_ctx, co
 		trace_msg(conn_ctx, "policy match not found", 0);
 	}
 
-	char is_mtls_enabled[] = "false";
+	char *is_mtls_enabled = "false";
 	if (ctx.mtls)
-		strcpy(is_mtls_enabled, "true");
+		is_mtls_enabled = "true";
 
-	char is_camblet_enabled[] = "false";
+	char *is_camblet_enabled = "false";
 	if (ctx.allowed)
-		strcpy(is_camblet_enabled, "true");
+		is_camblet_enabled = "true";
 
 	trace_debug(conn_ctx, "policy evaluation result", 10, "id", ctx.id, "uri", ctx.uri, "ttl", ctx.ttl, "mtls", is_mtls_enabled, "camblet_enabled", is_camblet_enabled);
 
@@ -925,12 +1119,16 @@ int (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 int (*setsockopt)(struct sock *sk, int level,
 				  int optname, sockptr_t optval,
 				  unsigned int optlen);
+int (*sendpage)(struct sock *sk, struct page *page,
+				int offset, size_t size, int flags);
 
 struct sock *(*accept_v6)(struct sock *sk, int flags, int *err, bool kern);
 int (*connect_v6)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 int (*setsockopt_v6)(struct sock *sk, int level,
 					 int optname, sockptr_t optval,
 					 unsigned int optlen);
+int (*sendpage_v6)(struct sock *sk, struct page *page,
+				   int offset, size_t size, int flags);
 
 // lock cert generation
 static DEFINE_MUTEX(cert_gen_lock);
@@ -1091,7 +1289,7 @@ static tcp_connection_context *tcp_connection_context_init(direction direction, 
 	tcp_connection_context *ctx = kzalloc(sizeof(tcp_connection_context), GFP_KERNEL);
 
 	ctx->direction = direction;
-	ctx->id = s;
+	ctx->id = (u64)s;
 
 	const char *ipformat = "%pI4";
 
@@ -1248,7 +1446,7 @@ cleanup:
 static int br_low_read(void *ctx, unsigned char *buf, size_t len)
 {
 	camblet_socket *s = (camblet_socket *)ctx;
-	int ret = plain_recv_msg(s, buf, len, 0);
+	int ret = plain_recvmsg(s, buf, len, 0);
 	// BearSSL doesn't like 0 return value, but it's not an error
 	// so we return -1 instead and set sock_closed to true to
 	// indicate that the socket is closed without errors.
@@ -1265,7 +1463,7 @@ static int br_low_read(void *ctx, unsigned char *buf, size_t len)
  */
 static int br_low_write(void *ctx, const unsigned char *buf, size_t len)
 {
-	return plain_send_msg((camblet_socket *)ctx, buf, len);
+	return plain_sendmsg((camblet_socket *)ctx, buf, len);
 }
 
 opa_socket_context enriched_socket_eval(const tcp_connection_context *conn_ctx, direction direction, struct sock *sk, int port)
@@ -1285,10 +1483,10 @@ opa_socket_context enriched_socket_eval(const tcp_connection_context *conn_ctx, 
 		sd_entry = sd_table_entry_get(conn_ctx->destination_ip);
 		if (sd_entry == NULL)
 		{
-			char *address = strnprintf("%s:%d", conn_ctx->destination_ip, conn_ctx->destination_port);
-			pr_debug("look for sd entry # command[%s] address[%s:%d]", current->comm, conn_ctx->destination_ip, conn_ctx->destination_port);
+			char address[INET6_ADDRSTRLEN + 6];
+			sprintf(address, "%s:%d", conn_ctx->destination_ip, conn_ctx->destination_port);
+			pr_debug("look for sd entry # command[%s] address[%s]", current->comm, address);
 			sd_entry = sd_table_entry_get(address);
-			kfree(address);
 		}
 		if (!sd_entry)
 		{
@@ -1368,7 +1566,7 @@ void camblet_configure_server_tls(camblet_socket *sc)
 	 */
 	br_ssl_engine_set_buffer(&sc->sc->eng, &sc->iobuf, BR_SSL_BUFSIZE_BIDI, true);
 
-	br_ssl_engine_set_protocol_names(&sc->sc->eng, ALPNs, ALPNs_NUM);
+	br_ssl_engine_set_protocol_names(&sc->sc->eng, ALPNs_passthrough, ALPNs_passthrough_NUM);
 
 	/*
 	 * Reset the server context, for a new handshake.
@@ -1484,7 +1682,7 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	u16 port = (u16)(sk->sk_portpair >> 16);
 
-	const tcp_connection_context *conn_ctx = tcp_connection_context_init(INPUT, client_sk, port);
+	tcp_connection_context *conn_ctx = tcp_connection_context_init(INPUT, client_sk, port);
 
 	opa_socket_context opa_socket_ctx = enriched_socket_eval(conn_ctx, INPUT, client_sk, port);
 
@@ -1555,7 +1753,7 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		return err;
 	}
 
-	const tcp_connection_context *conn_ctx = tcp_connection_context_init(OUTPUT, sk, port);
+	tcp_connection_context *conn_ctx = tcp_connection_context_init(OUTPUT, sk, port);
 
 	opa_socket_context opa_socket_ctx = enriched_socket_eval(conn_ctx, OUTPUT, sk, port);
 
@@ -1623,14 +1821,21 @@ int socket_init(void)
 	connect_v6 = tcpv6_prot.connect;
 	setsockopt_v6 = tcpv6_prot.setsockopt;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 5, 0)
+	sendpage = tcp_prot.sendpage;
+	sendpage_v6 = tcpv6_prot.sendpage;
+#endif
+
 	// overwrite tcp_prot with our methods
 	tcp_prot.accept = camblet_accept;
 	tcp_prot.connect = camblet_connect;
 	tcp_prot.setsockopt = camblet_setsockopt;
+	tcp_prot.getsockopt = camblet_getsockopt;
 
 	tcpv6_prot.accept = camblet_accept;
 	tcpv6_prot.connect = camblet_connect;
 	tcpv6_prot.setsockopt = camblet_setsockopt;
+	tcpv6_prot.getsockopt = camblet_getsockopt;
 
 	memcpy(&camblet_prot, &tcp_prot, sizeof(camblet_prot));
 	camblet_prot.recvmsg = camblet_recvmsg;
@@ -1644,6 +1849,11 @@ int socket_init(void)
 	camblet_v6_prot.recvmsg = camblet_recvmsg;
 	camblet_v6_prot.sendmsg = camblet_sendmsg;
 	camblet_v6_prot.close = camblet_close;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 5, 0)
+	camblet_prot.sendpage = camblet_sendpage;
+	camblet_v6_prot.sendpage = camblet_sendpage;
+#endif
 
 	memcpy(&camblet_v6_ktls_prot, &camblet_v6_prot, sizeof(camblet_v6_prot));
 	camblet_v6_ktls_prot.close = NULL; // mark it as uninitialized
@@ -1672,6 +1882,11 @@ void socket_exit(void)
 	tcpv6_prot.accept = accept_v6;
 	tcpv6_prot.connect = connect_v6;
 	tcpv6_prot.setsockopt = setsockopt_v6;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 5, 0)
+	tcp_prot.sendpage = sendpage;
+	tcpv6_prot.sendpage = sendpage_v6;
+#endif
 
 	//- free global tls key
 	free_rsa_private_key(rsa_priv);

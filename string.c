@@ -22,7 +22,7 @@ char *strdup(const char *str)
     return strndup(str, len);
 }
 
-char *strnprintf(const char *fmt, ...)
+char *strprintf(const char *fmt, ...)
 {
     va_list args;
 

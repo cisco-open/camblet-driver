@@ -9,6 +9,8 @@ ccflags-y += -foptimize-sibling-calls \
 			 -I$(PWD)/third-party/wasm3/source/ \
 			 -I$(PWD)/third-party/base64 \
 			 -I$(PWD)/third-party/parson \
+			 -I$(PWD)/third-party/picohttpparser \
+			 -Wall -g \
 			 #-Dd_m3LogCompile=1
 
 # Enable floating point arithmetic
@@ -30,11 +32,15 @@ ifeq ($(ARCH), aarch64)
 endif
 
 KBUILD_EXTRA_SYMBOLS = $(PWD)/third-party/BearSSL/Module.symvers
-EXTRA_CFLAGS = -Wall -g
 
 ccflags-remove-y += -Wdeclaration-after-statement
 
-VERBOSE := 1
+VERBOSE ?= 
+DYNDBG ?= dyndbg==_
+
+ifeq ($(VERBOSE), 1)
+	DYNDBG = 
+endif
 
 # obj-m specifies we're a kernel module.
 obj-m += camblet.o
@@ -55,6 +61,7 @@ camblet-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  third-party/wasm3/source/m3_parse.o \
 			  third-party/base64/base64.o \
 			  third-party/parson/json.o \
+			  third-party/picohttpparser/picohttpparser.o \
 			  buffer.o \
 			  device_driver.o \
 			  main.o \
@@ -72,7 +79,8 @@ camblet-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  augmentation.o \
 			  config.o \
 			  sd.o \
-			  trace.o
+			  trace.o \
+			  http.o
 
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
@@ -81,7 +89,7 @@ default: bearssl
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) modules
 
 bearssl:
-	cd third-party/BearSSL && $(MAKE) linux-km
+	cd third-party/BearSSL && $(MAKE) VERBOSE=$(VERBOSE) linux-km
 
 static/socket_wasm.h: socket.rego
 	opa build -t wasm -e "socket/allow" socket.rego -o bundle.tar.gz
@@ -109,13 +117,13 @@ logs:
 
 insmod-tls:
 	@find /lib/modules/$(uname -r) -type f -name '*.ko*' | grep -w tls > /dev/null && sudo modprobe tls || echo "tls module not available"
-	
+
 insmod-bearssl: insmod-tls
 	sudo insmod third-party/BearSSL/bearssl.ko
 
 insmod: insmod-bearssl
 	$(eval ktls_available := $(shell lsmod | grep -w tls > /dev/null && echo 1 || echo 0))
-	sudo insmod camblet.ko dyndbg==_ ktls_available=$(ktls_available)
+	sudo insmod camblet.ko $(DYNDBG) ktls_available=$(ktls_available)
 
 insmod-with-proxywasm: insmod-bearssl
 	sudo insmod camblet.ko proxywasm_modules=1
@@ -184,7 +192,7 @@ rpm:
 
 .PHONY: bump_version
 bump_version:
-	$(eval latest_tag :=0.4.0)
+	$(eval latest_tag :=$(shell git fetch origin; git describe --tags --abbrev=0))
 	$(eval major := $(shell echo $(latest_tag) | cut -d. -f1))
 	$(eval minor := $(shell echo $(latest_tag) | cut -d. -f2))
 	$(eval patch := $(shell echo $(latest_tag) | cut -d. -f3))

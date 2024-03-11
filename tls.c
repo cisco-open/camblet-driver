@@ -12,12 +12,40 @@
 
 #include "tls.h"
 #include "trace.h"
+#include "string.h"
 
 #include <linux/slab.h>
 
 const unsigned char OID_rfc822Name[] = {0, 1};
 const unsigned char OID_dNSName[] = {0, 2};
 const unsigned char OID_uniformResourceIdentifier[] = {0, 6};
+
+#define tlsHandshakeRecord 22
+#define VersionTLS10 0x0301
+#define VersionTLS11 0x0302
+#define VersionTLS12 0x0303
+#define VersionTLS13 0x0304
+
+bool is_tls_handshake(const uint8_t *b)
+{
+    if (b[0] != tlsHandshakeRecord)
+    {
+        return false;
+    }
+
+    uint16_t tlsVersion = (b[1] << 8) | b[2];
+
+    switch (tlsVersion)
+    {
+    case VersionTLS10:
+    case VersionTLS11:
+    case VersionTLS12:
+    case VersionTLS13:
+        return true;
+    default:
+        return false;
+    }
+}
 
 static int compare_spiffe_ids(const char *allowed_id, const char *id)
 {
@@ -116,6 +144,11 @@ xwc_end_chain(const br_x509_class **ctx)
 
         if (mini_cc->name_elts[i].oid == OID_uniformResourceIdentifier)
         {
+            if (camblet_cc->conn_ctx->peer_spiffe_id == NULL && mini_cc->name_elts[i].buf != NULL)
+            {
+                camblet_cc->conn_ctx->peer_spiffe_id = strdup(mini_cc->name_elts[i].buf);
+            }
+
             spiffe_id = mini_cc->name_elts[i].buf;
             for (k = 0; k < camblet_cc->socket_context->allowed_spiffe_ids_length; k++)
             {
@@ -157,7 +190,7 @@ static const br_x509_class x509_camblet_vtable = {
     xwc_get_pkey,
 };
 
-void br_x509_camblet_init(br_x509_camblet_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context, const tcp_connection_context *conn_ctx, bool insecure)
+void br_x509_camblet_init(br_x509_camblet_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context, tcp_connection_context *conn_ctx, bool insecure)
 {
     ctx->vtable = &x509_camblet_vtable;
     ctx->socket_context = socket_context;

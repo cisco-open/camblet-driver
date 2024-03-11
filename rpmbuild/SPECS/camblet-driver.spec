@@ -1,5 +1,5 @@
 Name:           camblet-driver
-Version:        0.5.0
+Version:        0.6.0
 Release:        1%{?dist}
 Summary:        Kernel module for the Camblet project.
 
@@ -57,6 +57,34 @@ fi
 
 
 %changelog
+* Tue Feb 27 2024 Camblet maintainers <team@camblet.io> - 0.6.0-1
+  - parametrize VERBOSE builds (#171)
+  - chore: do not use deprecated -EXTRA_CFLAGS (#169)
+  - add http parser library (#158)
+  - handle nil msghdr
+  - fix missing param
+  - call ensure_tls_handshake at getsockopt to avoid timing issues
+  - move tls_info struct to header
+  - support getting connection spiffe ids through socket option
+  - Update socket.c
+  - remove unused uuid header
+  - refactor passthrough
+  - socket: implement automatic TLS passthrough
+  - trace: lock less if possible (#157)
+  - address review comment
+  - address review comments
+  - use socket pointer instead of uuid
+  - add tcp connection context to trace messages
+  - tracing requests implementation
+  - add one-way message type command
+  - change how camblet runs in ci
+  - run ci on all branches
+  - Add changelog to rpm spec as well (#146)
+  - fix prerm check
+  - tls: harmonize spiffe id checks
+  - Add setup-tls-perf target and openssl to smoketest (#142)
+  - Escape special characters in bump version script (#144)
+
 * Fri Dec 15 2023 Nasp maintainers <team@camblet.io> - 0.4.0-1
  - Create a new make target bump version (#128)
 
