@@ -14,6 +14,7 @@
 #include "json.h"
 #include "string.h"
 #include "config.h"
+#include "spiffe.h"
 
 typedef struct opa_wrapper
 {
@@ -363,21 +364,23 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
         size_t id_len = json_object_dotget_string_len(matched_policy, "id");
         if (egress_id_len > 0 || id_len > 0)
         {
-            camblet_config_lock();
-            camblet_config *config = camblet_config_get_locked();
-            size_t trust_domain_len = strlen(config->trust_domain);
             size_t ttl_len = 0;
             if (ttl)
             {
                 ttl_len = strlen(ttl);
             }
+
+            camblet_config_lock();
+            camblet_config *config = camblet_config_get_locked();
+            size_t trust_domain_len = strlen(config->trust_domain);
             ret.id = kzalloc(egress_id_len + id_len + trust_domain_len + ttl_len + 1, GFP_KERNEL);
             strcat(ret.id, config->trust_domain);
-            if (ttl)
+            camblet_config_unlock();
+
+            if (ttl_len > 0)
             {
                 strcat(ret.id, ttl);
             }
-            camblet_config_unlock();
             if (id_len > 0)
             {
                 strcat(ret.id, json_object_dotget_string(matched_policy, "id"));
@@ -442,13 +445,7 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             camblet_config_unlock();
         }
 
-        int workload_id_is_valid = json_object_dotget_boolean(matched_policy, "egress.certificate.workloadIDIsValid");
-        if (workload_id_is_valid == -1)
-            workload_id_is_valid = json_object_dotget_boolean(matched_policy, "certificate.workloadIDIsValid");
-        if (workload_id_is_valid == 1)
-            ret.workload_id_is_valid = true;
-        else
-            ret.workload_id_is_valid = false;
+        ret.workload_id_is_valid = is_spiffe_id_valid(ret.workload_id);
 
         JSON_Array *dns = json_object_dotget_array(matched_policy, "egress.certificate.dnsNames");
         if (dns == NULL)
