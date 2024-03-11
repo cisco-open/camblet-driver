@@ -867,17 +867,13 @@ void ensure_camblet_ktls_prot(struct sock *sock, struct proto *camblet_ktls_prot
 		bool (*sock_is_readable)(struct sock *sk);
 		sock_is_readable = sock->sk_prot->sock_is_readable;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 5, 0)
-		int (*sendpage)(struct sock *sk, struct page *page,
-						int offset, size_t size, int flags);
-		sendpage = sock->sk_prot->sendpage;
-
-		camblet_ktls_prot->sendpage = sendpage;
-#endif
 		camblet_ktls_prot->setsockopt = setsockopt;
 		camblet_ktls_prot->getsockopt = getsockopt;
 		camblet_ktls_prot->sock_is_readable = sock_is_readable;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 5, 0)
+		camblet_ktls_prot->sendpage = camblet_sendpage;
+#endif
 		camblet_ktls_prot->recvmsg = camblet_recvmsg;
 		camblet_ktls_prot->sendmsg = camblet_sendmsg;
 
