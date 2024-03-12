@@ -25,7 +25,7 @@
 static LIST_HEAD(command_list);
 
 // lock for the above list to make it thread safe
-static DEFINE_SPINLOCK(command_list_lock);
+static DEFINE_MUTEX(command_list_lock);
 static unsigned long command_list_lock_flags;
 
 // wait queue for the driver to be woken up when a command is added to the list
@@ -44,9 +44,9 @@ static command_answer *this_send_command(char *name, char *data, task_context *c
     cmd->context = context;
     cmd->is_message = is_message;
 
-    spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
+    mutex_lock(&command_list_lock);
     list_add_tail(&cmd->list, &command_list);
-    spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
+    mutex_unlock(&command_list_lock);
 
     // we can now wake up the driver to send out a command for processing
     wake_up_interruptible(&command_wait_queue);
@@ -77,9 +77,9 @@ static command_answer *this_send_command(char *name, char *data, task_context *c
         cmd->answer = answer_with_error("timeout");
     }
 
-    spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
+    mutex_lock(&command_list_lock);
     list_del(&cmd->list);
-    spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
+    mutex_unlock(&command_list_lock);
 
     command_answer *cmd_answer = cmd->answer;
     free_command(cmd);
@@ -320,7 +320,7 @@ error:
 
 command *lookup_in_flight_command(char *id)
 {
-    spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
+    mutex_lock(&command_list_lock);
 
     command *cmd = NULL;
     command *tmp;
@@ -333,7 +333,7 @@ command *lookup_in_flight_command(char *id)
         }
     }
 
-    spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
+    mutex_unlock(&command_list_lock);
 
     return cmd;
 }
@@ -357,14 +357,14 @@ command *get_next_command(void)
         return NULL;
     }
 
-    spin_lock_irqsave(&command_list_lock, command_list_lock_flags);
+    mutex_lock(&command_list_lock);
     command *cmd = list_first_entry(&command_list, struct command, list);
     list_del(&cmd->list);
     if (!cmd->is_message)
     {
         list_add_tail(&cmd->list, &in_flight_command_list);
     }
-    spin_unlock_irqrestore(&command_list_lock, command_list_lock_flags);
+    mutex_unlock(&command_list_lock);
 
     return cmd;
 }
