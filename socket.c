@@ -318,22 +318,6 @@ static void camblet_socket_free(camblet_socket *s)
 			proxywasm_unlock(s->p);
 		}
 
-		if (s->alpn && !s->ktls_sendmsg && !s->opa_socket_ctx.passthrough)
-		{
-			// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
-			if (br_sslio_close(&s->ioc) != BR_ERR_OK)
-			{
-				const br_ssl_engine_context *ec = get_ssl_engine_context(s);
-				int err = br_ssl_engine_last_error(ec);
-				if (err != 0 && err != BR_ERR_IO)
-					pr_err("br_sslio_close error # command[%s] err[%d]", current->comm, err);
-			}
-			else
-			{
-				pr_debug("br_sslio SSL closed # command[%s]", current->comm);
-			}
-		}
-
 		if (s->direction == ListenerDirectionInbound)
 		{
 			kfree(s->sc);
@@ -838,11 +822,31 @@ void camblet_close(struct sock *sk, long timeout)
 		}
 
 		pr_debug("free camblet socket # command[%s] sk[%p]", current->comm, sk);
-		camblet_socket_free(s);
-		WRITE_ONCE(sk->sk_user_data, NULL);
+
+		if (s->alpn && !s->ktls_sendmsg && !s->opa_socket_ctx.passthrough)
+		{
+			// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
+			if (br_sslio_close(&s->ioc) != true)
+			{
+				const br_ssl_engine_context *ec = get_ssl_engine_context(s);
+				int err = br_ssl_engine_last_error(ec);
+				if (err != 0 && err != BR_ERR_IO)
+					pr_err("br_sslio_close error # command[%s] err[%d]", current->comm, err);
+			}
+			else
+			{
+				pr_debug("br_sslio SSL closed # command[%s]", current->comm);
+			}
+		}
 	}
 
 	close(sk, timeout);
+
+	if (s)
+	{
+		camblet_socket_free(s);
+		WRITE_ONCE(sk->sk_user_data, NULL);
+	}
 }
 
 // analyze tls_main.c to find out what we need to implement: check build_protos()
