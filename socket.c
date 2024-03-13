@@ -225,7 +225,7 @@ static int bearssl_recvmsg(camblet_socket *s, void *dst, size_t len, int flags)
 	return ret;
 }
 
-void bearssl_close(camblet_socket *s)
+static void bearssl_close(camblet_socket *s)
 {
 	// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
 	if (br_sslio_close(&s->ioc) != true)
