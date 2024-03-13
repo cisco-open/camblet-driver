@@ -225,6 +225,21 @@ static int bearssl_recvmsg(camblet_socket *s, void *dst, size_t len, int flags)
 	return ret;
 }
 
+void bearssl_close(camblet_socket *s)
+{
+	// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
+	if (br_sslio_close(&s->ioc) != true)
+	{
+		const br_ssl_engine_context *ec = get_ssl_engine_context(s);
+		int err = br_ssl_engine_last_error(ec);
+		pr_err("br_sslio_close error # command[%s] err[%d]", current->comm, err);
+	}
+	else
+	{
+		pr_debug("br_sslio SSL closed # command[%s]", current->comm);
+	}
+}
+
 static int plain_sendmsg(camblet_socket *s, void *msg, size_t len)
 {
 	struct msghdr hdr = {0};
@@ -624,6 +639,11 @@ int camblet_recvmsg(struct sock *sock,
 
 	camblet_socket *s = sock->sk_user_data;
 
+	if (!s)
+	{
+		return -EPIPE;
+	}
+
 	ret = ensure_tls_handshake(s, msg);
 	if (ret != 0)
 	{
@@ -725,6 +745,11 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	camblet_socket *s = sock->sk_user_data;
 
+	if (!s)
+	{
+		return -EPIPE;
+	}
+
 	ret = ensure_tls_handshake(s, msg);
 	if (ret != 0)
 	{
@@ -825,18 +850,7 @@ void camblet_close(struct sock *sk, long timeout)
 
 		if (s->alpn && !s->ktls_sendmsg && !s->opa_socket_ctx.passthrough)
 		{
-			// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
-			if (br_sslio_close(&s->ioc) != true)
-			{
-				const br_ssl_engine_context *ec = get_ssl_engine_context(s);
-				int err = br_ssl_engine_last_error(ec);
-				if (err != 0 && err != BR_ERR_IO)
-					pr_err("br_sslio_close error # command[%s] err[%d]", current->comm, err);
-			}
-			else
-			{
-				pr_debug("br_sslio SSL closed # command[%s]", current->comm);
-			}
+			bearssl_close(s);
 		}
 	}
 
