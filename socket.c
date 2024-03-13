@@ -641,7 +641,7 @@ int camblet_recvmsg(struct sock *sock,
 
 	if (!s)
 	{
-		return -EPIPE;
+		return -ESHUTDOWN;
 	}
 
 	ret = ensure_tls_handshake(s, msg);
@@ -747,7 +747,7 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	if (!s)
 	{
-		return -EPIPE;
+		return -ESHUTDOWN;
 	}
 
 	ret = ensure_tls_handshake(s, msg);
