@@ -29,7 +29,7 @@ jobs:
         fetch-depth: 0
 
     - name: Setup Golang with cache
-      uses: magnetikonline/action-golang-cache@v4
+      uses: magnetikonline/action-golang-cache@v5
       with:
         go-version-file: camblet/go.mod
 
@@ -70,7 +70,7 @@ jobs:
       working-directory: camblet-driver 
       run: |
         sudo modprobe tls
-        sudo modprobe camblet ktls_available=1
+        sudo modprobe camblet dyndbg==_ ktls_available=1
         sudo dmesg -T
 
     # - name: Setup upterm session
@@ -91,7 +91,7 @@ jobs:
       working-directory: camblet-driver 
       run: |
         sudo rmmod tls
-        sudo modprobe camblet ktls_available=0
+        sudo modprobe camblet dyndbg==_ ktls_available=0
         sudo dmesg -T
 
     - name: Run proxy-wasm smoke test with bearSSL
