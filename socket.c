@@ -88,6 +88,8 @@ struct camblet_socket
 	br_rsa_public_key *rsa_pub;
 	csr_parameters *parameters;
 
+	struct kref bearssl_refcount;
+
 	x509_certificate *cert;
 
 	char *hostname;
@@ -163,20 +165,25 @@ static int ktls_recvmsg(camblet_socket *s, void *buf, size_t size, int flags)
 
 static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 {
+	kref_get(&s->bearssl_refcount);
 	int err = br_sslio_write_all(&s->ioc, src, len);
 	if (err < 0)
 	{
 		const br_ssl_engine_context *ec = get_ssl_engine_context(s);
 		pr_err("br_sslio_write_all error # command[%s] br_last_err[%d]", current->comm, br_ssl_engine_last_error(ec));
-		return err;
+		len = err;
+	}
+	else
+	{
+		err = br_sslio_flush(&s->ioc);
+		if (err < 0)
+		{
+			pr_err("br_sslio_flush error # command[%s] err[%d]", current->comm, err);
+			len = err;
+		}
 	}
 
-	err = br_sslio_flush(&s->ioc);
-	if (err < 0)
-	{
-		pr_err("br_sslio_flush error # command[%s] err[%d]", current->comm, err);
-		return err;
-	}
+	kref_put(&s->bearssl_refcount, NULL);
 
 	return len;
 }
@@ -209,24 +216,27 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 
 static int bearssl_recvmsg(camblet_socket *s, void *dst, size_t len, int flags)
 {
+	kref_get(&s->bearssl_refcount);
 	int ret = br_sslio_read_with_flags(&s->ioc, dst, len, flags);
 	if (ret < 0)
 	{
 		const br_ssl_engine_context *ec = get_ssl_engine_context(s);
 		int last_error = br_ssl_engine_last_error(ec);
 		if (last_error == 0)
-			return 0;
-		if (last_error == BR_ERR_IO && s->sock_closed)
-			return 0;
-		if (last_error == BR_ERR_IO)
-			return -EIO;
-		pr_err("br_sslio_read error # command[%s] err[%d]", current->comm, last_error);
+			ret = 0;
+		else if (last_error == BR_ERR_IO && s->sock_closed)
+			ret = 0;
+		else if (last_error == BR_ERR_IO)
+			ret = -EIO;
+		// pr_err("br_sslio_read error # command[%s] err[%d]", current->comm, last_error);
 	}
+	kref_put(&s->bearssl_refcount, NULL);
 	return ret;
 }
 
 static void bearssl_close(camblet_socket *s)
 {
+	mutex_lock(&s->lock);
 	// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
 	if (br_sslio_close(&s->ioc) != true)
 	{
@@ -238,6 +248,7 @@ static void bearssl_close(camblet_socket *s)
 	{
 		pr_debug("br_sslio SSL closed # command[%s]", current->comm);
 	}
+	mutex_unlock(&s->lock);
 }
 
 static int plain_sendmsg(camblet_socket *s, void *msg, size_t len)
@@ -400,6 +411,8 @@ static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_c
 	s->read_buffer = buffer_new(16 * 1024);
 	s->write_buffer = buffer_new(16 * 1024);
 
+	kref_init(&s->bearssl_refcount);
+
 	s->sock = sock;
 	s->opa_socket_ctx = opa_socket_ctx;
 
@@ -436,6 +449,8 @@ static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_c
 	s->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
 	s->read_buffer = buffer_new(16 * 1024);
 	s->write_buffer = buffer_new(16 * 1024);
+
+	kref_init(&s->bearssl_refcount);
 
 	s->sock = sock;
 	s->opa_socket_ctx = opa_socket_ctx;
@@ -514,6 +529,16 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 	pr_debug("TLS handshake # command[%s] sock[%p]", current->comm, s->sock);
 
 	mutex_lock(&s->lock);
+
+	// check if bearssl is already closed
+	unsigned int state = br_ssl_engine_current_state(&s->cc->eng);
+	printk("ensure_tls_handshake # command[%s] state[%d]\n", current->comm, state);
+	if (state == BR_SSL_CLOSED)
+	{
+		pr_debug("TLS handshake failed because bearssl is already closed # command[%s] sock[%p]", current->comm, s->sock);
+		ret = -ECONNRESET;
+		goto bail;
+	}
 
 	alpn = READ_ONCE(s->alpn);
 
@@ -641,7 +666,7 @@ int camblet_recvmsg(struct sock *sock,
 
 	if (!s)
 	{
-		return -ESHUTDOWN;
+		return -ECONNRESET;
 	}
 
 	ret = ensure_tls_handshake(s, msg);
@@ -747,7 +772,7 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	if (!s)
 	{
-		return -ESHUTDOWN;
+		return -ECONNRESET;
 	}
 
 	ret = ensure_tls_handshake(s, msg);
@@ -834,13 +859,22 @@ int camblet_sendpage(struct sock *sock, struct page *page, int offset, size_t si
 }
 #endif
 
+static void camblet_socket_release(struct kref *kref)
+{
+	camblet_socket *s = container_of(kref, camblet_socket, bearssl_refcount);
+	camblet_socket_free(s);
+}
+
 void camblet_close(struct sock *sk, long timeout)
 {
 	void (*close)(struct sock *sk, long timeout) = tcp_close;
+
 	camblet_socket *s = READ_ONCE(sk->sk_user_data);
 
 	if (s)
 	{
+		WRITE_ONCE(sk->sk_user_data, NULL);
+
 		if (s->ktls_close)
 		{
 			close = READ_ONCE(s->ktls_close);
@@ -852,15 +886,18 @@ void camblet_close(struct sock *sk, long timeout)
 		{
 			bearssl_close(s);
 		}
+
+		// check if refs are 1, if not, wait for kref_put to finish before calling close
+		while (kref_read(&s->bearssl_refcount) > 1)
+		{
+			msleep(100);
+			pr_debug("waiting for kref_put to finish before calling close # command[%s]", current->comm);
+		}
+
+		kref_put(&s->bearssl_refcount, camblet_socket_release);
 	}
 
 	close(sk, timeout);
-
-	if (s)
-	{
-		camblet_socket_free(s);
-		WRITE_ONCE(sk->sk_user_data, NULL);
-	}
 }
 
 // analyze tls_main.c to find out what we need to implement: check build_protos()
