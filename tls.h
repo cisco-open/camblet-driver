@@ -14,6 +14,7 @@
 #include "bearssl.h"
 #include "opa.h"
 #include "socket.h"
+#include <net/tls.h>
 
 /*
  * This is a wrapper around the BearSSL X.509 validation engine. It
@@ -36,4 +37,8 @@ void br_x509_camblet_free(br_x509_camblet_context *ctx);
 
 bool is_tls_handshake(const uint8_t *b);
 
+void setup_aes_ccm_128_crypto_info(struct tls12_crypto_info_aes_ccm_128 *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq);
+void setup_aes_gcm_128_crypto_info(struct tls12_crypto_info_aes_gcm_128 *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq);
+void setup_aes_gcm_256_crypto_info(struct tls12_crypto_info_aes_gcm_256 *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq);
+void setup_chacha_poly_crypto_info(struct tls12_crypto_info_chacha20_poly1305 *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq);
 #endif

@@ -223,3 +223,43 @@ void br_x509_camblet_free(br_x509_camblet_context *ctx)
     }
     kfree(ctx->ctx.name_elts);
 }
+
+void setup_aes_gcm_128_crypto_info(struct tls12_crypto_info_aes_gcm_128 *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq)
+{
+    crypto_info->info.version = TLS_1_2_VERSION;
+    crypto_info->info.cipher_type = TLS_CIPHER_AES_GCM_128;
+	memcpy(crypto_info->iv, iv, TLS_CIPHER_AES_GCM_128_IV_SIZE);
+	memcpy(crypto_info->key, key, TLS_CIPHER_AES_GCM_128_KEY_SIZE);
+	uint64_t outseq = m3_bswap64(seq);
+	memcpy(crypto_info->rec_seq, &outseq, TLS_CIPHER_AES_GCM_128_REC_SEQ_SIZE);
+}
+
+void setup_aes_gcm_256_crypto_info(struct tls12_crypto_info_aes_gcm_256 *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq)
+{
+    crypto_info->info.version = TLS_1_2_VERSION;
+    crypto_info->info.cipher_type = TLS_CIPHER_AES_GCM_256;
+	memcpy(crypto_info->iv, iv, TLS_CIPHER_AES_GCM_256_IV_SIZE);
+	memcpy(crypto_info->key, key, TLS_CIPHER_AES_GCM_256_KEY_SIZE);
+	uint64_t outseq = m3_bswap64(seq);
+	memcpy(crypto_info->rec_seq, &outseq, TLS_CIPHER_AES_GCM_256_REC_SEQ_SIZE);
+}
+
+void setup_chacha_poly_crypto_info(struct tls12_crypto_info_chacha20_poly1305 *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq)
+{
+    crypto_info->info.version = TLS_1_2_VERSION;
+    crypto_info->info.cipher_type = TLS_CIPHER_CHACHA20_POLY1305;
+    memcpy(crypto_info->iv, iv, TLS_CIPHER_CHACHA20_POLY1305_IV_SIZE);
+    memcpy(crypto_info->key, key, TLS_CIPHER_CHACHA20_POLY1305_KEY_SIZE);
+    seq = m3_bswap64(seq);
+    memcpy(crypto_info->rec_seq, &seq, TLS_CIPHER_CHACHA20_POLY1305_REC_SEQ_SIZE);
+}
+
+void setup_aes_ccm_128_crypto_info(struct tls12_crypto_info_aes_ccm_128 *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq)
+{
+    crypto_info->info.version = TLS_1_2_VERSION;
+    crypto_info->info.cipher_type = TLS_CIPHER_AES_CCM_128;
+	memcpy(crypto_info->iv, iv, TLS_CIPHER_AES_CCM_128_IV_SIZE);
+	memcpy(crypto_info->key, key, TLS_CIPHER_AES_CCM_128_KEY_SIZE);
+	uint64_t outseq = m3_bswap64(seq);
+	memcpy(crypto_info->rec_seq, &outseq, TLS_CIPHER_AES_CCM_128_REC_SEQ_SIZE);
+}

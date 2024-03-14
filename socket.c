@@ -888,7 +888,11 @@ static int configure_ktls_sock(camblet_socket *s)
 	br_ssl_engine_context *eng = get_ssl_engine_context(s);
 	br_ssl_session_parameters *params = &eng->session;
 
-	if (params->cipher_suite != BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 || !ktls_available)
+	if ((params->cipher_suite != BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 &&
+		params->cipher_suite != BR_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 &&
+		params->cipher_suite != BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 &&
+		params->cipher_suite != BR_TLS_RSA_WITH_AES_128_CCM) ||
+		!ktls_available)
 	{
 		if (!ktls_available)
 			pr_warn("configure kTLS error: kTLS is not available on this system # command[%s]", current->comm);
@@ -904,21 +908,38 @@ static int configure_ktls_sock(camblet_socket *s)
 	pr_debug("configure kTLS for output # command[%s] cipher_suite[%x] version[%x] iv[%.*s]", current->comm, params->cipher_suite, params->version, 12, eng->out.chapol.iv);
 	pr_debug("configure kTLS for input # command[%s] cipher_suite[%x] version[%x] iv[%.*s]", current->comm, params->cipher_suite, params->version, 12, eng->in.chapol.iv);
 
-	struct tls12_crypto_info_chacha20_poly1305 crypto_info_tx = {.info = {.version = TLS_1_2_VERSION,
-																		  .cipher_type = TLS_CIPHER_CHACHA20_POLY1305}};
-	memcpy(crypto_info_tx.iv, eng->out.chapol.iv, TLS_CIPHER_CHACHA20_POLY1305_IV_SIZE);
-	memcpy(crypto_info_tx.key, eng->out.chapol.key, TLS_CIPHER_CHACHA20_POLY1305_KEY_SIZE);
-	uint64_t outseq = m3_bswap64(eng->out.chapol.seq);
-	memcpy(crypto_info_tx.rec_seq, &outseq, TLS_CIPHER_CHACHA20_POLY1305_REC_SEQ_SIZE);
-	//  memcpy(crypto_info.salt, eng->out.chapol.salt, TLS_CIPHER_CHACHA20_POLY1305_SALT_SIZE);
+	typedef union {
+		struct tls12_crypto_info_aes_ccm_128 ccm_128;
+		struct tls12_crypto_info_aes_gcm_128 gcm_128;
+		struct tls12_crypto_info_aes_gcm_256 gcm_256;
+		struct tls12_crypto_info_chacha20_poly1305 chapol;
+	} crypto_info;
 
-	struct tls12_crypto_info_chacha20_poly1305 crypto_info_rx = {.info = {.version = TLS_1_2_VERSION,
-																		  .cipher_type = TLS_CIPHER_CHACHA20_POLY1305}};
-	memcpy(crypto_info_rx.iv, eng->in.chapol.iv, TLS_CIPHER_CHACHA20_POLY1305_IV_SIZE);
-	memcpy(crypto_info_rx.key, eng->in.chapol.key, TLS_CIPHER_CHACHA20_POLY1305_KEY_SIZE);
-	uint64_t inseq = m3_bswap64(eng->in.chapol.seq);
-	memcpy(crypto_info_rx.rec_seq, &inseq, TLS_CIPHER_CHACHA20_POLY1305_REC_SEQ_SIZE);
-	// memcpy(crypto_info.salt, eng->out.chapol.salt, TLS_CIPHER_CHACHA20_POLY1305_SALT_SIZE);
+	crypto_info crypto_info_tx;
+	crypto_info crypto_info_rx;
+
+	switch (params->cipher_suite)
+	{
+		case BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256:
+			setup_chacha_poly_crypto_info(&crypto_info_tx.chapol, eng->out.chapol.iv, eng->out.chapol.key, eng->out.chapol.seq);
+			setup_chacha_poly_crypto_info(&crypto_info_rx.chapol, eng->in.chapol.iv, eng->in.chapol.key, eng->in.chapol.seq);
+			break;
+		case BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
+			setup_aes_gcm_128_crypto_info(&crypto_info_tx.gcm_128, eng->out.gcm.iv, eng->out.gcm.key.k16, eng->out.gcm.seq);
+			setup_aes_gcm_128_crypto_info(&crypto_info_rx.gcm_128, eng->in.gcm.iv, eng->in.gcm.key.k16, eng->in.gcm.seq);
+			break;
+		case BR_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
+			setup_aes_gcm_256_crypto_info(&crypto_info_tx.gcm_256, eng->out.gcm.iv, eng->out.gcm.key.k32, eng->out.gcm.seq);
+			setup_aes_gcm_256_crypto_info(&crypto_info_rx.gcm_256, eng->in.gcm.iv, eng->in.gcm.key.k32, eng->in.gcm.seq);
+			break;
+		case BR_TLS_RSA_WITH_AES_128_CCM:
+			setup_aes_ccm_128_crypto_info(&crypto_info_tx.ccm_128, eng->out.ccm.iv, eng->out.ccm.key, eng->out.ccm.seq);
+			setup_aes_ccm_128_crypto_info(&crypto_info_rx.ccm_128, eng->in.ccm.iv, eng->in.ccm.key, eng->in.ccm.seq);
+			break;
+		default:
+			pr_err("cipher %x is not supported with kTLS # command[%s]", params->cipher_suite, current->comm);
+			return -1;
+	}
 
 	// We have to set the protocol to the original here because the kTLS proto gets created from the sockets original protocol,
 	// so if it contains the camblet protocol parts it will spread to places where kTLS is used but camblet is not.
@@ -1621,10 +1642,12 @@ void camblet_configure_client_tls(camblet_socket *sc)
 
 	br_ssl_client_init_full(sc->cc, &sc->xc.ctx, trust_anchors, trust_anchors_len);
 
-	// Currently we need to enforce our one and only cipher suite,
-	// from where we can extract kTLS paramaters.
+	// Currently we need to enforce our four supported cipher suite.
 	static const uint16_t suites[] = {
 		BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+		BR_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+		BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+		BR_TLS_RSA_WITH_AES_128_CCM,
 	};
 
 	br_ssl_engine_set_suites(&sc->cc->eng, suites,
