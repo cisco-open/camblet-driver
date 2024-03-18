@@ -41,4 +41,5 @@ void setup_aes_ccm_128_crypto_info(struct tls12_crypto_info_aes_ccm_128 *crypto_
 void setup_aes_gcm_128_crypto_info(struct tls12_crypto_info_aes_gcm_128 *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq);
 void setup_aes_gcm_256_crypto_info(struct tls12_crypto_info_aes_gcm_256 *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq);
 void setup_chacha_poly_crypto_info(struct tls12_crypto_info_chacha20_poly1305 *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq);
+bool is_cipher_supported(uint16_t cipher_suite);
 #endif

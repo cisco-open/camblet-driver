@@ -263,3 +263,10 @@ void setup_aes_ccm_128_crypto_info(struct tls12_crypto_info_aes_ccm_128 *crypto_
 	uint64_t outseq = m3_bswap64(seq);
 	memcpy(crypto_info->rec_seq, &outseq, TLS_CIPHER_AES_CCM_128_REC_SEQ_SIZE);
 }
+
+bool is_cipher_supported(uint16_t cipher_suite) {
+    return cipher_suite == BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 ||
+		cipher_suite == BR_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ||
+		cipher_suite == BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 ||
+		cipher_suite == BR_TLS_RSA_WITH_AES_128_CCM;
+}

@@ -888,16 +888,15 @@ static int configure_ktls_sock(camblet_socket *s)
 	br_ssl_engine_context *eng = get_ssl_engine_context(s);
 	br_ssl_session_parameters *params = &eng->session;
 
-	if ((params->cipher_suite != BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 &&
-		params->cipher_suite != BR_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 &&
-		params->cipher_suite != BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 &&
-		params->cipher_suite != BR_TLS_RSA_WITH_AES_128_CCM) ||
-		!ktls_available)
+	if ( !is_cipher_supported(params->cipher_suite) || !ktls_available)
 	{
 		if (!ktls_available)
 			pr_warn("configure kTLS error: kTLS is not available on this system # command[%s]", current->comm);
 		else
-			pr_warn("configure kTLS error: only ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 cipher suite is supported # requested_suite[%x]", params->cipher_suite);
+			pr_warn("configure kTLS error: only ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256, "
+				"BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, "
+				"BR_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, "
+				"BR_TLS_RSA_WITH_AES_128_CCM cipher suites are supported # requested_suite[%x]", params->cipher_suite);
 
 		s->sendmsg = bearssl_sendmsg;
 		s->recvmsg = bearssl_recvmsg;
