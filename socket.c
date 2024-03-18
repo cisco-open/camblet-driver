@@ -925,12 +925,12 @@ static int configure_ktls_sock(camblet_socket *s)
 			setup_chacha_poly_crypto_info(&crypto_info_rx.chapol, eng->in.chapol.iv, eng->in.chapol.key, eng->in.chapol.seq);
 			break;
 		case BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
-			setup_aes_gcm_128_crypto_info(&crypto_info_tx.gcm_128, eng->out.gcm.iv, eng->out.gcm.key.k16, eng->out.gcm.seq);
-			setup_aes_gcm_128_crypto_info(&crypto_info_rx.gcm_128, eng->in.gcm.iv, eng->in.gcm.key.k16, eng->in.gcm.seq);
+			setup_aes_gcm_128_crypto_info(&crypto_info_tx.gcm_128, eng->out.gcm.iv, eng->out.gcm.key, eng->out.gcm.seq);
+			setup_aes_gcm_128_crypto_info(&crypto_info_rx.gcm_128, eng->in.gcm.iv, eng->in.gcm.key, eng->in.gcm.seq);
 			break;
 		case BR_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
-			setup_aes_gcm_256_crypto_info(&crypto_info_tx.gcm_256, eng->out.gcm.iv, eng->out.gcm.key.k32, eng->out.gcm.seq);
-			setup_aes_gcm_256_crypto_info(&crypto_info_rx.gcm_256, eng->in.gcm.iv, eng->in.gcm.key.k32, eng->in.gcm.seq);
+			setup_aes_gcm_256_crypto_info(&crypto_info_tx.gcm_256, eng->out.gcm.iv, eng->out.gcm.key, eng->out.gcm.seq);
+			setup_aes_gcm_256_crypto_info(&crypto_info_rx.gcm_256, eng->in.gcm.iv, eng->in.gcm.key, eng->in.gcm.seq);
 			break;
 		case BR_TLS_RSA_WITH_AES_128_CCM:
 			setup_aes_ccm_128_crypto_info(&crypto_info_tx.ccm_128, eng->out.ccm.iv, eng->out.ccm.key, eng->out.ccm.seq);
