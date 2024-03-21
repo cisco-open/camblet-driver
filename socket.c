@@ -904,15 +904,8 @@ static int configure_ktls_sock(camblet_socket *s)
 		return 0;
 	}
 
-	pr_debug("configure kTLS for output # command[%s] cipher_suite[%x] version[%x] iv[%.*s]", current->comm, params->cipher_suite, params->version, 12, eng->out.chapol.iv);
-	pr_debug("configure kTLS for input # command[%s] cipher_suite[%x] version[%x] iv[%.*s]", current->comm, params->cipher_suite, params->version, 12, eng->in.chapol.iv);
-
-	typedef union {
-		struct tls12_crypto_info_aes_ccm_128 ccm_128;
-		struct tls12_crypto_info_aes_gcm_128 gcm_128;
-		struct tls12_crypto_info_aes_gcm_256 gcm_256;
-		struct tls12_crypto_info_chacha20_poly1305 chapol;
-	} crypto_info;
+	pr_debug("configure kTLS for output # command[%s] cipher_suite[%x] version[%x]", current->comm, params->cipher_suite, params->version, 12);
+	pr_debug("configure kTLS for input # command[%s] cipher_suite[%x] version[%x]", current->comm, params->cipher_suite, params->version, 12);
 
 	crypto_info crypto_info_tx;
 	crypto_info crypto_info_rx;
@@ -920,20 +913,20 @@ static int configure_ktls_sock(camblet_socket *s)
 	switch (params->cipher_suite)
 	{
 		case BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256:
-			setup_chacha_poly_crypto_info(&crypto_info_tx.chapol, eng->out.chapol.iv, eng->out.chapol.key, eng->out.chapol.seq);
-			setup_chacha_poly_crypto_info(&crypto_info_rx.chapol, eng->in.chapol.iv, eng->in.chapol.key, eng->in.chapol.seq);
+			setup_chacha_poly_crypto_info(&crypto_info_tx, eng->out.chapol.iv, eng->out.chapol.key, eng->out.chapol.seq);
+			setup_chacha_poly_crypto_info(&crypto_info_rx, eng->in.chapol.iv, eng->in.chapol.key, eng->in.chapol.seq);
 			break;
 		case BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
-			setup_aes_gcm_128_crypto_info(&crypto_info_tx.gcm_128, eng->out.gcm.iv, eng->out.gcm.key, eng->out.gcm.seq);
-			setup_aes_gcm_128_crypto_info(&crypto_info_rx.gcm_128, eng->in.gcm.iv, eng->in.gcm.key, eng->in.gcm.seq);
+			setup_aes_gcm_128_crypto_info(&crypto_info_tx, eng->out.gcm.iv, eng->out.gcm.key, eng->out.gcm.seq);
+			setup_aes_gcm_128_crypto_info(&crypto_info_rx, eng->in.gcm.iv, eng->in.gcm.key, eng->in.gcm.seq);
 			break;
 		case BR_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
-			setup_aes_gcm_256_crypto_info(&crypto_info_tx.gcm_256, eng->out.gcm.iv, eng->out.gcm.key, eng->out.gcm.seq);
-			setup_aes_gcm_256_crypto_info(&crypto_info_rx.gcm_256, eng->in.gcm.iv, eng->in.gcm.key, eng->in.gcm.seq);
+			setup_aes_gcm_256_crypto_info(&crypto_info_tx, eng->out.gcm.iv, eng->out.gcm.key, eng->out.gcm.seq);
+			setup_aes_gcm_256_crypto_info(&crypto_info_rx, eng->in.gcm.iv, eng->in.gcm.key, eng->in.gcm.seq);
 			break;
 		case BR_TLS_RSA_WITH_AES_128_CCM:
-			setup_aes_ccm_128_crypto_info(&crypto_info_tx.ccm_128, eng->out.ccm.iv, eng->out.ccm.key, eng->out.ccm.seq);
-			setup_aes_ccm_128_crypto_info(&crypto_info_rx.ccm_128, eng->in.ccm.iv, eng->in.ccm.key, eng->in.ccm.seq);
+			setup_aes_ccm_128_crypto_info(&crypto_info_tx, eng->out.ccm.iv, eng->out.ccm.key, eng->out.ccm.seq);
+			setup_aes_ccm_128_crypto_info(&crypto_info_rx, eng->in.ccm.iv, eng->in.ccm.key, eng->in.ccm.seq);
 			break;
 		default:
 			pr_err("cipher %x is not supported with kTLS # command[%s]", params->cipher_suite, current->comm);
@@ -951,14 +944,14 @@ static int configure_ktls_sock(camblet_socket *s)
 		return ret;
 	}
 
-	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TLS, TLS_TX, KERNEL_SOCKPTR(&crypto_info_tx), sizeof(crypto_info_tx));
+	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TLS, TLS_TX, KERNEL_SOCKPTR(&crypto_info_tx.cipher_type), crypto_info_tx.cipher_type_len);
 	if (ret != 0)
 	{
 		pr_err("could not set sockopt TLS_TX # command[%s] err[%d]", current->comm, ret);
 		return ret;
 	}
 
-	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TLS, TLS_RX, KERNEL_SOCKPTR(&crypto_info_rx), sizeof(crypto_info_rx));
+	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TLS, TLS_RX, KERNEL_SOCKPTR(&crypto_info_rx.cipher_type), crypto_info_rx.cipher_type_len);
 	if (ret != 0)
 	{
 		pr_err("could not set sockopt TLS_RX # command[%s] err[%d]", current->comm, ret);
