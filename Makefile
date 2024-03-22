@@ -5,10 +5,10 @@ ccflags-y += -foptimize-sibling-calls \
 			 -DDEBUG=1 \
 			 -Dd_m3HasFloat=$(EMULATE_FLOATS) \
 			 -I$(PWD) \
+			 -I$(PWD)/third-party/ \
 			 -I$(PWD)/third-party/BearSSL/inc/ \
 			 -I$(PWD)/third-party/wasm3/source/ \
 			 -I$(PWD)/third-party/base64 \
-			 -I$(PWD)/third-party/parson \
 			 -I$(PWD)/third-party/picohttpparser \
 			 -Wall -g \
 			 #-Dd_m3LogCompile=1
@@ -60,6 +60,7 @@ camblet-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  third-party/wasm3/source/m3_module.o \
 			  third-party/wasm3/source/m3_parse.o \
 			  third-party/base64/base64.o \
+			  third-party/fastjson/json.o \
 			  third-party/parson/json.o \
 			  third-party/picohttpparser/picohttpparser.o \
 			  buffer.o \
@@ -81,7 +82,9 @@ camblet-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  sd.o \
 			  trace.o \
 			  http.o \
-			  spiffe.o
+			  spiffe.o \
+			  jwt.o \
+			  crypto.o
 
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/

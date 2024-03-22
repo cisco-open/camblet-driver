@@ -13,8 +13,6 @@
 
 #include <linux/inet.h>
 
-#include "json.h"
-
 int socket_init(void);
 void socket_exit(void);
 
@@ -36,7 +34,5 @@ typedef struct
     char destination_address[INET6_ADDRSTRLEN + 5];
     char *peer_spiffe_id;
 } tcp_connection_context;
-
-void add_net_conn_info_to_json(const tcp_connection_context *ctx, JSON_Object *json_object);
 
 #endif

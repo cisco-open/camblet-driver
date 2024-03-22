@@ -15,7 +15,7 @@
 #include <linux/ipv6.h>
 
 #include "commands.h"
-#include "json.h"
+#include "parson/json.h"
 #include "base64.h"
 #include "string.h"
 #include "socket.h"
