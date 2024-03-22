@@ -126,9 +126,6 @@ struct camblet_socket
 	camblet_recvmsg_t *recvmsg;
 
 	tcp_connection_context *conn_ctx;
-
-	camblet_sendmsg_t *br_low_sendmsg;
-	camblet_recvmsg_t *br_low_recvmsg;
 };
 
 static int get_read_buffer_capacity(camblet_socket *s);
@@ -321,7 +318,7 @@ static void camblet_socket_free(camblet_socket *s)
 			proxywasm_unlock(s->p);
 		}
 
-		if (s->alpn && !s->opa_socket_ctx.passthrough)
+		if (s->alpn && !s->ktls_sendmsg && !s->opa_socket_ctx.passthrough)
 		{
 			// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
 			if (br_sslio_close(&s->ioc) != BR_ERR_OK)
@@ -531,12 +528,6 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 			br_ssl_engine_set_protocol_names(&s->sc->eng, ALPNs_passthrough, ALPNs_passthrough_NUM);
 			br_ssl_client_reset(s->cc, s->hostname, false);
 		}
-
-		// Initialize the low_read and low_write functions
-		// with tcp_sendmsg and recvmsg. These will be used
-		// by BearSSL to read and write data to socket.
-		s->br_low_recvmsg = plain_recvmsg;
-		s->br_low_sendmsg = plain_sendmsg;
 
 		ret = br_sslio_flush(&s->ioc);
 		if (ret == 0)
@@ -983,26 +974,8 @@ static int configure_ktls_sock(camblet_socket *s)
 
 	WRITE_ONCE(s->sock->sk_prot, ktls_prot);
 
-	if (ktls_available)
-	{
-		// By default, BearSSL does not support sending application data without encryption.
-		// To use kTLS, we need unencrypted data, but we also want to receive all the features (e.g., control messages).
-		// Since the first part of the SSL handshake occurs without encryption, BearSSL has a struct called clear.
-		// The clear struct is used for outgoing data, so it only includes encryption and plaintext functions.
-		// For the decryption part and during the handshake, it utilizes a flag called 'incrypt', which is set to 1 once the handshake reaches that stage.
-
-		// Since the handshake is complete, we can utilize the clear struct for outgoing data, and kTLS will handle encryption.
-		// Similarly, we can disable decryption by setting the 'incrypt' field to 0 for the same reason.
-
-		br_ssl_engine_context *ec = get_ssl_engine_context(s);
-		ec->out.vtable = &br_sslrec_out_clear_vtable;
-		ec->incrypt = 0;
-		s->br_low_recvmsg = ktls_recvmsg;
-		s->br_low_sendmsg = ktls_sendmsg;
-	}
-
-	s->sendmsg = bearssl_sendmsg;
-	s->recvmsg = bearssl_recvmsg;
+	s->sendmsg = ktls_sendmsg;
+	s->recvmsg = ktls_recvmsg;
 
 	trace_debug(s->conn_ctx, "kTLS configured", 0);
 
@@ -1489,7 +1462,7 @@ cleanup:
 static int br_low_read(void *ctx, unsigned char *buf, size_t len)
 {
 	camblet_socket *s = (camblet_socket *)ctx;
-	int ret = s->br_low_recvmsg(s, buf, len, 0);
+	int ret = plain_recvmsg(s, buf, len, 0);
 	// BearSSL doesn't like 0 return value, but it's not an error
 	// so we return -1 instead and set sock_closed to true to
 	// indicate that the socket is closed without errors.
@@ -1506,8 +1479,7 @@ static int br_low_read(void *ctx, unsigned char *buf, size_t len)
  */
 static int br_low_write(void *ctx, const unsigned char *buf, size_t len)
 {
-	camblet_socket *s = (camblet_socket *)ctx;
-	return s->br_low_sendmsg(s, buf, len);
+	return plain_sendmsg((camblet_socket *)ctx, buf, len);
 }
 
 opa_socket_context enriched_socket_eval(const tcp_connection_context *conn_ctx, direction direction, struct sock *sk, int port)
