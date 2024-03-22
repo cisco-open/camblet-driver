@@ -40,7 +40,7 @@ typedef struct crypto_info
         struct tls12_crypto_info_aes_gcm_128 gcm_128;
         struct tls12_crypto_info_aes_gcm_256 gcm_256;
         struct tls12_crypto_info_chacha20_poly1305 chapol;
-    } cipher_type;
+    } cipher;
     size_t cipher_type_len;
 } crypto_info;
 

@@ -894,9 +894,9 @@ static int configure_ktls_sock(camblet_socket *s)
 			pr_warn("configure kTLS error: kTLS is not available on this system # command[%s]", current->comm);
 		else
 			pr_warn("configure kTLS error: only ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256, "
-					"BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, "
-					"BR_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, "
-					"BR_TLS_RSA_WITH_AES_128_CCM cipher suites are supported # requested_suite[%x]",
+					"ECDHE_RSA_WITH_AES_128_GCM_SHA256, "
+					"ECDHE_RSA_WITH_AES_256_GCM_SHA384, "
+					"RSA_WITH_AES_128_CCM cipher suites are supported # requested_suite[%x]",
 					params->cipher_suite);
 
 		s->sendmsg = bearssl_sendmsg;
@@ -945,14 +945,14 @@ static int configure_ktls_sock(camblet_socket *s)
 		return ret;
 	}
 
-	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TLS, TLS_TX, KERNEL_SOCKPTR(&crypto_info_tx.cipher_type), crypto_info_tx.cipher_type_len);
+	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TLS, TLS_TX, KERNEL_SOCKPTR(&crypto_info_tx.cipher), crypto_info_tx.cipher_type_len);
 	if (ret != 0)
 	{
 		pr_err("could not set sockopt TLS_TX # command[%s] err[%d]", current->comm, ret);
 		return ret;
 	}
 
-	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TLS, TLS_RX, KERNEL_SOCKPTR(&crypto_info_rx.cipher_type), crypto_info_rx.cipher_type_len);
+	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TLS, TLS_RX, KERNEL_SOCKPTR(&crypto_info_rx.cipher), crypto_info_rx.cipher_type_len);
 	if (ret != 0)
 	{
 		pr_err("could not set sockopt TLS_RX # command[%s] err[%d]", current->comm, ret);
