@@ -888,15 +888,16 @@ static int configure_ktls_sock(camblet_socket *s)
 	br_ssl_engine_context *eng = get_ssl_engine_context(s);
 	br_ssl_session_parameters *params = &eng->session;
 
-	if ( !is_cipher_supported(params->cipher_suite) || !ktls_available)
+	if (!is_cipher_supported(params->cipher_suite) || !ktls_available)
 	{
 		if (!ktls_available)
 			pr_warn("configure kTLS error: kTLS is not available on this system # command[%s]", current->comm);
 		else
 			pr_warn("configure kTLS error: only ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256, "
-				"BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, "
-				"BR_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, "
-				"BR_TLS_RSA_WITH_AES_128_CCM cipher suites are supported # requested_suite[%x]", params->cipher_suite);
+					"BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, "
+					"BR_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, "
+					"BR_TLS_RSA_WITH_AES_128_CCM cipher suites are supported # requested_suite[%x]",
+					params->cipher_suite);
 
 		s->sendmsg = bearssl_sendmsg;
 		s->recvmsg = bearssl_recvmsg;
@@ -912,25 +913,25 @@ static int configure_ktls_sock(camblet_socket *s)
 
 	switch (params->cipher_suite)
 	{
-		case BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256:
-			setup_chacha_poly_crypto_info(&crypto_info_tx, eng->out.chapol.iv, eng->out.chapol.key, eng->out.chapol.seq);
-			setup_chacha_poly_crypto_info(&crypto_info_rx, eng->in.chapol.iv, eng->in.chapol.key, eng->in.chapol.seq);
-			break;
-		case BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
-			setup_aes_gcm_128_crypto_info(&crypto_info_tx, eng->out.gcm.iv, eng->out.gcm.key, eng->out.gcm.seq);
-			setup_aes_gcm_128_crypto_info(&crypto_info_rx, eng->in.gcm.iv, eng->in.gcm.key, eng->in.gcm.seq);
-			break;
-		case BR_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
-			setup_aes_gcm_256_crypto_info(&crypto_info_tx, eng->out.gcm.iv, eng->out.gcm.key, eng->out.gcm.seq);
-			setup_aes_gcm_256_crypto_info(&crypto_info_rx, eng->in.gcm.iv, eng->in.gcm.key, eng->in.gcm.seq);
-			break;
-		case BR_TLS_RSA_WITH_AES_128_CCM:
-			setup_aes_ccm_128_crypto_info(&crypto_info_tx, eng->out.ccm.iv, eng->out.ccm.key, eng->out.ccm.seq);
-			setup_aes_ccm_128_crypto_info(&crypto_info_rx, eng->in.ccm.iv, eng->in.ccm.key, eng->in.ccm.seq);
-			break;
-		default:
-			pr_err("cipher %x is not supported with kTLS # command[%s]", params->cipher_suite, current->comm);
-			return -1;
+	case BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256:
+		setup_chacha_poly_crypto_info(&crypto_info_tx, eng->out.chapol.iv, eng->out.chapol.key, eng->out.chapol.seq);
+		setup_chacha_poly_crypto_info(&crypto_info_rx, eng->in.chapol.iv, eng->in.chapol.key, eng->in.chapol.seq);
+		break;
+	case BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
+		setup_aes_gcm_128_crypto_info(&crypto_info_tx, eng->out.gcm.iv, eng->out.gcm.key, eng->out.gcm.seq);
+		setup_aes_gcm_128_crypto_info(&crypto_info_rx, eng->in.gcm.iv, eng->in.gcm.key, eng->in.gcm.seq);
+		break;
+	case BR_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
+		setup_aes_gcm_256_crypto_info(&crypto_info_tx, eng->out.gcm.iv, eng->out.gcm.key, eng->out.gcm.seq);
+		setup_aes_gcm_256_crypto_info(&crypto_info_rx, eng->in.gcm.iv, eng->in.gcm.key, eng->in.gcm.seq);
+		break;
+	case BR_TLS_RSA_WITH_AES_128_CCM:
+		setup_aes_ccm_128_crypto_info(&crypto_info_tx, eng->out.ccm.iv, eng->out.ccm.key, eng->out.ccm.seq);
+		setup_aes_ccm_128_crypto_info(&crypto_info_rx, eng->in.ccm.iv, eng->in.ccm.key, eng->in.ccm.seq);
+		break;
+	default:
+		pr_err("cipher %x is not supported with kTLS # command[%s]", params->cipher_suite, current->comm);
+		return -1;
 	}
 
 	// We have to set the protocol to the original here because the kTLS proto gets created from the sockets original protocol,

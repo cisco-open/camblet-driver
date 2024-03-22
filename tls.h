@@ -34,7 +34,8 @@ typedef struct br_x509_camblet_context
 
 typedef struct crypto_info
 {
-    union {
+    union
+    {
         struct tls12_crypto_info_aes_ccm_128 ccm_128;
         struct tls12_crypto_info_aes_gcm_128 gcm_128;
         struct tls12_crypto_info_aes_gcm_256 gcm_256;
