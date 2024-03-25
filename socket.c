@@ -532,7 +532,6 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 
 	// check if bearssl is already closed
 	unsigned int state = br_ssl_engine_current_state(&s->cc->eng);
-	printk("ensure_tls_handshake # command[%s] state[%d]\n", current->comm, state);
 	if (state == BR_SSL_CLOSED)
 	{
 		pr_debug("TLS handshake failed because bearssl is already closed # command[%s] sock[%p]", current->comm, s->sock);
