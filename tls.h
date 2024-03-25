@@ -14,6 +14,7 @@
 #include "bearssl.h"
 #include "opa.h"
 #include "socket.h"
+#include <net/tls.h>
 
 /*
  * This is a wrapper around the BearSSL X.509 validation engine. It
@@ -31,9 +32,26 @@ typedef struct br_x509_camblet_context
     bool insecure;
 } br_x509_camblet_context;
 
+typedef struct crypto_info
+{
+    union
+    {
+        struct tls12_crypto_info_aes_ccm_128 ccm_128;
+        struct tls12_crypto_info_aes_gcm_128 gcm_128;
+        struct tls12_crypto_info_aes_gcm_256 gcm_256;
+        struct tls12_crypto_info_chacha20_poly1305 chapol;
+    } cipher;
+    size_t cipher_type_len;
+} crypto_info;
+
 void br_x509_camblet_init(br_x509_camblet_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context, tcp_connection_context *conn_ctx, bool insecure);
 void br_x509_camblet_free(br_x509_camblet_context *ctx);
 
 bool is_tls_handshake(const uint8_t *b);
 
+void setup_aes_ccm_128_crypto_info(crypto_info *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq);
+void setup_aes_gcm_128_crypto_info(crypto_info *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq);
+void setup_aes_gcm_256_crypto_info(crypto_info *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq);
+void setup_chacha_poly_crypto_info(crypto_info *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq);
+bool is_cipher_supported(uint16_t cipher_suite);
 #endif

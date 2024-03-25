@@ -223,3 +223,68 @@ void br_x509_camblet_free(br_x509_camblet_context *ctx)
     }
     kfree(ctx->ctx.name_elts);
 }
+
+void setup_aes_gcm_128_crypto_info(crypto_info *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq)
+{
+    crypto_info->cipher.gcm_128.info.version = TLS_1_2_VERSION;
+    crypto_info->cipher.gcm_128.info.cipher_type = TLS_CIPHER_AES_GCM_128;
+
+    memcpy(crypto_info->cipher.gcm_128.key, key, TLS_CIPHER_AES_GCM_128_KEY_SIZE);
+    memcpy(crypto_info->cipher.gcm_128.salt, iv, TLS_CIPHER_AES_GCM_128_SALT_SIZE);
+
+    uint64_t swapseq = m3_bswap64(seq);
+    memcpy(crypto_info->cipher.gcm_128.iv, &swapseq, TLS_CIPHER_AES_GCM_128_IV_SIZE);
+    memcpy(crypto_info->cipher.gcm_128.rec_seq, &swapseq, TLS_CIPHER_AES_GCM_128_REC_SEQ_SIZE);
+
+    crypto_info->cipher_type_len = sizeof(crypto_info->cipher.gcm_128);
+}
+
+void setup_aes_gcm_256_crypto_info(crypto_info *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq)
+{
+    crypto_info->cipher.gcm_256.info.version = TLS_1_2_VERSION;
+    crypto_info->cipher.gcm_256.info.cipher_type = TLS_CIPHER_AES_GCM_256;
+
+    memcpy(crypto_info->cipher.gcm_256.key, key, TLS_CIPHER_AES_GCM_256_KEY_SIZE);
+    memcpy(crypto_info->cipher.gcm_256.salt, iv, TLS_CIPHER_AES_GCM_256_SALT_SIZE);
+
+    uint64_t swapseq = m3_bswap64(seq);
+    memcpy(crypto_info->cipher.gcm_256.iv, &swapseq, TLS_CIPHER_AES_GCM_256_IV_SIZE);
+    memcpy(crypto_info->cipher.gcm_256.rec_seq, &swapseq, TLS_CIPHER_AES_GCM_256_REC_SEQ_SIZE);
+
+    crypto_info->cipher_type_len = sizeof(crypto_info->cipher.gcm_256);
+}
+
+void setup_chacha_poly_crypto_info(crypto_info *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq)
+{
+    crypto_info->cipher.chapol.info.version = TLS_1_2_VERSION;
+    crypto_info->cipher.chapol.info.cipher_type = TLS_CIPHER_CHACHA20_POLY1305;
+
+    memcpy(crypto_info->cipher.chapol.iv, iv, TLS_CIPHER_CHACHA20_POLY1305_IV_SIZE);
+    memcpy(crypto_info->cipher.chapol.key, key, TLS_CIPHER_CHACHA20_POLY1305_KEY_SIZE);
+
+    uint64_t swapseq = m3_bswap64(seq);
+    memcpy(crypto_info->cipher.chapol.rec_seq, &swapseq, TLS_CIPHER_CHACHA20_POLY1305_REC_SEQ_SIZE);
+    crypto_info->cipher_type_len = sizeof(crypto_info->cipher.chapol);
+}
+
+void setup_aes_ccm_128_crypto_info(crypto_info *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq)
+{
+    crypto_info->cipher.ccm_128.info.version = TLS_1_2_VERSION;
+    crypto_info->cipher.ccm_128.info.cipher_type = TLS_CIPHER_AES_CCM_128;
+
+    memcpy(crypto_info->cipher.ccm_128.salt, iv, TLS_CIPHER_AES_CCM_128_SALT_SIZE);
+    memcpy(crypto_info->cipher.ccm_128.key, key, TLS_CIPHER_AES_CCM_128_KEY_SIZE);
+
+    uint64_t swapseq = m3_bswap64(seq);
+    memcpy(crypto_info->cipher.ccm_128.iv, &swapseq, TLS_CIPHER_AES_CCM_128_IV_SIZE);
+    memcpy(crypto_info->cipher.ccm_128.rec_seq, &swapseq, TLS_CIPHER_AES_CCM_128_REC_SEQ_SIZE);
+    crypto_info->cipher_type_len = sizeof(crypto_info->cipher.ccm_128);
+}
+
+bool is_cipher_supported(uint16_t cipher_suite)
+{
+    return cipher_suite == BR_TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 ||
+           cipher_suite == BR_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ||
+           cipher_suite == BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 ||
+           cipher_suite == BR_TLS_RSA_WITH_AES_128_CCM;
+}

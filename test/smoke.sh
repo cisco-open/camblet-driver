@@ -24,8 +24,14 @@ diff bigfile.o bigfile_downloaded.o
 echo "Test bearssl with non-bearssl compatibility"
 python3 -m http.server 7000 >/tmp/python.log &
 sleep 1
-echo "testing with curl..."
+echo "testing with curl using default cipher..."
 curl -k -v https://localhost:7000/
+echo "testing with curl using AES_GCM_128 cipher..."
+curl -k -v --ciphers ECDHE-RSA-AES128-GCM-SHA256 https://localhost:7000/
+echo "testing with curl using AES_GCM_256 cipher..."
+curl -k -v --ciphers ECDHE-RSA-AES256-GCM-SHA384 https://localhost:7000/
+echo "testing with curl using CHACHA_POLY cipher..."
+curl -k -v --ciphers ECDHE-RSA-CHACHA20-POLY1305 https://localhost:7000/
 echo "testing with wget..."
 wget --no-check-certificate https://localhost:7000/
 
