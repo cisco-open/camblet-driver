@@ -201,6 +201,11 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 	}
 	if (br_sslio_run_until(ctx, BR_SSL_RECVAPP) < 0)
 	{
+		unsigned state = br_ssl_engine_current_state(ctx->engine);
+		if (state & BR_SSL_CLOSED)
+		{
+			return 0;
+		}
 		return -1;
 	}
 	buf = br_ssl_engine_recvapp_buf(ctx->engine, &alen);
