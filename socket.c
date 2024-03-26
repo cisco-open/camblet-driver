@@ -243,7 +243,6 @@ static int bearssl_recvmsg(camblet_socket *s, void *dst, size_t len, int flags)
 
 static void bearssl_close(camblet_socket *s)
 {
-	mutex_lock(&s->lock);
 	br_sslio_flush(&s->ioc);
 	// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
 	if (br_sslio_close(&s->ioc) != true)
@@ -256,7 +255,6 @@ static void bearssl_close(camblet_socket *s)
 	{
 		pr_debug("br_sslio SSL closed # command[%s]", current->comm);
 	}
-	mutex_unlock(&s->lock);
 }
 
 static int plain_sendmsg(camblet_socket *s, void *msg, size_t len)
@@ -862,7 +860,6 @@ int camblet_sendpage(struct sock *sock, struct page *page, int offset, size_t si
 		kref_get(&s->bearssl_refcount);
 		s->sendpage = true;
 	}
-	mutex_unlock(&s->lock);
 	
 	// log which process wants to send a page
 	pr_debug("sendpage # command[%s] size %d eor %d", current->comm, size, eor);
@@ -875,16 +872,16 @@ int camblet_sendpage(struct sock *sock, struct page *page, int offset, size_t si
 	iov_iter_kvec(&msg.msg_iter, WRITE, &iov, 1, size);
 	res = camblet_sendmsg(sock, &msg, size);
 
-	mutex_lock(&s->lock);
 	if (eor)
 	{
 		kref_put(&s->bearssl_refcount, NULL);
 		s->sendpage = false;
 	}
-	mutex_unlock(&s->lock);
 
 	kunmap(page);
 	printk("sendpage: %d\n", res);
+	mutex_unlock(&s->lock);
+
 	return res;
 }
 #endif
@@ -903,6 +900,7 @@ void camblet_close(struct sock *sk, long timeout)
 
 	if (s)
 	{
+		mutex_lock(&s->lock);
 		if (s->ktls_close)
 		{
 			close = READ_ONCE(s->ktls_close);
@@ -913,13 +911,11 @@ void camblet_close(struct sock *sk, long timeout)
 		if (s->alpn && !s->ktls_sendmsg && !s->opa_socket_ctx.passthrough)
 		{
 			// check if refs are 1, if not, wait for kref_put to finish before calling close
-			mutex_lock(&s->lock);
 			while (kref_read(&s->bearssl_refcount) > 1)
 			{
 				msleep(100);
 				pr_debug("waiting for kref_put to finish before calling close # command[%s]", current->comm);
 			}
-			mutex_unlock(&s->lock);
 
 			bearssl_close(s);
 		}
@@ -934,6 +930,8 @@ void camblet_close(struct sock *sk, long timeout)
 		// }
 
 		kref_put(&s->bearssl_refcount, camblet_socket_release);
+
+		mutex_unlock(&s->lock);
 	}
 
 	close(sk, timeout);
