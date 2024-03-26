@@ -94,6 +94,8 @@ struct camblet_socket
 
 	char *hostname;
 
+	bool sendpage;
+
 	proxywasm *p;
 	proxywasm_context *pc;
 	i64 direction;
@@ -242,6 +244,7 @@ static int bearssl_recvmsg(camblet_socket *s, void *dst, size_t len, int flags)
 static void bearssl_close(camblet_socket *s)
 {
 	mutex_lock(&s->lock);
+	br_sslio_flush(&s->ioc);
 	// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
 	if (br_sslio_close(&s->ioc) != true)
 	{
@@ -850,6 +853,19 @@ bail:
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 5, 0)
 int camblet_sendpage(struct sock *sock, struct page *page, int offset, size_t size, int flags)
 {
+	camblet_socket *s = sock->sk_user_data;
+
+	bool eor = !(flags & MSG_SENDPAGE_NOTLAST);
+	mutex_lock(&s->lock);
+	if (!s->sendpage)
+	{
+		kref_get(&s->bearssl_refcount);
+		s->sendpage = true;
+	}
+	mutex_unlock(&s->lock);
+	
+	// log which process wants to send a page
+	pr_debug("sendpage # command[%s] size %d eor %d", current->comm, size, eor);
 	ssize_t res;
 	struct msghdr msg = {.msg_flags = flags};
 	struct kvec iov;
@@ -858,7 +874,17 @@ int camblet_sendpage(struct sock *sock, struct page *page, int offset, size_t si
 	iov.iov_len = size;
 	iov_iter_kvec(&msg.msg_iter, WRITE, &iov, 1, size);
 	res = camblet_sendmsg(sock, &msg, size);
+
+	mutex_lock(&s->lock);
+	if (eor)
+	{
+		kref_put(&s->bearssl_refcount, NULL);
+		s->sendpage = false;
+	}
+	mutex_unlock(&s->lock);
+
 	kunmap(page);
+	printk("sendpage: %d\n", res);
 	return res;
 }
 #endif
@@ -877,8 +903,6 @@ void camblet_close(struct sock *sk, long timeout)
 
 	if (s)
 	{
-		WRITE_ONCE(sk->sk_user_data, NULL);
-
 		if (s->ktls_close)
 		{
 			close = READ_ONCE(s->ktls_close);
@@ -888,15 +912,26 @@ void camblet_close(struct sock *sk, long timeout)
 
 		if (s->alpn && !s->ktls_sendmsg && !s->opa_socket_ctx.passthrough)
 		{
+			// check if refs are 1, if not, wait for kref_put to finish before calling close
+			mutex_lock(&s->lock);
+			while (kref_read(&s->bearssl_refcount) > 1)
+			{
+				msleep(100);
+				pr_debug("waiting for kref_put to finish before calling close # command[%s]", current->comm);
+			}
+			mutex_unlock(&s->lock);
+
 			bearssl_close(s);
 		}
 
-		// check if refs are 1, if not, wait for kref_put to finish before calling close
-		while (kref_read(&s->bearssl_refcount) > 1)
-		{
-			msleep(100);
-			pr_debug("waiting for kref_put to finish before calling close # command[%s]", current->comm);
-		}
+		WRITE_ONCE(sk->sk_user_data, NULL);
+
+		// // check if refs are 1, if not, wait for kref_put to finish before calling close
+		// while (kref_read(&s->bearssl_refcount) > 1)
+		// {
+		// 	msleep(100);
+		// 	pr_debug("waiting for kref_put to finish before calling close # command[%s]", current->comm);
+		// }
 
 		kref_put(&s->bearssl_refcount, camblet_socket_release);
 	}
