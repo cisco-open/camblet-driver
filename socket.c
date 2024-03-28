@@ -79,7 +79,7 @@ struct camblet_socket
 		br_ssl_client_context *cc;
 	};
 
-	unsigned char iobuf[BR_SSL_BUFSIZE_BIDI * 2];
+	unsigned char iobuf[BR_SSL_BUFSIZE_BIDI];
 	br_sslio_context ioc;
 	br_x509_camblet_context xc;
 	br_x509_class validator;
@@ -87,8 +87,6 @@ struct camblet_socket
 	br_rsa_private_key *rsa_priv;
 	br_rsa_public_key *rsa_pub;
 	csr_parameters *parameters;
-
-	struct kref bearssl_refcount;
 
 	x509_certificate *cert;
 
@@ -167,7 +165,6 @@ static int ktls_recvmsg(camblet_socket *s, void *buf, size_t size, int flags)
 
 static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 {
-	printk("bearssl_sendmsg command [%s] len %d", current->comm, len);
 	mutex_lock(&s->lock);
 	int err = br_sslio_write_all(&s->ioc, src, len);
 	if (err < 0)
@@ -185,8 +182,6 @@ static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 			len = err;
 		}
 	}
-
-	printk("bearssl_sendmsg command [%s] ret %d", current->comm, len);
 
 	mutex_unlock(&s->lock);
 
@@ -228,7 +223,6 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 static int bearssl_recvmsg(camblet_socket *s, void *dst, size_t len, int flags)
 {
 	mutex_lock(&s->lock);
-	printk("bearssl_recvmsg command [%s] flags %d", current->comm, flags);
 	int ret = br_sslio_read_with_flags(&s->ioc, dst, len, flags);
 	if (ret < 0)
 	{
@@ -242,7 +236,6 @@ static int bearssl_recvmsg(camblet_socket *s, void *dst, size_t len, int flags)
 		// 	ret = -EIO;
 		// // pr_err("br_sslio_read error # command[%s] err[%d]", current->comm, last_error);
 	}
-	printk("bearssl_recvmsg command [%s] ret %d", current->comm, ret);
 	mutex_unlock(&s->lock);
 	return ret;
 }
@@ -423,8 +416,6 @@ static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_c
 	s->read_buffer = buffer_new(16 * 1024);
 	s->write_buffer = buffer_new(16 * 1024);
 
-	kref_init(&s->bearssl_refcount);
-
 	s->sock = sock;
 	s->opa_socket_ctx = opa_socket_ctx;
 
@@ -461,8 +452,6 @@ static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_c
 	s->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
 	s->read_buffer = buffer_new(16 * 1024);
 	s->write_buffer = buffer_new(16 * 1024);
-
-	kref_init(&s->bearssl_refcount);
 
 	s->sock = sock;
 	s->opa_socket_ctx = opa_socket_ctx;
@@ -585,7 +574,7 @@ retry:
 			ret = -ECONNRESET;
 			goto bail;
 		}
-		else if (ret == -EAGAIN)
+		else if (ret == -EAGAIN || ret == -EWOULDBLOCK)
 		{
 			goto retry;
 		}
@@ -713,7 +702,6 @@ int camblet_recvmsg(struct sock *sock,
 
 			if (ret == -EAGAIN || ret == -EWOULDBLOCK)
 			{
-				printk("recvmsg: camblet_socket_read would block # command[%s]", current->comm);
 				continue;
 			}
 
@@ -871,16 +859,11 @@ int camblet_sendpage(struct sock *sock, struct page *page, int offset, size_t si
 	camblet_socket *s = sock->sk_user_data;
 
 	bool eor = !(flags & MSG_SENDPAGE_NOTLAST);
-	// mutex_lock(&s->lock);
 	if (!s->sendpage && !eor)
 	{
-		printk("incrementing sendpage refcount");
-		kref_get(&s->bearssl_refcount);
 		s->sendpage = true;
 	}
 	
-	// log which process wants to send a page
-	pr_debug("sendpage # command[%s] size %d eor %d", current->comm, size, eor);
 	ssize_t res;
 	struct msghdr msg = {.msg_flags = flags};
 	struct kvec iov;
@@ -892,24 +875,14 @@ int camblet_sendpage(struct sock *sock, struct page *page, int offset, size_t si
 
 	if (s->sendpage && eor)
 	{
-		printk("decrementing [%p] sendpage refcount", s);
-		kref_put(&s->bearssl_refcount, NULL);
 		s->sendpage = false;
 	}
 
 	kunmap(page);
-	printk("sendpage: %d\n", res);
-	// mutex_unlock(&s->lock);
 
 	return res;
 }
 #endif
-
-static void camblet_socket_release(struct kref *kref)
-{
-	camblet_socket *s = container_of(kref, camblet_socket, bearssl_refcount);
-	camblet_socket_free(s);
-}
 
 void camblet_close(struct sock *sk, long timeout)
 {
@@ -929,11 +902,9 @@ void camblet_close(struct sock *sk, long timeout)
 
 		if (s->alpn && !s->ktls_sendmsg && !s->opa_socket_ctx.passthrough)
 		{
-			// // check if refs are 1, if not, wait for kref_put to finish before calling close
 			while (s->sendpage)
 			{
-				msleep_interruptible(1000);
-				pr_debug("waiting for kref_put to finish before calling close # [%p] command[%s] %d", s, current->comm, s->sendpage);
+				msleep_interruptible(100);
 			}
 
 			bearssl_close(s);
@@ -941,14 +912,7 @@ void camblet_close(struct sock *sk, long timeout)
 
 		WRITE_ONCE(sk->sk_user_data, NULL);
 
-		// // check if refs are 1, if not, wait for kref_put to finish before calling close
-		// while (kref_read(&s->bearssl_refcount) > 1)
-		// {
-		// 	msleep(100);
-		// 	pr_debug("waiting for kref_put to finish before calling close # command[%s]", current->comm);
-		// }
-
-		kref_put(&s->bearssl_refcount, camblet_socket_release);
+		camblet_socket_free(s);
 
 		mutex_unlock(&s->lock);
 	}
@@ -1122,7 +1086,6 @@ int camblet_setsockopt(struct sock *sk, int level,
 					   int optname, sockptr_t optval,
 					   unsigned int optlen)
 {
-	printk("setsockopt # command[%s] level[%d] optname[%d]", current->comm, level, optname);
 	if (level == SOL_TCP && optname == TCP_ULP)
 	{
 		// check if optval is "camblet"
@@ -1588,9 +1551,7 @@ cleanup:
 static int br_low_read(void *ctx, unsigned char *buf, size_t len)
 {
 	camblet_socket *s = (camblet_socket *)ctx;
-	printk("br_low_read # MSG_DONTWAIT command[%s] len[%d]", current->comm, len);
 	int ret = plain_recvmsg(s, buf, len, MSG_DONTWAIT);
-	printk("br_low_read # MSG_DONTWAIT command[%s] ret[%d]", current->comm, ret);
 	// BearSSL doesn't like 0 return value, but it's not an error
 	// so we return -1 instead and set sock_closed to true to
 	// indicate that the socket is closed without errors.
@@ -1708,7 +1669,7 @@ void camblet_configure_server_tls(camblet_socket *sc)
 	 * "split the buffer into separate input and output
 	 * areas").
 	 */
-	br_ssl_engine_set_buffer(&sc->sc->eng, &sc->iobuf, BR_SSL_BUFSIZE_BIDI * 2, true);
+	br_ssl_engine_set_buffer(&sc->sc->eng, &sc->iobuf, BR_SSL_BUFSIZE_BIDI, true);
 
 	br_ssl_engine_set_protocol_names(&sc->sc->eng, ALPNs_passthrough, ALPNs_passthrough_NUM);
 
@@ -1777,7 +1738,7 @@ void camblet_configure_client_tls(camblet_socket *sc)
 	 * "split the buffer into separate input and output
 	 * areas").
 	 */
-	br_ssl_engine_set_buffer(&sc->cc->eng, &sc->iobuf, BR_SSL_BUFSIZE_BIDI * 2, true);
+	br_ssl_engine_set_buffer(&sc->cc->eng, &sc->iobuf, BR_SSL_BUFSIZE_BIDI, true);
 
 	br_ssl_engine_set_protocol_names(&sc->cc->eng, ALPNs, ALPNs_NUM);
 
