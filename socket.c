@@ -236,8 +236,7 @@ static void bearssl_close(camblet_socket *s)
 	if (br_sslio_close(&s->ioc) != true)
 	{
 		const br_ssl_engine_context *ec = get_ssl_engine_context(s);
-		int err = br_ssl_engine_last_error(ec);
-		pr_err("br_sslio_close error # command[%s] err[%d]", current->comm, err);
+		pr_err("br_sslio_close error # command[%s] err[%d]", current->comm, br_ssl_engine_last_error(ec));
 	}
 	else
 	{
