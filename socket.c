@@ -92,8 +92,6 @@ struct camblet_socket
 
 	char *hostname;
 
-	bool sendpage;
-
 	proxywasm *p;
 	proxywasm_context *pc;
 	i64 direction;
@@ -848,14 +846,6 @@ bail:
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 5, 0)
 int camblet_sendpage(struct sock *sock, struct page *page, int offset, size_t size, int flags)
 {
-	camblet_socket *s = sock->sk_user_data;
-
-	bool eor = !(flags & MSG_SENDPAGE_NOTLAST);
-	if (!s->sendpage && !eor)
-	{
-		s->sendpage = true;
-	}
-	
 	ssize_t res;
 	struct msghdr msg = {.msg_flags = flags};
 	struct kvec iov;
@@ -864,14 +854,7 @@ int camblet_sendpage(struct sock *sock, struct page *page, int offset, size_t si
 	iov.iov_len = size;
 	iov_iter_kvec(&msg.msg_iter, WRITE, &iov, 1, size);
 	res = camblet_sendmsg(sock, &msg, size);
-
-	if (s->sendpage && eor)
-	{
-		s->sendpage = false;
-	}
-
 	kunmap(page);
-
 	return res;
 }
 #endif
@@ -894,11 +877,6 @@ void camblet_close(struct sock *sk, long timeout)
 
 		if (s->alpn && !s->ktls_sendmsg && !s->opa_socket_ctx.passthrough)
 		{
-			while (s->sendpage)
-			{
-				msleep_interruptible(100);
-			}
-
 			bearssl_close(s);
 		}
 
