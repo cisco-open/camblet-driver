@@ -173,7 +173,7 @@ static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 	}
 	else
 	{
-		retry:
+	retry:
 		err = br_sslio_flush(&s->ioc);
 		if (err == -EAGAIN || err == -EWOULDBLOCK)
 		{
@@ -543,7 +543,7 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 			br_ssl_client_reset(s->cc, s->hostname, false);
 		}
 
-retry:
+	retry:
 		ret = br_sslio_flush(&s->ioc);
 		if (ret == 0)
 		{
