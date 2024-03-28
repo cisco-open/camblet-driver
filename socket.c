@@ -103,7 +103,6 @@ struct camblet_socket
 	buffer_t *write_buffer;
 
 	struct sock *sock;
-	bool sock_closed;
 
 	opa_socket_context opa_socket_ctx;
 
