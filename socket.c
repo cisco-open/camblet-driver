@@ -175,8 +175,13 @@ static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 	}
 	else
 	{
+		retry:
 		err = br_sslio_flush(&s->ioc);
-		if (err < 0)
+		if (err == -EAGAIN || err == -EWOULDBLOCK)
+		{
+			goto retry;
+		}
+		else if (err < 0)
 		{
 			pr_err("br_sslio_flush error # command[%s] err[%d]", current->comm, err);
 			len = err;
@@ -224,25 +229,12 @@ static int bearssl_recvmsg(camblet_socket *s, void *dst, size_t len, int flags)
 {
 	mutex_lock(&s->lock);
 	int ret = br_sslio_read_with_flags(&s->ioc, dst, len, flags);
-	if (ret < 0)
-	{
-		// const br_ssl_engine_context *ec = get_ssl_engine_context(s);
-		// int last_error = br_ssl_engine_last_error(ec);
-		// if (last_error == 0)
-		// 	ret = 0;
-		// else if (last_error == BR_ERR_IO && s->sock_closed)
-		// 	ret = 0;
-		// else if (last_error == BR_ERR_IO)
-		// 	ret = -EIO;
-		// // pr_err("br_sslio_read error # command[%s] err[%d]", current->comm, last_error);
-	}
 	mutex_unlock(&s->lock);
 	return ret;
 }
 
 static void bearssl_close(camblet_socket *s)
 {
-	br_sslio_flush(&s->ioc);
 	// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
 	if (br_sslio_close(&s->ioc) != true)
 	{
@@ -1551,16 +1543,7 @@ cleanup:
 static int br_low_read(void *ctx, unsigned char *buf, size_t len)
 {
 	camblet_socket *s = (camblet_socket *)ctx;
-	int ret = plain_recvmsg(s, buf, len, MSG_DONTWAIT);
-	// BearSSL doesn't like 0 return value, but it's not an error
-	// so we return -1 instead and set sock_closed to true to
-	// indicate that the socket is closed without errors.
-	// if (ret == 0)
-	// {
-	// 	s->sock_closed = true;
-	// 	ret = -1;
-	// }
-	return ret;
+	return plain_recvmsg(s, buf, len, MSG_DONTWAIT);
 }
 
 /*
