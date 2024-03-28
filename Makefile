@@ -231,3 +231,6 @@ endif
 	#     mtls: false
 	# To run the perf test please use the following command:
 	# cd test/tls-perf && ./tls-perf -l 1000 -t 2 -T 10 127.0.0.1 8000
+
+minigun:
+	for i in `seq 1 100`; do curl \-4 -s localhost:8000/tls.c > /dev/null; echo $$?; done

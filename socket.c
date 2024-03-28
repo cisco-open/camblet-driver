@@ -103,7 +103,6 @@ struct camblet_socket
 	buffer_t *write_buffer;
 
 	struct sock *sock;
-	bool sock_closed;
 
 	opa_socket_context opa_socket_ctx;
 
@@ -111,7 +110,7 @@ struct camblet_socket
 						struct msghdr *msg,
 						size_t size,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
-						int noblock,
+						int nonblock,
 #endif
 						int flags,
 						int *addr_len);
@@ -163,20 +162,30 @@ static int ktls_recvmsg(camblet_socket *s, void *buf, size_t size, int flags)
 
 static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 {
+	mutex_lock(&s->lock);
 	int err = br_sslio_write_all(&s->ioc, src, len);
 	if (err < 0)
 	{
 		const br_ssl_engine_context *ec = get_ssl_engine_context(s);
 		pr_err("br_sslio_write_all error # command[%s] br_last_err[%d]", current->comm, br_ssl_engine_last_error(ec));
-		return err;
+		len = err;
+	}
+	else
+	{
+	retry:
+		err = br_sslio_flush(&s->ioc);
+		if (err == -EAGAIN || err == -EWOULDBLOCK)
+		{
+			goto retry;
+		}
+		else if (err < 0)
+		{
+			pr_err("br_sslio_flush error # command[%s] err[%d]", current->comm, err);
+			len = err;
+		}
 	}
 
-	err = br_sslio_flush(&s->ioc);
-	if (err < 0)
-	{
-		pr_err("br_sslio_flush error # command[%s] err[%d]", current->comm, err);
-		return err;
-	}
+	mutex_unlock(&s->lock);
 
 	return len;
 }
@@ -192,9 +201,15 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 	{
 		return 0;
 	}
-	if (br_sslio_run_until(ctx, BR_SSL_RECVAPP) < 0)
+	int ret = br_sslio_run_until(ctx, BR_SSL_RECVAPP);
+	if (ret < 0)
 	{
-		return -1;
+		unsigned state = br_ssl_engine_current_state(ctx->engine);
+		if (state & BR_SSL_CLOSED)
+		{
+			return 0;
+		}
+		return ret;
 	}
 	buf = br_ssl_engine_recvapp_buf(ctx->engine, &alen);
 	if (alen > len)
@@ -209,20 +224,24 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 
 static int bearssl_recvmsg(camblet_socket *s, void *dst, size_t len, int flags)
 {
+	mutex_lock(&s->lock);
 	int ret = br_sslio_read_with_flags(&s->ioc, dst, len, flags);
-	if (ret < 0)
+	mutex_unlock(&s->lock);
+	return ret;
+}
+
+static void bearssl_close(camblet_socket *s)
+{
+	// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
+	if (br_sslio_close(&s->ioc) != true)
 	{
 		const br_ssl_engine_context *ec = get_ssl_engine_context(s);
-		int last_error = br_ssl_engine_last_error(ec);
-		if (last_error == 0)
-			return 0;
-		if (last_error == BR_ERR_IO && s->sock_closed)
-			return 0;
-		if (last_error == BR_ERR_IO)
-			return -EIO;
-		pr_err("br_sslio_read error # command[%s] err[%d]", current->comm, last_error);
+		pr_err("br_sslio_close error # command[%s] err[%d]", current->comm, br_ssl_engine_last_error(ec));
 	}
-	return ret;
+	else
+	{
+		pr_debug("br_sslio SSL closed # command[%s]", current->comm);
+	}
 }
 
 static int plain_sendmsg(camblet_socket *s, void *msg, size_t len)
@@ -243,9 +262,17 @@ static int plain_recvmsg(camblet_socket *s, void *buf, size_t size, int flags)
 
 	iov_iter_kvec(&hdr.msg_iter, READ, &iov, 1, size);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
+	int nonblock = 0;
+	if (flags & MSG_DONTWAIT)
+	{
+		nonblock = MSG_DONTWAIT;
+	}
+#endif
+
 	return tcp_recvmsg(s->sock, &hdr, size,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
-					   0,
+					   nonblock,
 #endif
 					   flags, &addr_len);
 }
@@ -316,22 +343,6 @@ static void camblet_socket_free(camblet_socket *s)
 			proxywasm_lock(s->p, s->pc);
 			proxywasm_destroy_context(s->p);
 			proxywasm_unlock(s->p);
-		}
-
-		if (s->alpn && !s->ktls_sendmsg && !s->opa_socket_ctx.passthrough)
-		{
-			// This call runs the SSL closure protocol (sending a close_notify, receiving the response close_notify).
-			if (br_sslio_close(&s->ioc) != BR_ERR_OK)
-			{
-				const br_ssl_engine_context *ec = get_ssl_engine_context(s);
-				int err = br_ssl_engine_last_error(ec);
-				if (err != 0 && err != BR_ERR_IO)
-					pr_err("br_sslio_close error # command[%s] err[%d]", current->comm, err);
-			}
-			else
-			{
-				pr_debug("br_sslio SSL closed # command[%s]", current->comm);
-			}
 		}
 
 		if (s->direction == ListenerDirectionInbound)
@@ -516,6 +527,15 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 
 	mutex_lock(&s->lock);
 
+	// check if bearssl is already closed
+	unsigned int state = br_ssl_engine_current_state(&s->cc->eng);
+	if (state == BR_SSL_CLOSED)
+	{
+		pr_debug("TLS handshake failed because bearssl is already closed # command[%s] sock[%p]", current->comm, s->sock);
+		ret = -ECONNRESET;
+		goto bail;
+	}
+
 	alpn = READ_ONCE(s->alpn);
 
 	if (alpn == NULL)
@@ -529,6 +549,7 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 			br_ssl_client_reset(s->cc, s->hostname, false);
 		}
 
+	retry:
 		ret = br_sslio_flush(&s->ioc);
 		if (ret == 0)
 		{
@@ -548,6 +569,10 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 			trace_msg(conn_ctx, "TLS handshake got interrupted by connection close", 0);
 			ret = -ECONNRESET;
 			goto bail;
+		}
+		else if (ret == -EAGAIN || ret == -EWOULDBLOCK)
+		{
+			goto retry;
 		}
 		else
 		{
@@ -631,7 +656,7 @@ int camblet_recvmsg(struct sock *sock,
 					struct msghdr *msg,
 					size_t size,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
-					int noblock,
+					int nonblock,
 #endif
 					int flags,
 					int *addr_len)
@@ -639,6 +664,11 @@ int camblet_recvmsg(struct sock *sock,
 	int ret, len;
 
 	camblet_socket *s = sock->sk_user_data;
+
+	if (!s)
+	{
+		return -ECONNRESET;
+	}
 
 	ret = ensure_tls_handshake(s, msg);
 	if (ret != 0)
@@ -665,6 +695,11 @@ int camblet_recvmsg(struct sock *sock,
 		{
 			if (ret == -ERESTARTSYS)
 				ret = -EINTR;
+
+			if (ret == -EAGAIN || ret == -EWOULDBLOCK)
+			{
+				continue;
+			}
 
 			goto bail;
 		}
@@ -740,6 +775,11 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	int ret, len;
 
 	camblet_socket *s = sock->sk_user_data;
+
+	if (!s)
+	{
+		return -ECONNRESET;
+	}
 
 	ret = ensure_tls_handshake(s, msg);
 	if (ret != 0)
@@ -828,18 +868,29 @@ int camblet_sendpage(struct sock *sock, struct page *page, int offset, size_t si
 void camblet_close(struct sock *sk, long timeout)
 {
 	void (*close)(struct sock *sk, long timeout) = tcp_close;
+
 	camblet_socket *s = READ_ONCE(sk->sk_user_data);
 
 	if (s)
 	{
+		mutex_lock(&s->lock);
 		if (s->ktls_close)
 		{
 			close = READ_ONCE(s->ktls_close);
 		}
 
 		pr_debug("free camblet socket # command[%s] sk[%p]", current->comm, sk);
-		camblet_socket_free(s);
+
+		if (s->alpn && !s->ktls_sendmsg && !s->opa_socket_ctx.passthrough)
+		{
+			bearssl_close(s);
+		}
+
 		WRITE_ONCE(sk->sk_user_data, NULL);
+
+		camblet_socket_free(s);
+
+		mutex_unlock(&s->lock);
 	}
 
 	close(sk, timeout);
@@ -1476,16 +1527,7 @@ cleanup:
 static int br_low_read(void *ctx, unsigned char *buf, size_t len)
 {
 	camblet_socket *s = (camblet_socket *)ctx;
-	int ret = plain_recvmsg(s, buf, len, 0);
-	// BearSSL doesn't like 0 return value, but it's not an error
-	// so we return -1 instead and set sock_closed to true to
-	// indicate that the socket is closed without errors.
-	if (ret == 0)
-	{
-		s->sock_closed = true;
-		ret = -1;
-	}
-	return ret;
+	return plain_recvmsg(s, buf, len, MSG_DONTWAIT);
 }
 
 /*

@@ -12,7 +12,7 @@
 
 #include <linux/slab.h>
 #include <linux/hashtable.h>
-#include <linux/crc32c.h>
+#include <linux/xxhash.h>
 
 #include "sd.h"
 
@@ -43,7 +43,7 @@ void sd_table_init()
 
 static u64 sd_entry_hash(const char *name, int len)
 {
-    return crc32c((u32)~1, name, len);
+    return xxh32(name, len, 0);
 }
 
 void service_discovery_table_entry_add(service_discovery_table *table, service_discovery_entry *entry)
