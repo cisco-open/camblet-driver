@@ -32,7 +32,7 @@ void augmentation_response_put(augmentation_response *response);
 /*
  * augment_workload
  *
- * returns an struct augmentation_response pointer or ERR_PTR() on error;
+ * returns an augmentation_response struct pointer or ERR_PTR() on error
  */
 augmentation_response *augment_workload(void);
 

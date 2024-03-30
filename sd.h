@@ -26,13 +26,18 @@ typedef struct service_discovery_table
     DECLARE_HASHTABLE(htable, 8);
 } service_discovery_table;
 
-void sd_table_init(void);
+int sd_table_init(void);
 void sd_table_free(void);
 service_discovery_entry *sd_table_entry_get(const char *address);
 void sd_table_replace(service_discovery_table *table);
 void sd_table_entry_del(service_discovery_entry *entry);
-
+/*
+ * service_discovery_table_create
+ *
+ * returns a service_discovery_table struct pointer or ERR_PTR() on error
+ */
 service_discovery_table *service_discovery_table_create(void);
 void service_discovery_table_entry_add(service_discovery_table *table, service_discovery_entry *entry);
+void service_discovery_entry_free(service_discovery_entry *entry);
 
 #endif

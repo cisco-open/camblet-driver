@@ -204,49 +204,103 @@ wasm_vm_result load_module(const char *name, const char *code, unsigned length, 
     return result;
 }
 
-static void load_sd_info(const char *data)
+static int load_sd_info(const char *data)
 {
+    int retval = 0;
+    JSON_Value *json;
+
     if (!data)
     {
-        return;
+        retval = -EINVAL;
+        goto ret;
     }
 
     pr_info("load service discovery info # data[%s]", data);
 
-    JSON_Value *json = json_parse_string(data);
+    json = json_parse_string(data);
     if (json == NULL)
     {
         pr_err("could not load sd info: invalid json");
+        retval = -EINVAL;
+        goto ret;
     }
 
     JSON_Object *root = json_value_get_object(json);
     if (root == NULL)
     {
         pr_err("could not load sd info: invalid json root");
+        retval = -EINVAL;
+        goto ret;
     }
 
     service_discovery_table *table = service_discovery_table_create();
+    if (IS_ERR(table))
+    {
+        retval = PTR_ERR(table);
+        goto ret;
+    }
     service_discovery_entry *entry;
 
     size_t i, k;
     for (i = 0; i < json_object_get_count(root); i++)
     {
         const char *name = json_object_get_name(root, i);
+        if (!name)
+        {
+            pr_err("could not load sd info: record[%d]: could not get object name", i);
+            retval = -EINVAL;
+            goto ret;
+        }
         JSON_Object *json_entry = json_object_get_object(root, name);
+        if (!json_entry)
+        {
+            pr_err("could not load sd info: record[%d]: could not get object", i);
+            retval = -EINVAL;
+            goto ret;
+        }
         JSON_Array *labels = json_object_get_array(json_entry, "labels");
+        if (!labels)
+        {
+            pr_err("could not load sd info: record[%d]: could not get labels", i);
+            retval = -EINVAL;
+            goto ret;
+        }
 
         entry = kzalloc(sizeof(*entry), GFP_KERNEL);
-        entry->address = strdup(name);
+        if (!entry)
+        {
+            retval = -ENOMEM;
+            goto ret;
+        }
+        entry->address = kstrdup(name, GFP_KERNEL);
+        if (!entry->address)
+        {
+            service_discovery_entry_free(entry);
+            retval = -ENOMEM;
+            goto ret;
+        }
 
         pr_debug("create sd entry # address[%s]", entry->address);
 
         entry->labels_len = json_array_get_count(labels);
         entry->labels = kmalloc(entry->labels_len * sizeof(char *), GFP_KERNEL);
+        if (!entry->labels)
+        {
+            service_discovery_entry_free(entry);
+            retval = -ENOMEM;
+            goto ret;
+        }
 
         for (k = 0; k < entry->labels_len; k++)
         {
             const char *label = json_array_get_string(labels, k);
-            entry->labels[k] = strdup(label);
+            entry->labels[k] = kstrdup(label, GFP_KERNEL);
+            if (!entry->labels[k])
+            {
+                service_discovery_entry_free(entry);
+                retval = -ENOMEM;
+                goto ret;
+            }
             pr_debug("set sd entry label # address[%s] label[%s]", entry->address, entry->labels[k]);
         }
 
@@ -255,7 +309,10 @@ static void load_sd_info(const char *data)
 
     sd_table_replace(table);
 
+ret:
     json_value_free(json);
+
+    return retval;
 }
 
 static void load_camblet_config(const char *data)

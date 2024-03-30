@@ -50,10 +50,17 @@ static int __init camblet_init(void)
         return -1;
     }
 
-    camblet_config_init();
-    sd_table_init();
-
     int ret = 0;
+
+    camblet_config_init();
+    ret = sd_table_init();
+    if (ret < 0)
+    {
+        FATAL("could not create sd table: error: %d", ret);
+        return -1;
+    }
+
+    ret = 0;
 
     ret += chardev_init();
     ret += socket_init();

@@ -32,13 +32,24 @@ static void sd_table_unlock(void)
 service_discovery_table *service_discovery_table_create()
 {
     service_discovery_table *table = kzalloc(sizeof(service_discovery_table), GFP_KERNEL);
+    if (!table)
+    {
+        return ERR_PTR(-ENOMEM);
+    }
+
     hash_init(table->htable);
     return table;
 }
 
-void sd_table_init()
+int sd_table_init()
 {
     sd_table = service_discovery_table_create();
+    if (IS_ERR(sd_table))
+    {
+        return PTR_ERR(sd_table);
+    }
+
+    return 0;
 }
 
 static u64 sd_entry_hash(const char *name, int len)
@@ -101,7 +112,7 @@ void sd_table_entry_del(service_discovery_entry *entry)
     sd_table_unlock();
 }
 
-static void service_discovery_entry_free(service_discovery_entry *entry)
+void service_discovery_entry_free(service_discovery_entry *entry)
 {
     if (!entry)
     {
