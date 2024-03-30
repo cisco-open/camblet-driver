@@ -29,6 +29,11 @@ typedef struct
 
 void augmentation_response_get(augmentation_response *response);
 void augmentation_response_put(augmentation_response *response);
+/*
+ * augment_workload
+ *
+ * returns an struct augmentation_response pointer or ERR_PTR() on error;
+ */
 augmentation_response *augment_workload(void);
 
 #endif

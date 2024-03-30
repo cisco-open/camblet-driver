@@ -128,6 +128,7 @@ struct camblet_socket
 };
 
 static int get_read_buffer_capacity(camblet_socket *s);
+static void tcp_connection_context_free(tcp_connection_context *ctx);
 
 static br_ssl_engine_context *get_ssl_engine_context(camblet_socket *s)
 {
@@ -370,8 +371,7 @@ static void camblet_socket_free(camblet_socket *s)
 		x509_certificate_put(s->cert);
 
 		kfree(s->parameters);
-		kfree(s->conn_ctx->peer_spiffe_id);
-		kfree(s->conn_ctx);
+		tcp_connection_context_free(s->conn_ctx);
 		kfree(s);
 	}
 }
@@ -1422,6 +1422,17 @@ static tcp_connection_context *tcp_connection_context_init(direction direction, 
 	return ctx;
 }
 
+static void tcp_connection_context_free(tcp_connection_context *ctx)
+{
+	if (!ctx)
+	{
+		return;
+	}
+
+	kfree(ctx->peer_spiffe_id);
+	kfree(ctx);
+}
+
 void add_sd_entry_labels_to_json(service_discovery_entry *sd_entry, JSON_Value *json)
 {
 	if (!json)
@@ -1576,6 +1587,14 @@ opa_socket_context enriched_socket_eval(const tcp_connection_context *conn_ctx, 
 
 	// augmenting process connection
 	augmentation_response *response = augment_workload();
+	if (IS_ERR(response))
+	{
+		opa_socket_ctx.error = PTR_ERR(response);
+		char err_code_str[8];
+		snprintf(err_code_str, 8, "%d", opa_socket_ctx.error);
+		trace_err(conn_ctx, "could not augment process connection", 2, "error_code", err_code_str);
+		goto ret;
+	}
 	if (response->error)
 	{
 		trace_err(conn_ctx, "could not augment process connection", 2, "error", response->error);
@@ -1597,6 +1616,7 @@ opa_socket_context enriched_socket_eval(const tcp_connection_context *conn_ctx, 
 		augmentation_response_put(response);
 	}
 
+ret:
 	return opa_socket_ctx;
 }
 
@@ -1759,6 +1779,12 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 	tcp_connection_context *conn_ctx = tcp_connection_context_init(INPUT, client_sk, port);
 
 	opa_socket_context opa_socket_ctx = enriched_socket_eval(conn_ctx, INPUT, client_sk, port);
+	if (opa_socket_ctx.error < 0)
+	{
+		tcp_connection_context_free(conn_ctx);
+		*err = opa_socket_ctx.error;
+		goto error;
+	}
 
 	if (opa_socket_ctx.allowed)
 	{
@@ -1836,6 +1862,11 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	tcp_connection_context *conn_ctx = tcp_connection_context_init(OUTPUT, sk, port);
 
 	opa_socket_context opa_socket_ctx = enriched_socket_eval(conn_ctx, OUTPUT, sk, port);
+	if (opa_socket_ctx.error < 0)
+	{
+		tcp_connection_context_free(conn_ctx);
+		return opa_socket_ctx.error;
+	}
 
 	if (opa_socket_ctx.allowed)
 	{
