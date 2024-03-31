@@ -11,16 +11,26 @@
 #ifndef buffer_h
 #define buffer_h
 
-typedef struct buffer_t {
+typedef struct buffer_t
+{
   char *data;
   int size;
   int capacity;
 } buffer_t;
 
-
+/*
+ * buffer_new
+ *
+ * returns a buffer_t struct pointer or ERR_PTR() on error
+ */
 buffer_t *buffer_new(int capacity);
 void buffer_free(buffer_t *buffer);
-// returns a pointer to the buffer where the caller can write len long data (possibly resizing the buffer)
+/*
+ * buffer_grow
+ *
+ * returns a buffer_t struct pointer where the caller can write len long data
+ * (possibly resizing the buffer) or NULL on realloc error
+ */
 char *buffer_grow(buffer_t *buffer, int len);
 
 #endif

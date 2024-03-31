@@ -335,7 +335,7 @@ static void set_write_buffer_size(camblet_socket *s, int size)
 
 static void camblet_socket_free(camblet_socket *s)
 {
-	if (s)
+	if (s && !IS_ERR(s))
 	{
 		pr_debug("free camblet socket # command[%s]", current->comm);
 
@@ -405,13 +405,26 @@ int proxywasm_attach(proxywasm *p, camblet_socket *s, ListenerDirection directio
 static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_context opa_socket_ctx, tcp_connection_context *conn_ctx)
 {
 	camblet_socket *s = kzalloc(sizeof(camblet_socket), GFP_KERNEL);
+	if (!s)
+		return ERR_PTR(-ENOMEM);
 	s->sc = kzalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
+	if (!s->sc)
+		goto enomem;
 	s->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
+	if (!s->rsa_priv)
+		goto enomem;
 	s->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
+	if (!s->rsa_pub)
+		goto enomem;
 	s->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
+	if (!s->parameters)
+		goto enomem;
 	s->read_buffer = buffer_new(16 * 1024);
+	if (IS_ERR(s->read_buffer))
+		goto enomem;
 	s->write_buffer = buffer_new(16 * 1024);
-
+	if (IS_ERR(s->write_buffer))
+		goto enomem;
 	s->sock = sock;
 	s->opa_socket_ctx = opa_socket_ctx;
 
@@ -437,17 +450,39 @@ static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_c
 	}
 
 	return s;
+
+enomem:
+	camblet_socket_free(s);
+	return ERR_PTR(-ENOMEM);
 }
 
 static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_context opa_socket_ctx, tcp_connection_context *conn_ctx)
 {
 	camblet_socket *s = kzalloc(sizeof(camblet_socket), GFP_KERNEL);
+	if (!s)
+		return ERR_PTR(-ENOMEM);
 	s->cc = kzalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
+	if (!s->sc)
+		goto enomem;
 	s->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
+	if (!s->rsa_priv)
+		goto enomem;
 	s->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
+	if (!s->rsa_pub)
+		goto enomem;
 	s->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
+	if (!s->parameters)
+		goto enomem;
 	s->read_buffer = buffer_new(16 * 1024);
+	if (IS_ERR(s->read_buffer))
+	{
+		goto enomem;
+	}
 	s->write_buffer = buffer_new(16 * 1024);
+	if (IS_ERR(s->write_buffer))
+	{
+		goto enomem;
+	}
 
 	s->sock = sock;
 	s->opa_socket_ctx = opa_socket_ctx;
@@ -474,6 +509,10 @@ static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_c
 	}
 
 	return s;
+
+enomem:
+	camblet_socket_free(s);
+	return ERR_PTR(-ENOMEM);
 }
 
 void dump_array(unsigned char array[], size_t len)
@@ -690,7 +729,13 @@ int camblet_recvmsg(struct sock *sock,
 
 	while (action != Continue)
 	{
-		ret = camblet_socket_read(s, get_read_buffer_for_read(s, len), len, flags);
+		char *buf = get_read_buffer_for_read(s, len);
+		if (!buf)
+		{
+			ret = -ENOMEM;
+			goto bail;
+		}
+		ret = camblet_socket_read(s, buf, len, flags);
 		if (ret < 0)
 		{
 			if (ret == -ERESTARTSYS)
@@ -789,7 +834,13 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	size_t prevbuflen = get_write_buffer_size(s);
 
-	len = copy_from_iter(get_write_buffer_for_write(s, size), size, &msg->msg_iter);
+	char *buf = get_write_buffer_for_write(s, size);
+	if (!buf)
+	{
+		ret = -ENOMEM;
+		goto bail;
+	}
+	len = copy_from_iter(buf, size, &msg->msg_iter);
 
 	set_write_buffer_size(s, get_write_buffer_size(s) + len);
 
@@ -1070,6 +1121,11 @@ int camblet_setsockopt(struct sock *sk, int level,
 			opa_socket_context opa_socket_ctx = {.allowed = true, .passthrough = false, .mtls = false};
 			tcp_connection_context conn_ctx = {.direction = OUTPUT};
 			camblet_socket *s = camblet_new_client_socket(sk, opa_socket_ctx, &conn_ctx);
+			if (IS_ERR(s))
+			{
+				pr_err("camblet_setsockopt error # command[%s] error_code[%d]", current->comm, PTR_ERR(s));
+				return PTR_ERR(s);
+			}
 
 			sk->sk_user_data = s;
 
@@ -1746,6 +1802,16 @@ void camblet_configure_client_tls(camblet_socket *sc)
 	br_sslio_init(&sc->ioc, &sc->cc->eng, br_low_read, sc, br_low_write, sc);
 }
 
+void socket_reset(struct sock *sk)
+{
+	pr_info("sk reset\n");
+	tcp_set_state(sk, TCP_CLOSE);
+	inet_bhash2_reset_saddr(sk);
+	sk->sk_route_caps = 0;
+	struct inet_sock *inet = inet_sk(sk);
+	inet->inet_dport = 0;
+}
+
 struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 {
 	struct sock *client_sk = NULL;
@@ -1795,9 +1861,15 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 		}
 
 		sc = camblet_new_server_socket(client_sk, opa_socket_ctx, conn_ctx);
+		if (IS_ERR(sc))
+		{
+			pr_err("could not create camblet server socket");
+			*err = PTR_ERR(sc);
+			goto error;
+		}
 		if (!sc)
 		{
-			pr_err("could not create camblet socket");
+			pr_err("could not create camblet server socket");
 			goto error;
 		}
 
@@ -1865,22 +1937,30 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if (opa_socket_ctx.error < 0)
 	{
 		tcp_connection_context_free(conn_ctx);
-		return opa_socket_ctx.error;
+		err = opa_socket_ctx.error;
+		goto error;
 	}
 
 	if (opa_socket_ctx.allowed)
 	{
 		if (!opa_socket_ctx.workload_id_is_valid)
 		{
-			return -CAMBLET_EINVALIDSPIFFEID;
+			err = -CAMBLET_EINVALIDSPIFFEID;
+			goto error;
 		}
 
 		if (!sc)
 		{
 			sc = camblet_new_client_socket(sk, opa_socket_ctx, conn_ctx);
+			if (IS_ERR(sc))
+			{
+				pr_err("could not create camblet client socket");
+				err = PTR_ERR(sc);
+				goto error;
+			}
 			if (!sc)
 			{
-				pr_err("could not create camblet socket");
+				pr_err("could not create camblet client socket");
 				goto error;
 			}
 		}
@@ -1909,10 +1989,7 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 error:
 	camblet_socket_free(sc);
-
-	lock_sock(sk);
-	sk->sk_prot->close(sk, 0);
-	release_sock(sk);
+	socket_reset(sk);
 
 	return err;
 }
