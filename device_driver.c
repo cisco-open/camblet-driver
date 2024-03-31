@@ -72,7 +72,12 @@ int chardev_init(void)
     cls = class_create(DEVICE_NAME);
 #endif
 
-    device_create(cls, NULL, MKDEV(major, 0), NULL, DEVICE_NAME);
+    if (IS_ERR(cls))
+        return PTR_ERR(cls);
+
+    struct device *dev = device_create(cls, NULL, MKDEV(major, 0), NULL, DEVICE_NAME);
+    if (IS_ERR(dev))
+        return PTR_ERR(dev);
 
     pr_info("device created # device[/dev/%s]", DEVICE_NAME);
 
@@ -81,11 +86,19 @@ int chardev_init(void)
 
 void chardev_exit(void)
 {
-    device_destroy(cls, MKDEV(major, 0));
-    class_destroy(cls);
+    if (!IS_ERR(cls))
+    {
+        device_destroy(cls, MKDEV(major, 0));
+        class_destroy(cls);
+        pr_info("device destroyed # device[/dev/%s]", DEVICE_NAME);
+    }
 
     /* Unregister the device */
-    unregister_chrdev(major, DEVICE_NAME);
+    if (major > 0)
+    {
+        unregister_chrdev(major, DEVICE_NAME);
+        pr_info("char device unregistered # major[%d]", major);
+    }
 }
 
 /* Methods */
@@ -189,6 +202,12 @@ wasm_vm_result load_module(const char *name, const char *code, unsigned length, 
         {
             pr_info("initializing csr module # name[%s]", name);
             result = init_csr_for(vm, module);
+            if (IS_ERR(result.err))
+            {
+                pr_crit("could not init csr module # err[could not allocate memory]");
+                wasm_vm_unlock(vm);
+                return (wasm_vm_result){.err = "could not allocate memory"};
+            }
             if (result.err)
             {
                 pr_crit("could not init csr module # err[%s]", result.err);

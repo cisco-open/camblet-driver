@@ -131,7 +131,7 @@ void service_discovery_entry_free(service_discovery_entry *entry)
 
 static void service_discovery_table_free_locked(service_discovery_table *table)
 {
-    if (!table)
+    if (!table || IS_ERR(table))
     {
         return;
     }
