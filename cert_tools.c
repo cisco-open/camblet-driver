@@ -16,6 +16,7 @@
 #include "cert_tools.h"
 #include "string.h"
 #include "rsa_tools.h"
+#include "task_context.h"
 
 // Define the maximum number of elements inside the cache
 #define MAX_CACHE_LENGTH 64
@@ -231,7 +232,7 @@ static void x509_certificate_release(struct kref *kref)
 
 void x509_certificate_get(x509_certificate *cert)
 {
-    if (!cert)
+    if (!cert || IS_ERR(cert))
     {
         return;
     }
@@ -240,7 +241,7 @@ void x509_certificate_get(x509_certificate *cert)
 
 void x509_certificate_put(x509_certificate *cert)
 {
-    if (!cert)
+    if (!cert || IS_ERR(cert))
     {
         return;
     }
