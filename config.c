@@ -26,12 +26,20 @@ void camblet_config_unlock(void)
     mutex_unlock(&camblet_config_mutex_lock);
 }
 
-void camblet_config_init()
+int camblet_config_init()
 {
     camblet_config_lock();
     config = kzalloc(sizeof(camblet_config), GFP_KERNEL);
+    if (IS_ERR(config))
+    {
+        camblet_config_unlock();
+        return -ENOMEM;
+    }
+
     strlcpy(config->trust_domain, "camblet", MAX_TRUST_DOMAIN_LEN);
     camblet_config_unlock();
+
+    return 0;
 }
 
 camblet_config *camblet_config_get_locked()

@@ -52,11 +52,17 @@ static int __init camblet_init(void)
 
     int ret = 0;
 
-    camblet_config_init();
+    ret = camblet_config_init();
+    if (ret < 0)
+    {
+        FATAL("could not init config: error: %d", ret);
+        return -1;
+    }
+
     ret = sd_table_init();
     if (ret < 0)
     {
-        FATAL("could not create sd table: error: %d", ret);
+        FATAL("could not init sd table: error: %d", ret);
         return -1;
     }
 
