@@ -63,10 +63,14 @@ int add_cert_to_cache(char *key, x509_certificate *cert)
     cert_with_key *new_entry = kzalloc(sizeof(cert_with_key), GFP_KERNEL);
     if (!new_entry)
     {
-        pr_err("could not allocate memory");
         return -ENOMEM;
     }
-    new_entry->key = strdup(key);
+    new_entry->key = kstrdup(key, GFP_KERNEL);
+    if (!new_entry->key)
+    {
+        kfree(new_entry);
+        return -ENOMEM;
+    }
     new_entry->cert = cert;
 
     cert_cache_lock();
