@@ -210,6 +210,11 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
         }
 
         csr_sign_answer->cert = x509_certificate_init();
+        if (IS_ERR(csr_sign_answer->cert))
+        {
+            csr_sign_answer = (void *)csr_sign_answer->cert;
+            goto enomem;
+        }
 
         csr_sign_answer->cert->trust_anchors_len = json_array_get_count(trust_anchors);
         size_t srclen;
@@ -312,6 +317,7 @@ error:
         csr_sign_answer->error = strdup(errormsg);
     }
 
+enomem:
     json_value_free(json);
     free_command_answer(answer);
 

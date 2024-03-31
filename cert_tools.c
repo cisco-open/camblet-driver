@@ -51,19 +51,19 @@ size_t linkedlist_length(struct list_head *head)
 
 // add_cert_to_cache adds a certificate chain with a given trust anchor to a linked list. The key will identify this entry.
 // the function is thread safe.
-void add_cert_to_cache(char *key, x509_certificate *cert)
+int add_cert_to_cache(char *key, x509_certificate *cert)
 {
     if (!key)
     {
         pr_err("invalid key");
-        return;
+        return -EINVAL;
     }
 
     cert_with_key *new_entry = kzalloc(sizeof(cert_with_key), GFP_KERNEL);
     if (!new_entry)
     {
-        pr_err("memory allocation error");
-        return;
+        pr_err("could not allocate memory");
+        return -ENOMEM;
     }
     new_entry->key = strdup(key);
     new_entry->cert = cert;
@@ -71,6 +71,8 @@ void add_cert_to_cache(char *key, x509_certificate *cert)
     cert_cache_lock();
     list_add(&new_entry->list, &cert_cache);
     cert_cache_unlock();
+
+    return 0;
 }
 
 // remove_unused_expired_certs_from_cache iterates over the whole cache and tries to clean up the unused/expired certificates.
@@ -199,6 +201,8 @@ bool validate_cert(x509_certificate_validity cert_validity)
 x509_certificate *x509_certificate_init(void)
 {
     x509_certificate *cert = kzalloc(sizeof(x509_certificate), GFP_KERNEL);
+    if (!cert)
+        return ERR_PTR(-ENOMEM);
 
     kref_init(&cert->kref);
 

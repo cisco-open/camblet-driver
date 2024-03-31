@@ -1355,6 +1355,8 @@ static int handle_cert_gen_locked(camblet_socket *sc)
 
 	csr_sign_answer *csr_sign_answer;
 	csr_sign_answer = send_csrsign_command(csr_ptr, sc->opa_socket_ctx.ttl);
+	if (IS_ERR(csr_sign_answer))
+		return PTR_ERR(csr_sign_answer);
 	if (csr_sign_answer->error)
 	{
 		pr_err("error during CSR signing # err[%s]", csr_sign_answer->error);
@@ -1391,11 +1393,11 @@ static int cache_and_validate_cert(camblet_socket *sc, char *key)
 	{
 	regen_cert:
 		err = handle_cert_gen(sc);
-		if (err == -1)
-		{
-			return -1;
-		}
-		add_cert_to_cache(key, sc->cert);
+		if (err < 0)
+			return err;
+		err = add_cert_to_cache(key, sc->cert);
+		if (err < 0)
+			return err;
 	}
 	// Cert found in the cache use that
 	else
@@ -1877,8 +1879,9 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
 
 		int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.id);
-		if (result == -1)
+		if (result < 0)
 		{
+			*err = result;
 			goto error;
 		}
 
@@ -1971,8 +1974,9 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		if (sc->opa_socket_ctx.mtls)
 		{
 			int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.id);
-			if (result == -1)
+			if (result < 0)
 			{
+				err = result;
 				goto error;
 			}
 		}
