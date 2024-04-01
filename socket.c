@@ -1144,6 +1144,8 @@ int camblet_setsockopt(struct sock *sk, int level,
 			}
 
 			s->hostname = kzalloc(optlen, GFP_KERNEL);
+			if (!s->hostname)
+				return -ENOMEM;
 			copy_from_sockptr(s->hostname, optval, optlen);
 			return 0;
 		}
@@ -1343,7 +1345,12 @@ static int handle_cert_gen_locked(camblet_socket *sc)
 		return -1;
 	}
 
-	csr_ptr = strndup(generated_csr.csr_ptr + mem, generated_csr.csr_len);
+	csr_ptr = kstrndup(generated_csr.csr_ptr + mem, generated_csr.csr_len, GFP_KERNEL);
+	if (!csr_ptr)
+	{
+		csr_unlock(csr);
+		return -ENOMEM;
+	}
 	free_result = csr_free(csr, generated_csr.csr_ptr);
 	if (free_result.err)
 	{
@@ -1425,6 +1432,8 @@ static int cache_and_validate_cert(camblet_socket *sc, char *key)
 static tcp_connection_context *tcp_connection_context_init(direction direction, struct sock *s, u16 port)
 {
 	tcp_connection_context *ctx = kzalloc(sizeof(tcp_connection_context), GFP_KERNEL);
+	if (!ctx)
+		return ERR_PTR(-ENOMEM);
 
 	ctx->direction = direction;
 	ctx->id = (u64)s;
@@ -1481,7 +1490,7 @@ static tcp_connection_context *tcp_connection_context_init(direction direction, 
 
 static void tcp_connection_context_free(tcp_connection_context *ctx)
 {
-	if (!ctx)
+	if (!ctx && IS_ERR(ctx))
 	{
 		return;
 	}
@@ -1581,6 +1590,11 @@ static command_answer *prepare_opa_input(const tcp_connection_context *conn_ctx,
 	}
 
 	answer = kzalloc(sizeof(struct command_answer), GFP_KERNEL);
+	if (!answer)
+	{
+		json_value_free(json);
+		return ERR_PTR(-ENOMEM);
+	}
 	answer->answer = json_serialize_to_string(json);
 
 cleanup:
@@ -1844,6 +1858,11 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 	u16 port = (u16)(sk->sk_portpair >> 16);
 
 	tcp_connection_context *conn_ctx = tcp_connection_context_init(INPUT, client_sk, port);
+	if (IS_ERR(conn_ctx))
+	{
+		*err = PTR_ERR(conn_ctx);
+		goto error;
+	}
 
 	opa_socket_context opa_socket_ctx = enriched_socket_eval(conn_ctx, INPUT, client_sk, port);
 	if (opa_socket_ctx.error < 0)
@@ -1934,6 +1953,11 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	}
 
 	tcp_connection_context *conn_ctx = tcp_connection_context_init(OUTPUT, sk, port);
+	if (IS_ERR(conn_ctx))
+	{
+		err = PTR_ERR(conn_ctx);
+		goto error;
+	}
 
 	opa_socket_context opa_socket_ctx = enriched_socket_eval(conn_ctx, OUTPUT, sk, port);
 	if (opa_socket_ctx.error < 0)
