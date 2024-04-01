@@ -29,12 +29,21 @@ struct mnt_namespace
     struct ns_common ns;
 };
 
+static char *get_current_proc_path(char *buf, int buflen);
+
 task_context *get_task_context(void)
 {
     struct task_context *context = kmalloc(sizeof(struct task_context), GFP_KERNEL);
+    if (!context)
+        return ERR_PTR(-ENOMEM);
 
     strcpy(context->command_name, current->comm);
     context->command_path = get_current_proc_path(context->command_path_buffer, sizeof(context->command_path_buffer));
+    if (IS_ERR(context->command_path))
+    {
+        free_task_context(context);
+        return (void *)context->command_path;
+    }
     current_uid_gid(&context->uid, &context->gid);
     context->pid = current->pid;
 
@@ -58,10 +67,18 @@ task_context *get_task_context(void)
 
 void free_task_context(struct task_context *context)
 {
+    if (!context || IS_ERR(context))
+        return;
+
     kfree(context);
 }
 
-char *get_current_proc_path(char *buf, int buflen)
+/*
+ * get_current_proc_path
+ *
+ * returns a pointer into the buffer or ERR_PTR() on error
+ */
+static char *get_current_proc_path(char *buf, int buflen)
 {
     struct file *exe_file;
     char *result = ERR_PTR(-ENOENT);

@@ -194,11 +194,13 @@ augmentation_response *augment_workload()
     augmentation_response *response;
     void *error;
 
-    char *key = get_task_context_key(get_task_context());
+    task_context *ctx = get_task_context();
+    if (IS_ERR(ctx))
+        return (void *)ctx;
+
+    char *key = get_task_context_key(ctx);
     if (IS_ERR(key))
-    {
         return (void *)key;
-    }
 
     augmentation_response_cache_lock();
     response = augmentation_response_cache_get_locked(key);

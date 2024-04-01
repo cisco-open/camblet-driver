@@ -113,11 +113,19 @@ void send_message(char *name, char *data, task_context *context)
 
 command_answer *send_augment_command()
 {
-    return send_command("augment", NULL, get_task_context());
+    task_context *ctx = get_task_context();
+    if (IS_ERR(ctx))
+        return (void *)ctx;
+
+    return send_command("augment", NULL, ctx);
 }
 
 command_answer *send_accept_command(u16 port)
 {
+    task_context *ctx = get_task_context();
+    if (IS_ERR(ctx))
+        return (void *)ctx;
+
     JSON_Value *root_value = json_value_init_object();
     if (!root_value)
         return ERR_PTR(-ENOMEM);
@@ -133,7 +141,7 @@ command_answer *send_accept_command(u16 port)
     if (json_object_set_number(root_object, "port", port) < 0)
         answer = answer_with_error("could not set port");
     else
-        answer = send_command("accept", json_serialize_to_string(root_value), get_task_context());
+        answer = send_command("accept", json_serialize_to_string(root_value), ctx);
 
     json_value_free(root_value);
 
@@ -142,6 +150,10 @@ command_answer *send_accept_command(u16 port)
 
 command_answer *send_connect_command(u16 port)
 {
+    task_context *ctx = get_task_context();
+    if (IS_ERR(ctx))
+        return (void *)ctx;
+
     JSON_Value *root_value = json_value_init_object();
     if (!root_value)
         return ERR_PTR(-ENOMEM);
@@ -157,7 +169,7 @@ command_answer *send_connect_command(u16 port)
     if (json_object_set_number(root_object, "port", port) < 0)
         answer = answer_with_error("could not set port");
     else
-        answer = send_command("connect", json_serialize_to_string(root_value), get_task_context());
+        answer = send_command("connect", json_serialize_to_string(root_value), ctx);
 
     json_value_free(root_value);
 
@@ -207,6 +219,10 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
     const char *errormsg = NULL;
     void *error = NULL;
 
+    task_context *ctx = get_task_context();
+    if (IS_ERR(ctx))
+        return (void *)ctx;
+
     csr_sign_answer = kzalloc(sizeof(struct csr_sign_answer), GFP_KERNEL);
     if (!csr_sign_answer)
         return ERR_PTR(-ENOMEM);
@@ -229,7 +245,7 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
         goto error;
     }
 
-    answer = send_command("csr_sign", csr_json, get_task_context());
+    answer = send_command("csr_sign", csr_json, ctx);
     if (answer->error)
     {
         errormsg = answer->error;

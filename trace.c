@@ -253,9 +253,14 @@ out:
 
 int trace_log(const tcp_connection_context *conn_ctx, const char *message, int log_level, int n, ...)
 {
+    int ret = 0;
     unsigned int i;
     va_list args, args_copy;
     char *level = NULL;
+
+    task_context *task_ctx = get_task_context();
+    if (IS_ERR(task_ctx))
+        return PTR_ERR(task_ctx);
 
     if (n < 0 || (n > 0 && n % 2 != 0))
     {
@@ -297,47 +302,48 @@ int trace_log(const tcp_connection_context *conn_ctx, const char *message, int l
         va_end(args);
     }
 
-    task_context *tc = get_task_context();
-    trace_request *tr = get_trace_request_by_partial_match(tc->pid, tc->uid.val, tc->command_name);
-    free_task_context(tc);
-
-    if (tr == NULL)
+    trace_request *tr = get_trace_request_by_partial_match(task_ctx->pid, task_ctx->uid.val, task_ctx->command_name);
+    if (!tr)
     {
-        return 0;
+        free_task_context(task_ctx);
+        return ret;
     }
 
     JSON_Value *root_value = json_value_init_object();
-    JSON_Object *root_object = json_value_get_object(root_value);
-
     if (!root_value)
     {
+        free_task_context(task_ctx);
         return -ENOMEM;
     }
 
+    JSON_Object *root_object = json_value_get_object(root_value);
+
     if (json_object_set_string(root_object, "message", message) < 0)
     {
-        json_value_free(root_value);
-
-        return -ENOMEM;
+        ret = -ENOMEM;
+        goto out;
     }
 
     if (log_level > 0 && json_object_set_string(root_object, "level", level) < 0)
     {
-        json_value_free(root_value);
-
-        return -ENOMEM;
+        ret = -ENOMEM;
+        goto out;
     }
 
     if (conn_ctx)
     {
         const char *id_str = strprintf("%llu", conn_ctx->id);
+        if (!id_str)
+        {
+            ret = -ENOMEM;
+            goto out;
+        }
         int retval = json_object_set_string(root_object, "correlation_id", id_str);
         kfree(id_str);
         if (retval < 0)
         {
-            json_value_free(root_value);
-
-            return -ENOMEM;
+            ret = -ENOMEM;
+            goto out;
         }
     }
 
@@ -353,9 +359,11 @@ int trace_log(const tcp_connection_context *conn_ctx, const char *message, int l
     }
     va_end(args);
 
-    send_message("log", json_serialize_to_string(root_value), get_task_context());
+    send_message("log", json_serialize_to_string(root_value), task_ctx);
 
+out:
     json_value_free(root_value);
+    free_task_context(task_ctx);
 
-    return 0;
+    return ret;
 }
