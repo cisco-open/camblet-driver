@@ -202,12 +202,6 @@ wasm_vm_result load_module(const char *name, const char *code, unsigned length, 
         {
             pr_info("initializing csr module # name[%s]", name);
             result = init_csr_for(vm, module);
-            if (IS_ERR(result.err))
-            {
-                pr_crit("could not init csr module # err[could not allocate memory]");
-                wasm_vm_unlock(vm);
-                return (wasm_vm_result){.err = "could not allocate memory"};
-            }
             if (result.err)
             {
                 pr_crit("could not init csr module # err[%s]", result.err);

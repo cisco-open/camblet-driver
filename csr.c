@@ -55,8 +55,7 @@ wasm_vm_result init_csr_for(wasm_vm *vm, wasm_vm_module *module)
         csr = kzalloc(sizeof(struct csr_module), GFP_KERNEL);
         if (!csr)
         {
-            result.err = ERR_PTR(-ENOMEM);
-            return result;
+            return wasm_vm_error("could not allocate memory");
         }
         csr->vm = vm;
         csr_modules[wasm_vm_cpu(vm)] = csr;
@@ -72,7 +71,7 @@ error:
         return result;
     }
 
-    return (wasm_vm_result){.err = NULL};
+    return wasm_vm_ok;
 }
 
 wasm_vm_result csr_malloc(csr_module *csr, i32 size)
