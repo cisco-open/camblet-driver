@@ -445,7 +445,7 @@ static int parse_command(const char *data)
         char *decoded = base64_decode_data(code, &length);
         if (IS_ERR(decoded))
         {
-            pr_err("could not decode data: err[%d]", PTR_ERR(decoded));
+            pr_err("could not decode data: err[%ld]", PTR_ERR(decoded));
             goto out;
         }
 
@@ -512,7 +512,7 @@ static int parse_command(const char *data)
         char *decoded = base64_decode_data(code, &length);
         if (IS_ERR(decoded))
         {
-            pr_err("could not decode data: err[%d]", PTR_ERR(decoded));
+            pr_err("could not decode data: err[%ld]", PTR_ERR(decoded));
             goto out;
         }
         int ret = load_camblet_config(decoded);
@@ -536,7 +536,7 @@ static int parse_command(const char *data)
         char *decoded = base64_decode_data(code, &length);
         if (IS_ERR(decoded))
         {
-            pr_err("could not decode data: err[%d]", PTR_ERR(decoded));
+            pr_err("could not decode data: err[%ld]", PTR_ERR(decoded));
             goto out;
         }
         pr_info("sd info arrived # length[%d]", length);
@@ -965,7 +965,7 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
     }
     if (IS_ERR(command_json))
     {
-        pr_err("could not marshal command json # uuid[%pUB] error_code[%d]", c->uuid.b, PTR_ERR(command_json));
+        pr_err("could not marshal command json # uuid[%pUB] error_code[%ld]", c->uuid.b, PTR_ERR(command_json));
         return -EINTR;
     }
     if (command_json == NULL)

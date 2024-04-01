@@ -1123,7 +1123,7 @@ int camblet_setsockopt(struct sock *sk, int level,
 			camblet_socket *s = camblet_new_client_socket(sk, opa_socket_ctx, &conn_ctx);
 			if (IS_ERR(s))
 			{
-				pr_err("camblet_setsockopt error # command[%s] error_code[%d]", current->comm, PTR_ERR(s));
+				pr_err("camblet_setsockopt error # command[%s] error_code[%ld]", current->comm, PTR_ERR(s));
 				return PTR_ERR(s);
 			}
 
@@ -1830,7 +1830,12 @@ void socket_reset(struct sock *sk)
 {
 	pr_info("sk reset\n");
 	tcp_set_state(sk, TCP_CLOSE);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0)
+	if (!(sk->sk_userlocks & SOCK_BINDADDR_LOCK))
+		inet_reset_saddr(sk);
+#else
 	inet_bhash2_reset_saddr(sk);
+#endif
 	sk->sk_route_caps = 0;
 	struct inet_sock *inet = inet_sk(sk);
 	inet->inet_dport = 0;
