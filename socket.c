@@ -1691,7 +1691,7 @@ ret:
 	return opa_socket_ctx;
 }
 
-void camblet_configure_server_tls(camblet_socket *sc)
+int camblet_configure_server_tls(camblet_socket *sc)
 {
 	/*
 	 * Initialise the context with the cipher suites and
@@ -1715,7 +1715,10 @@ void camblet_configure_server_tls(camblet_socket *sc)
 		br_ssl_server_set_trust_anchor_names_alt(sc->sc, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
 
 		bool insecure;
-		br_x509_camblet_init(&sc->xc, &sc->sc->eng, &sc->opa_socket_ctx, sc->conn_ctx, insecure = false);
+		int ret = br_x509_camblet_init(&sc->xc, &sc->sc->eng, &sc->opa_socket_ctx, sc->conn_ctx, insecure = false);
+		if (ret < 0)
+			return ret;
+
 		br_ssl_engine_set_default_rsavrfy(&sc->sc->eng);
 	}
 
@@ -1740,9 +1743,11 @@ void camblet_configure_server_tls(camblet_socket *sc)
 	 * Initialise the simplified I/O wrapper context.
 	 */
 	br_sslio_init(&sc->ioc, &sc->sc->eng, br_low_read, sc, br_low_write, sc);
+
+	return 0;
 }
 
-void camblet_configure_client_tls(camblet_socket *sc)
+int camblet_configure_client_tls(camblet_socket *sc)
 {
 	/*
 	 * Initialise the context with the cipher suites and
@@ -1780,7 +1785,9 @@ void camblet_configure_client_tls(camblet_socket *sc)
 							 (sizeof suites) / (sizeof suites[0]));
 
 	bool insecure;
-	br_x509_camblet_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx, sc->conn_ctx, insecure = trust_anchors_len == 0);
+	int ret = br_x509_camblet_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx, sc->conn_ctx, insecure = trust_anchors_len == 0);
+	if (ret < 0)
+		return ret;
 
 	// mTLS enablement
 	if (sc->opa_socket_ctx.mtls)
@@ -1815,6 +1822,8 @@ void camblet_configure_client_tls(camblet_socket *sc)
 	 * SSL client context, and the two callbacks for socket I/O.
 	 */
 	br_sslio_init(&sc->ioc, &sc->cc->eng, br_low_read, sc, br_low_write, sc);
+
+	return 0;
 }
 
 void socket_reset(struct sock *sk)
@@ -1903,7 +1912,12 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 			goto error;
 		}
 
-		camblet_configure_server_tls(sc);
+		result = camblet_configure_server_tls(sc);
+		if (result < 0)
+		{
+			*err = result;
+			goto error;
+		}
 
 		// We should save the ssl context here to the socket
 		// and overwrite the socket protocol with our own
@@ -2004,7 +2018,12 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			}
 		}
 
-		camblet_configure_client_tls(sc);
+		int result = camblet_configure_client_tls(sc);
+		if (result < 0)
+		{
+			err = result;
+			goto error;
+		}
 
 		// We should save the ssl context here to the socket
 		// and overwrite the socket protocol with our own

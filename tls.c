@@ -190,38 +190,55 @@ static const br_x509_class x509_camblet_vtable = {
     xwc_get_pkey,
 };
 
-void br_x509_camblet_init(br_x509_camblet_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context, tcp_connection_context *conn_ctx, bool insecure)
+static void br_x509_name_elts_free(br_name_element *name_elts, size_t num);
+
+int br_x509_camblet_init(br_x509_camblet_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context, tcp_connection_context *conn_ctx, bool insecure)
 {
+    br_name_element *name_elts = kmalloc(sizeof(br_name_element) * 3, GFP_KERNEL);
+    if (!name_elts)
+        return -ENOMEM;
+
+    char const *oids[] = {OID_rfc822Name, OID_dNSName, OID_uniformResourceIdentifier};
+
+    int i;
+    int num = 0;
+    for (i = 0; i < sizeof(oids) / sizeof(oids[0]); i++)
+    {
+        name_elts[i].oid = oids[i];
+        name_elts[i].buf = kmalloc(sizeof(char) * 256, GFP_KERNEL);
+        if (!name_elts[i].buf)
+        {
+            br_x509_name_elts_free(name_elts, num);
+            return -ENOMEM;
+        }
+        name_elts[i].len = 256;
+        num++;
+    }
+
     ctx->vtable = &x509_camblet_vtable;
     ctx->socket_context = socket_context;
     ctx->conn_ctx = conn_ctx;
     ctx->insecure = insecure;
 
-    br_name_element *name_elts = kmalloc(sizeof(br_name_element) * 3, GFP_KERNEL);
-
-    char const *oids[] = {OID_rfc822Name, OID_dNSName, OID_uniformResourceIdentifier};
-
-    int i;
-    for (i = 0; i < sizeof(oids) / sizeof(oids[0]); i++)
-    {
-        name_elts[i].oid = oids[i];
-        name_elts[i].buf = kmalloc(sizeof(char) * 256, GFP_KERNEL);
-        name_elts[i].len = 256;
-    }
-
-    br_x509_minimal_set_name_elements(&ctx->ctx, name_elts, sizeof(oids) / sizeof(oids[0]));
-
+    br_x509_minimal_set_name_elements(&ctx->ctx, name_elts, num);
     br_ssl_engine_set_x509(eng, &ctx->vtable);
+
+    return 0;
+}
+
+static void br_x509_name_elts_free(br_name_element *name_elts, size_t num)
+{
+    int i;
+    for (i = 0; i < num; i++)
+    {
+        kfree(name_elts[i].buf);
+    }
+    kfree(name_elts);
 }
 
 void br_x509_camblet_free(br_x509_camblet_context *ctx)
 {
-    int i;
-    for (i = 0; i < ctx->ctx.num_name_elts; i++)
-    {
-        kfree(ctx->ctx.name_elts[i].buf);
-    }
-    kfree(ctx->ctx.name_elts);
+    br_x509_name_elts_free(ctx->ctx.name_elts, ctx->ctx.num_name_elts);
 }
 
 void setup_aes_gcm_128_crypto_info(crypto_info *crypto_info, const uint8_t *iv, const uint8_t *key, uint64_t seq)
