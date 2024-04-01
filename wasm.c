@@ -45,6 +45,11 @@ static M3Result m3_link_all(IM3Module module);
 wasm_vm *wasm_vm_new(int cpu)
 {
     wasm_vm *vm = kzalloc(sizeof(wasm_vm), GFP_KERNEL);
+    if (!vm)
+    {
+        pr_crit("wasm_vm_new: could not allocate memory");
+        return NULL;
+    }
 
     vm->cpu = cpu;
 
