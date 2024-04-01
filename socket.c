@@ -1276,10 +1276,10 @@ static int handle_cert_gen_locked(camblet_socket *sc)
 	if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
 	{
 		u_int32_t result = generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
-		if (result == 0)
+		if (result < 0)
 		{
 			pr_err("could not generate rsa keys");
-			return -1;
+			return result;
 		}
 	}
 
@@ -2056,12 +2056,16 @@ int socket_init(void)
 
 	//- generate global tls key
 	rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
+	if (!rsa_priv)
+		return -ENOMEM;
 	rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
+	if (!rsa_pub)
+		return -ENOMEM;
 	u_int32_t result = generate_rsa_keys(rsa_priv, rsa_pub);
-	if (result == 0)
+	if (result < 0)
 	{
 		pr_err("could not generate rsa keys");
-		return -1;
+		return result;
 	}
 
 	pr_info("socket support loaded");
