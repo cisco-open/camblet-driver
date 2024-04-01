@@ -333,9 +333,9 @@ int trace_log(const tcp_connection_context *conn_ctx, const char *message, int l
     if (conn_ctx)
     {
         const char *id_str = strprintf("%llu", conn_ctx->id);
-        if (!id_str)
+        if (IS_ERR(id_str))
         {
-            ret = -ENOMEM;
+            ret = PTR_ERR(id_str);
             goto out;
         }
         int retval = json_object_set_string(root_object, "correlation_id", id_str);

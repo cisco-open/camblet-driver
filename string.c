@@ -19,6 +19,8 @@ char *strprintf(const char *fmt, ...)
     va_end(args);
 
     char *dst = kzalloc(len, GFP_KERNEL);
+    if (!dst)
+        return ERR_PTR(-ENOMEM);
 
     va_start(args, fmt);
     vsnprintf(dst, len, fmt, args);
