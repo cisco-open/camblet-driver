@@ -228,12 +228,15 @@ static wasm_vm_result parse_opa_builtins(opa_wrapper *opa, char *json)
         pr_debug("opa builtins # json[%s]", json);
 
         if (builtin_count == 0)
-        {
             goto bail;
-        }
 
         // indexing starts from 1 for some reason, so we need one bigger array
         opa->builtins = kzalloc(builtin_count + 1 * sizeof(void *), GFP_KERNEL);
+        if (!opa->builtins)
+        {
+            result = wasm_vm_error("could not allocate memory");
+            goto bail;
+        }
 
         int i;
         for (i = 0; i < builtin_count; i++)
@@ -285,15 +288,24 @@ void opa_socket_context_free(opa_socket_context ctx)
 
 opa_socket_context parse_opa_socket_eval_result(char *json)
 {
-    JSON_Value *root_value = json_parse_string(json);
+    JSON_Value *root_value = NULL;
     opa_socket_context ret = {0};
 
-    if (root_value)
+    root_value = json_parse_string(json);
+    if (!root_value)
+    {
+        ret.error = -EINVAL;
+        return ret;
+    }
+    else
     {
         JSON_Array *results = json_value_get_array(root_value);
         JSON_Object *result = json_array_get_object(results, 0);
-        if (result == NULL)
+        if (!result)
+        {
+            ret.error = -EINVAL;
             goto free;
+        }
 
         JSON_Array *policies;
 
@@ -374,6 +386,11 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             camblet_config *config = camblet_config_get_locked();
             size_t trust_domain_len = strlen(config->trust_domain);
             ret.id = kzalloc(egress_id_len + id_len + trust_domain_len + ttl_len + 1, GFP_KERNEL);
+            if (!ret.id)
+            {
+                ret.error = -ENOMEM;
+                goto free;
+            }
             strcat(ret.id, config->trust_domain);
             camblet_config_unlock();
 
@@ -441,6 +458,11 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             camblet_config *config = camblet_config_get_locked();
             int workload_id_len = snprintf(NULL, 0, "spiffe://%s/%s", config->trust_domain, workload_id);
             ret.workload_id = kzalloc(workload_id_len + 1, GFP_KERNEL);
+            if (!ret.workload_id)
+            {
+                ret.error = -ENOMEM;
+                goto free;
+            }
             snprintf(ret.workload_id, workload_id_len + 1, "spiffe://%s/%s", config->trust_domain, workload_id);
             camblet_config_unlock();
         }
@@ -463,6 +485,11 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             }
 
             ret.dns = kzalloc(dns_len + 1, GFP_KERNEL);
+            if (!ret.dns)
+            {
+                ret.error = -ENOMEM;
+                goto free;
+            }
             for (i = 0; i < json_array_get_count(dns); i++)
             {
                 strcat(ret.dns, json_array_get_string(dns, i));
@@ -650,6 +677,10 @@ wasm_vm_result init_opa_for(wasm_vm *vm, wasm_vm_module *module)
     wasm_vm_function *builtinsFunc;
 
     opa_wrapper *opa = kmalloc(sizeof(struct opa_wrapper), GFP_KERNEL);
+    if (!opa)
+    {
+        return wasm_vm_error("could not allocate memory");
+    }
     wasm_vm_try_get_function(opa->malloc, wasm_vm_get_function(vm, module->name, "opa_malloc"));
     wasm_vm_try_get_function(opa->free, wasm_vm_get_function(vm, module->name, "opa_free"));
     wasm_vm_try_get_function(opa->eval, wasm_vm_get_function(vm, module->name, "opa_eval"));
