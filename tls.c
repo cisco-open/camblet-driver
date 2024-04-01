@@ -146,7 +146,12 @@ xwc_end_chain(const br_x509_class **ctx)
         {
             if (camblet_cc->conn_ctx->peer_spiffe_id == NULL && mini_cc->name_elts[i].buf != NULL)
             {
-                camblet_cc->conn_ctx->peer_spiffe_id = strdup(mini_cc->name_elts[i].buf);
+                camblet_cc->conn_ctx->peer_spiffe_id = kstrdup(mini_cc->name_elts[i].buf, GFP_KERNEL);
+                if (!camblet_cc->conn_ctx->peer_spiffe_id)
+                {
+                    pr_crit("xwc_end_chain: could not allocate memory");
+                    break;
+                }
             }
 
             spiffe_id = mini_cc->name_elts[i].buf;

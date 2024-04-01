@@ -369,7 +369,12 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             ttl = json_object_dotget_string(matched_policy, "certificate.ttl");
         if (ttl != NULL)
         {
-            ret.ttl = strdup(ttl);
+            ret.ttl = kstrdup(ttl, GFP_KERNEL);
+            if (!ret.ttl)
+            {
+                ret.error = -ENOMEM;
+                goto free;
+            }
         }
 
         size_t egress_id_len = json_object_dotget_string_len(matched_policy, "egress.id");
@@ -422,7 +427,12 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
             ret.allowed_spiffe_ids_length = json_array_get_count(allowed_spiffe_ids);
             for (i = 0; i < ret.allowed_spiffe_ids_length; i++)
             {
-                ret.allowed_spiffe_ids[i] = strdup(json_array_get_string(allowed_spiffe_ids, i));
+                ret.allowed_spiffe_ids[i] = kstrdup(json_array_get_string(allowed_spiffe_ids, i), GFP_KERNEL);
+                if (!ret.allowed_spiffe_ids[i])
+                {
+                    ret.error = -ENOMEM;
+                    goto free;
+                }
             }
         }
 

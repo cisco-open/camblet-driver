@@ -10,18 +10,6 @@
 
 #include <linux/slab.h>
 
-char *strndup(const char *str, size_t size)
-{
-    char *dst = kzalloc(size + 1, GFP_KERNEL);
-    return strncpy(dst, str, size);
-}
-
-char *strdup(const char *str)
-{
-    int len = strlen(str);
-    return strndup(str, len);
-}
-
 char *strprintf(const char *fmt, ...)
 {
     va_list args;

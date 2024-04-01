@@ -198,7 +198,12 @@ wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char 
         goto on_error;
     }
 
-    char *module_name = strdup(name);
+    char *module_name = kstrdup(name, GFP_KERNEL);
+    if (!module_name)
+    {
+        result = "could not allocate memory";
+        goto on_error;
+    }
     m3_SetModuleName(module, module_name);
 
     result = m3_link_all(module);
