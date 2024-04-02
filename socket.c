@@ -225,7 +225,8 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 static int bearssl_recvmsg(camblet_socket *s, void *dst, size_t len, int flags)
 {
 	mutex_lock(&s->lock);
-	int ret = br_sslio_read_with_flags(&s->ioc, dst, len, flags);
+	s->ioc.read_flags = flags;
+	int ret = br_sslio_read(&s->ioc, dst, len);
 	mutex_unlock(&s->lock);
 	return ret;
 }
@@ -1524,10 +1525,11 @@ cleanup:
 /*
  * Low-level data read callback for the simplified SSL I/O API.
  */
-static int br_low_read(void *ctx, unsigned char *buf, size_t len)
+static int br_low_read(void *ctx, unsigned char *buf, size_t len, int flags)
 {
 	camblet_socket *s = (camblet_socket *)ctx;
-	return plain_recvmsg(s, buf, len, MSG_DONTWAIT);
+	flags |= MSG_DONTWAIT;
+	return plain_recvmsg(s, buf, len, flags);
 }
 
 /*
