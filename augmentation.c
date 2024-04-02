@@ -204,7 +204,6 @@ augmentation_response *augment_workload()
 
     augmentation_response_cache_lock();
     response = augmentation_response_cache_get_locked(key);
-    kfree(key);
     augmentation_response_cache_unlock();
 
     if (response)
@@ -257,9 +256,11 @@ augmentation_response *augment_workload()
     free_command_answer(answer);
 
 ret:
+    kfree(key);
     return response;
 
 error:
+    kfree(key);
     augmentation_response_free(response);
     return error;
 }
