@@ -72,6 +72,10 @@ static void housekeep_augment_cache_locked(void)
 static augmentation_response *augmentation_response_init(void)
 {
     augmentation_response *response = kzalloc(sizeof(augmentation_response), GFP_KERNEL);
+    if (!response)
+    {
+        return ERR_PTR(-ENOMEM);
+    }
 
     kref_init(&response->kref);
 
@@ -97,12 +101,10 @@ static void augmentation_response_release(struct kref *kref)
     augmentation_response_free(response);
 }
 
-void augmentation_response_get(augmentation_response *response)
+static void augmentation_response_get(augmentation_response *response)
 {
     if (!response)
-    {
         return;
-    }
 
     kref_get(&response->kref);
 }
@@ -110,9 +112,7 @@ void augmentation_response_get(augmentation_response *response)
 void augmentation_response_put(augmentation_response *response)
 {
     if (!response)
-    {
         return;
-    }
 
     kref_put(&response->kref, augmentation_response_release);
 }
@@ -121,17 +121,25 @@ static char *get_task_context_key(task_context *ctx)
 {
     int keylen = snprintf(NULL, 0, "%s %d %d %u %s", ctx->cgroup_path, ctx->uid.val, ctx->gid.val, ctx->namespace_ids.mnt, ctx->command_path);
     char *key = kzalloc(keylen + 1, GFP_KERNEL);
+    if (!key)
+    {
+        return ERR_PTR(-ENOMEM);
+    }
     snprintf(key, keylen + 1, "%s %d %d %u %s", ctx->cgroup_path, ctx->uid.val, ctx->gid.val, ctx->namespace_ids.mnt, ctx->command_path);
 
     return key;
 }
 
-static void augmentation_response_cache_set_locked(char *key, augmentation_response *response)
+static int augmentation_response_cache_set_locked(char *key, augmentation_response *response)
 {
     if (!key)
     {
-        pr_err("invalid key");
-        return;
+        return -EINVAL;
+    }
+
+    if (!response)
+    {
+        return -EINVAL;
     }
 
     housekeep_augment_cache_locked();
@@ -139,15 +147,21 @@ static void augmentation_response_cache_set_locked(char *key, augmentation_respo
     augmentation_response_cache_entry *new_entry = kzalloc(sizeof(augmentation_response_cache_entry), GFP_KERNEL);
     if (!new_entry)
     {
-        pr_err("memory allocation error");
-        return;
+        return -ENOMEM;
     }
 
-    new_entry->key = strdup(key);
+    new_entry->key = kstrdup(key, GFP_KERNEL);
+    if (!new_entry->key)
+    {
+        kfree(new_entry);
+        return -ENOMEM;
+    }
     new_entry->response = response;
 
     pr_debug("add entry # key[%s]", new_entry->key);
     list_add(&new_entry->list, &augmentation_response_cache);
+
+    return 0;
 }
 
 static augmentation_response *augmentation_response_cache_get_locked(char *key)
@@ -174,34 +188,78 @@ static augmentation_response *augmentation_response_cache_get_locked(char *key)
 augmentation_response *augment_workload()
 {
     augmentation_response *response;
+    void *error;
+
+    task_context *ctx = get_task_context();
+    if (IS_ERR(ctx))
+        return (void *)ctx;
+
+    char *key = get_task_context_key(ctx);
+    if (IS_ERR(key))
+        return (void *)key;
 
     augmentation_response_cache_lock();
-
-    char *key = get_task_context_key(get_task_context());
     response = augmentation_response_cache_get_locked(key);
+
     if (response)
     {
         augmentation_response_get(response);
+        augmentation_response_cache_unlock();
         goto ret;
     }
 
+    augmentation_response_cache_unlock();
+
     response = augmentation_response_init();
+    if (IS_ERR(response))
+    {
+        goto ret;
+    }
+
     command_answer *answer = send_augment_command();
+    if (IS_ERR(answer))
+    {
+        error = answer;
+        goto error;
+    }
     if (answer->error)
-        response->error = strdup(answer->error);
+    {
+        response->error = kstrdup(answer->error, GFP_KERNEL);
+        if (!response->error)
+        {
+            error = ERR_PTR(-ENOMEM);
+            goto error;
+        }
+    }
     else
     {
-        response->response = strdup(answer->answer);
-        augmentation_response_cache_set_locked(key, response);
+        response->response = kstrdup(answer->answer, GFP_KERNEL);
+        if (!response->response)
+        {
+            error = ERR_PTR(-ENOMEM);
+            goto error;
+        }
+
+        augmentation_response_cache_lock();
+        int ret = augmentation_response_cache_set_locked(key, response);
+        if (ret < 0)
+        {
+            error = ERR_PTR(ret);
+            augmentation_response_cache_unlock();
+            goto error;
+        }
         augmentation_response_get(response);
+        augmentation_response_cache_unlock();
     }
 
     free_command_answer(answer);
 
 ret:
     kfree(key);
-
-    augmentation_response_cache_unlock();
-
     return response;
+
+error:
+    kfree(key);
+    augmentation_response_free(response);
+    return error;
 }

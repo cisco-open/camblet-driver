@@ -27,8 +27,12 @@ typedef struct
     struct list_head list;
 } augmentation_response_cache_entry;
 
-void augmentation_response_get(augmentation_response *response);
 void augmentation_response_put(augmentation_response *response);
+/*
+ * augment_workload
+ *
+ * returns an augmentation_response struct pointer or ERR_PTR() on error
+ */
 augmentation_response *augment_workload(void);
 
 #endif

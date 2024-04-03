@@ -45,6 +45,11 @@ static M3Result m3_link_all(IM3Module module);
 wasm_vm *wasm_vm_new(int cpu)
 {
     wasm_vm *vm = kzalloc(sizeof(wasm_vm), GFP_KERNEL);
+    if (!vm)
+    {
+        pr_crit("wasm_vm_new: could not allocate memory");
+        return NULL;
+    }
 
     vm->cpu = cpu;
 
@@ -198,7 +203,12 @@ wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char 
         goto on_error;
     }
 
-    char *module_name = strdup(name);
+    char *module_name = kstrdup(name, GFP_KERNEL);
+    if (!module_name)
+    {
+        result = "could not allocate memory";
+        goto on_error;
+    }
     m3_SetModuleName(module, module_name);
 
     result = m3_link_all(module);

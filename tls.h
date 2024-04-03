@@ -44,7 +44,7 @@ typedef struct crypto_info
     size_t cipher_type_len;
 } crypto_info;
 
-void br_x509_camblet_init(br_x509_camblet_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context, tcp_connection_context *conn_ctx, bool insecure);
+int br_x509_camblet_init(br_x509_camblet_context *ctx, br_ssl_engine_context *eng, opa_socket_context *socket_context, tcp_connection_context *conn_ctx, bool insecure);
 void br_x509_camblet_free(br_x509_camblet_context *ctx);
 
 bool is_tls_handshake(const uint8_t *b);

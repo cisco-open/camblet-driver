@@ -128,6 +128,7 @@ struct camblet_socket
 };
 
 static int get_read_buffer_capacity(camblet_socket *s);
+static void tcp_connection_context_free(tcp_connection_context *ctx);
 
 static br_ssl_engine_context *get_ssl_engine_context(camblet_socket *s)
 {
@@ -334,7 +335,7 @@ static void set_write_buffer_size(camblet_socket *s, int size)
 
 static void camblet_socket_free(camblet_socket *s)
 {
-	if (s)
+	if (!IS_ERR_OR_NULL(s))
 	{
 		pr_debug("free camblet socket # command[%s]", current->comm);
 
@@ -370,8 +371,7 @@ static void camblet_socket_free(camblet_socket *s)
 		x509_certificate_put(s->cert);
 
 		kfree(s->parameters);
-		kfree(s->conn_ctx->peer_spiffe_id);
-		kfree(s->conn_ctx);
+		tcp_connection_context_free(s->conn_ctx);
 		kfree(s);
 	}
 }
@@ -405,13 +405,26 @@ int proxywasm_attach(proxywasm *p, camblet_socket *s, ListenerDirection directio
 static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_context opa_socket_ctx, tcp_connection_context *conn_ctx)
 {
 	camblet_socket *s = kzalloc(sizeof(camblet_socket), GFP_KERNEL);
+	if (!s)
+		return ERR_PTR(-ENOMEM);
 	s->sc = kzalloc(sizeof(br_ssl_server_context), GFP_KERNEL);
+	if (!s->sc)
+		goto enomem;
 	s->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
+	if (!s->rsa_priv)
+		goto enomem;
 	s->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
+	if (!s->rsa_pub)
+		goto enomem;
 	s->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
+	if (!s->parameters)
+		goto enomem;
 	s->read_buffer = buffer_new(16 * 1024);
+	if (IS_ERR(s->read_buffer))
+		goto enomem;
 	s->write_buffer = buffer_new(16 * 1024);
-
+	if (IS_ERR(s->write_buffer))
+		goto enomem;
 	s->sock = sock;
 	s->opa_socket_ctx = opa_socket_ctx;
 
@@ -437,17 +450,39 @@ static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_c
 	}
 
 	return s;
+
+enomem:
+	camblet_socket_free(s);
+	return ERR_PTR(-ENOMEM);
 }
 
 static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_context opa_socket_ctx, tcp_connection_context *conn_ctx)
 {
 	camblet_socket *s = kzalloc(sizeof(camblet_socket), GFP_KERNEL);
+	if (!s)
+		return ERR_PTR(-ENOMEM);
 	s->cc = kzalloc(sizeof(br_ssl_client_context), GFP_KERNEL);
+	if (!s->sc)
+		goto enomem;
 	s->rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
+	if (!s->rsa_priv)
+		goto enomem;
 	s->rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
+	if (!s->rsa_pub)
+		goto enomem;
 	s->parameters = kzalloc(sizeof(csr_parameters), GFP_KERNEL);
+	if (!s->parameters)
+		goto enomem;
 	s->read_buffer = buffer_new(16 * 1024);
+	if (IS_ERR(s->read_buffer))
+	{
+		goto enomem;
+	}
 	s->write_buffer = buffer_new(16 * 1024);
+	if (IS_ERR(s->write_buffer))
+	{
+		goto enomem;
+	}
 
 	s->sock = sock;
 	s->opa_socket_ctx = opa_socket_ctx;
@@ -474,6 +509,10 @@ static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_c
 	}
 
 	return s;
+
+enomem:
+	camblet_socket_free(s);
+	return ERR_PTR(-ENOMEM);
 }
 
 void dump_array(unsigned char array[], size_t len)
@@ -690,7 +729,13 @@ int camblet_recvmsg(struct sock *sock,
 
 	while (action != Continue)
 	{
-		ret = camblet_socket_read(s, get_read_buffer_for_read(s, len), len, flags);
+		char *buf = get_read_buffer_for_read(s, len);
+		if (!buf)
+		{
+			ret = -ENOMEM;
+			goto bail;
+		}
+		ret = camblet_socket_read(s, buf, len, flags);
 		if (ret < 0)
 		{
 			if (ret == -ERESTARTSYS)
@@ -793,7 +838,13 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 
 	size_t prevbuflen = get_write_buffer_size(s);
 
-	len = copy_from_iter(get_write_buffer_for_write(s, size), size, &msg->msg_iter);
+	char *buf = get_write_buffer_for_write(s, size);
+	if (!buf)
+	{
+		ret = -ENOMEM;
+		goto bail;
+	}
+	len = copy_from_iter(buf, size, &msg->msg_iter);
 
 	set_write_buffer_size(s, get_write_buffer_size(s) + len);
 
@@ -1074,6 +1125,11 @@ int camblet_setsockopt(struct sock *sk, int level,
 			opa_socket_context opa_socket_ctx = {.allowed = true, .passthrough = false, .mtls = false};
 			tcp_connection_context conn_ctx = {.direction = OUTPUT};
 			camblet_socket *s = camblet_new_client_socket(sk, opa_socket_ctx, &conn_ctx);
+			if (IS_ERR(s))
+			{
+				pr_err("camblet_setsockopt error # command[%s] error_code[%ld]", current->comm, PTR_ERR(s));
+				return PTR_ERR(s);
+			}
 
 			sk->sk_user_data = s;
 
@@ -1092,6 +1148,8 @@ int camblet_setsockopt(struct sock *sk, int level,
 			}
 
 			s->hostname = kzalloc(optlen, GFP_KERNEL);
+			if (!s->hostname)
+				return -ENOMEM;
 			copy_from_sockptr(s->hostname, optval, optlen);
 			return 0;
 		}
@@ -1224,10 +1282,10 @@ static int handle_cert_gen_locked(camblet_socket *sc)
 	if (sc->rsa_priv->plen == 0 || sc->rsa_pub->elen == 0)
 	{
 		u_int32_t result = generate_rsa_keys(sc->rsa_priv, sc->rsa_pub);
-		if (result == 0)
+		if (result < 0)
 		{
 			pr_err("could not generate rsa keys");
-			return -1;
+			return result;
 		}
 	}
 
@@ -1291,7 +1349,12 @@ static int handle_cert_gen_locked(camblet_socket *sc)
 		return -1;
 	}
 
-	csr_ptr = strndup(generated_csr.csr_ptr + mem, generated_csr.csr_len);
+	csr_ptr = kstrndup(generated_csr.csr_ptr + mem, generated_csr.csr_len, GFP_KERNEL);
+	if (!csr_ptr)
+	{
+		csr_unlock(csr);
+		return -ENOMEM;
+	}
 	free_result = csr_free(csr, generated_csr.csr_ptr);
 	if (free_result.err)
 	{
@@ -1303,19 +1366,20 @@ static int handle_cert_gen_locked(camblet_socket *sc)
 
 	csr_sign_answer *csr_sign_answer;
 	csr_sign_answer = send_csrsign_command(csr_ptr, sc->opa_socket_ctx.ttl);
+	if (IS_ERR(csr_sign_answer))
+		return PTR_ERR(csr_sign_answer);
 	if (csr_sign_answer->error)
 	{
 		pr_err("error during CSR signing # err[%s]", csr_sign_answer->error);
-		kfree(csr_sign_answer->error);
-		kfree(csr_sign_answer);
+		x509_certificate_put(csr_sign_answer->cert);
+		csr_sign_answer_free(csr_sign_answer);
 		return -1;
 	}
-	else
-	{
-		x509_certificate_get(csr_sign_answer->cert);
-		sc->cert = csr_sign_answer->cert;
-	}
-	kfree(csr_sign_answer);
+
+	x509_certificate_get(csr_sign_answer->cert);
+	sc->cert = csr_sign_answer->cert;
+	csr_sign_answer_free(csr_sign_answer);
+
 	return 0;
 }
 
@@ -1339,11 +1403,11 @@ static int cache_and_validate_cert(camblet_socket *sc, char *key)
 	{
 	regen_cert:
 		err = handle_cert_gen(sc);
-		if (err == -1)
-		{
-			return -1;
-		}
-		add_cert_to_cache(key, sc->cert);
+		if (err < 0)
+			return err;
+		err = add_cert_to_cache(key, sc->cert);
+		if (err < 0)
+			return err;
 	}
 	// Cert found in the cache use that
 	else
@@ -1372,6 +1436,8 @@ static int cache_and_validate_cert(camblet_socket *sc, char *key)
 static tcp_connection_context *tcp_connection_context_init(direction direction, struct sock *s, u16 port)
 {
 	tcp_connection_context *ctx = kzalloc(sizeof(tcp_connection_context), GFP_KERNEL);
+	if (!ctx)
+		return ERR_PTR(-ENOMEM);
 
 	ctx->direction = direction;
 	ctx->id = (u64)s;
@@ -1424,6 +1490,15 @@ static tcp_connection_context *tcp_connection_context_init(direction direction, 
 	snprintf(ctx->destination_address, INET6_ADDRSTRLEN + 5, "%s:%d", ctx->destination_ip, ctx->destination_port);
 
 	return ctx;
+}
+
+static void tcp_connection_context_free(tcp_connection_context *ctx)
+{
+	if (IS_ERR_OR_NULL(ctx))
+		return;
+
+	kfree(ctx->peer_spiffe_id);
+	kfree(ctx);
 }
 
 void add_sd_entry_labels_to_json(service_discovery_entry *sd_entry, JSON_Value *json)
@@ -1517,6 +1592,11 @@ static command_answer *prepare_opa_input(const tcp_connection_context *conn_ctx,
 	}
 
 	answer = kzalloc(sizeof(struct command_answer), GFP_KERNEL);
+	if (!answer)
+	{
+		json_value_free(json);
+		return ERR_PTR(-ENOMEM);
+	}
 	answer->answer = json_serialize_to_string(json);
 
 cleanup:
@@ -1580,6 +1660,14 @@ opa_socket_context enriched_socket_eval(const tcp_connection_context *conn_ctx, 
 
 	// augmenting process connection
 	augmentation_response *response = augment_workload();
+	if (IS_ERR(response))
+	{
+		opa_socket_ctx.error = PTR_ERR(response);
+		char err_code_str[8];
+		snprintf(err_code_str, 8, "%d", opa_socket_ctx.error);
+		trace_err(conn_ctx, "could not augment process connection", 2, "error_code", err_code_str);
+		goto ret;
+	}
 	if (response->error)
 	{
 		trace_err(conn_ctx, "could not augment process connection", 2, "error", response->error);
@@ -1601,10 +1689,11 @@ opa_socket_context enriched_socket_eval(const tcp_connection_context *conn_ctx, 
 		augmentation_response_put(response);
 	}
 
+ret:
 	return opa_socket_ctx;
 }
 
-void camblet_configure_server_tls(camblet_socket *sc)
+int camblet_configure_server_tls(camblet_socket *sc)
 {
 	/*
 	 * Initialise the context with the cipher suites and
@@ -1628,7 +1717,10 @@ void camblet_configure_server_tls(camblet_socket *sc)
 		br_ssl_server_set_trust_anchor_names_alt(sc->sc, sc->cert->trust_anchors, sc->cert->trust_anchors_len);
 
 		bool insecure;
-		br_x509_camblet_init(&sc->xc, &sc->sc->eng, &sc->opa_socket_ctx, sc->conn_ctx, insecure = false);
+		int ret = br_x509_camblet_init(&sc->xc, &sc->sc->eng, &sc->opa_socket_ctx, sc->conn_ctx, insecure = false);
+		if (ret < 0)
+			return ret;
+
 		br_ssl_engine_set_default_rsavrfy(&sc->sc->eng);
 	}
 
@@ -1653,9 +1745,11 @@ void camblet_configure_server_tls(camblet_socket *sc)
 	 * Initialise the simplified I/O wrapper context.
 	 */
 	br_sslio_init(&sc->ioc, &sc->sc->eng, br_low_read, sc, br_low_write, sc);
+
+	return 0;
 }
 
-void camblet_configure_client_tls(camblet_socket *sc)
+int camblet_configure_client_tls(camblet_socket *sc)
 {
 	/*
 	 * Initialise the context with the cipher suites and
@@ -1693,7 +1787,9 @@ void camblet_configure_client_tls(camblet_socket *sc)
 							 (sizeof suites) / (sizeof suites[0]));
 
 	bool insecure;
-	br_x509_camblet_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx, sc->conn_ctx, insecure = trust_anchors_len == 0);
+	int ret = br_x509_camblet_init(&sc->xc, &sc->cc->eng, &sc->opa_socket_ctx, sc->conn_ctx, insecure = trust_anchors_len == 0);
+	if (ret < 0)
+		return ret;
 
 	// mTLS enablement
 	if (sc->opa_socket_ctx.mtls)
@@ -1728,6 +1824,23 @@ void camblet_configure_client_tls(camblet_socket *sc)
 	 * SSL client context, and the two callbacks for socket I/O.
 	 */
 	br_sslio_init(&sc->ioc, &sc->cc->eng, br_low_read, sc, br_low_write, sc);
+
+	return 0;
+}
+
+void socket_reset(struct sock *sk)
+{
+	pr_info("sk reset\n");
+	tcp_set_state(sk, TCP_CLOSE);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0)
+	if (!(sk->sk_userlocks & SOCK_BINDADDR_LOCK))
+		inet_reset_saddr(sk);
+#else
+	inet_bhash2_reset_saddr(sk);
+#endif
+	sk->sk_route_caps = 0;
+	struct inet_sock *inet = inet_sk(sk);
+	inet->inet_dport = 0;
 }
 
 struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
@@ -1749,7 +1862,7 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	if (!client_sk && *err != 0)
 	{
-		goto error;
+		return NULL;
 	}
 
 	// return if the agent is not running
@@ -1761,8 +1874,20 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 	u16 port = (u16)(sk->sk_portpair >> 16);
 
 	tcp_connection_context *conn_ctx = tcp_connection_context_init(INPUT, client_sk, port);
+	if (IS_ERR(conn_ctx))
+	{
+		*err = PTR_ERR(conn_ctx);
+		goto error;
+	}
 
 	opa_socket_context opa_socket_ctx = enriched_socket_eval(conn_ctx, INPUT, client_sk, port);
+	if (opa_socket_ctx.error < 0)
+	{
+		tcp_connection_context_free(conn_ctx);
+		*err = opa_socket_ctx.error;
+		opa_socket_context_free(opa_socket_ctx);
+		goto error;
+	}
 
 	if (opa_socket_ctx.allowed)
 	{
@@ -1773,9 +1898,15 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 		}
 
 		sc = camblet_new_server_socket(client_sk, opa_socket_ctx, conn_ctx);
+		if (IS_ERR(sc))
+		{
+			pr_err("could not create camblet server socket");
+			*err = PTR_ERR(sc);
+			goto error;
+		}
 		if (!sc)
 		{
-			pr_err("could not create camblet socket");
+			pr_err("could not create camblet server socket");
 			goto error;
 		}
 
@@ -1783,12 +1914,18 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 		memcpy(sc->rsa_pub, rsa_pub, sizeof *sc->rsa_pub);
 
 		int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.id);
-		if (result == -1)
+		if (result < 0)
 		{
+			*err = result;
 			goto error;
 		}
 
-		camblet_configure_server_tls(sc);
+		result = camblet_configure_server_tls(sc);
+		if (result < 0)
+		{
+			*err = result;
+			goto error;
+		}
 
 		// We should save the ssl context here to the socket
 		// and overwrite the socket protocol with our own
@@ -1827,9 +1964,7 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	}
 
 	if (err != 0)
-	{
-		goto error;
-	}
+		return err;
 
 	// return if the agent is not running, and we don't have a socket context attached to the socket
 	if (sc == NULL && atomic_read(&already_open) == CDEV_NOT_USED)
@@ -1838,22 +1973,41 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	}
 
 	tcp_connection_context *conn_ctx = tcp_connection_context_init(OUTPUT, sk, port);
+	if (IS_ERR(conn_ctx))
+	{
+		err = PTR_ERR(conn_ctx);
+		goto error;
+	}
 
 	opa_socket_context opa_socket_ctx = enriched_socket_eval(conn_ctx, OUTPUT, sk, port);
+	if (opa_socket_ctx.error < 0)
+	{
+		tcp_connection_context_free(conn_ctx);
+		err = opa_socket_ctx.error;
+		opa_socket_context_free(opa_socket_ctx);
+		goto error;
+	}
 
 	if (opa_socket_ctx.allowed)
 	{
 		if (!opa_socket_ctx.workload_id_is_valid)
 		{
-			return -CAMBLET_EINVALIDSPIFFEID;
+			err = -CAMBLET_EINVALIDSPIFFEID;
+			goto error;
 		}
 
 		if (!sc)
 		{
 			sc = camblet_new_client_socket(sk, opa_socket_ctx, conn_ctx);
+			if (IS_ERR(sc))
+			{
+				pr_err("could not create camblet client socket");
+				err = PTR_ERR(sc);
+				goto error;
+			}
 			if (!sc)
 			{
-				pr_err("could not create camblet socket");
+				pr_err("could not create camblet client socket");
 				goto error;
 			}
 		}
@@ -1864,13 +2018,19 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		if (sc->opa_socket_ctx.mtls)
 		{
 			int result = cache_and_validate_cert(sc, sc->opa_socket_ctx.id);
-			if (result == -1)
+			if (result < 0)
 			{
+				err = result;
 				goto error;
 			}
 		}
 
-		camblet_configure_client_tls(sc);
+		int result = camblet_configure_client_tls(sc);
+		if (result < 0)
+		{
+			err = result;
+			goto error;
+		}
 
 		// We should save the ssl context here to the socket
 		// and overwrite the socket protocol with our own
@@ -1882,10 +2042,7 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 error:
 	camblet_socket_free(sc);
-
-	lock_sock(sk);
-	sk->sk_prot->close(sk, 0);
-	release_sock(sk);
+	socket_reset(sk);
 
 	return err;
 }
@@ -1949,12 +2106,16 @@ int socket_init(void)
 
 	//- generate global tls key
 	rsa_priv = kzalloc(sizeof(br_rsa_private_key), GFP_KERNEL);
+	if (!rsa_priv)
+		return -ENOMEM;
 	rsa_pub = kzalloc(sizeof(br_rsa_public_key), GFP_KERNEL);
+	if (!rsa_pub)
+		return -ENOMEM;
 	u_int32_t result = generate_rsa_keys(rsa_priv, rsa_pub);
-	if (result == 0)
+	if (result < 0)
 	{
 		pr_err("could not generate rsa keys");
-		return -1;
+		return result;
 	}
 
 	pr_info("socket support loaded");

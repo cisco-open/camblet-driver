@@ -39,24 +39,77 @@ bool ktls_available = true;
 module_param(ktls_available, bool, 0644);
 MODULE_PARM_DESC(ktls_available, "Marks if kTLS is available on the system");
 
+typedef struct camblet_init_status
+{
+    bool wasm;
+    bool chardev;
+    bool socket;
+    bool sd_table;
+    bool config;
+} camblet_init_status;
+
+camblet_init_status __camblet_init_status = {0};
+
+static void __camblet_exit(void)
+{
+    if (__camblet_init_status.socket)
+        socket_exit();
+    if (__camblet_init_status.chardev)
+        chardev_exit();
+    if (__camblet_init_status.wasm)
+        wasm_vm_destroy_per_cpu();
+    if (__camblet_init_status.sd_table)
+        sd_table_free();
+    if (__camblet_init_status.config)
+        camblet_config_free();
+}
+
 static int __init camblet_init(void)
 {
-    pr_info("module loaded at 0x%p running on %d CPUs", camblet_init, num_online_cpus());
+    int ret = 0;
+
+    pr_info("load module at 0x%p running on %d CPUs", camblet_init, num_online_cpus());
 
     wasm_vm_result result = wasm_vm_new_per_cpu();
     if (result.err)
     {
         FATAL("wasm_vm_new_per_cpu: %s", result.err);
-        return -1;
+        ret = -1;
+        goto out;
     }
+    __camblet_init_status.wasm = true;
 
-    camblet_config_init();
-    sd_table_init();
+    ret = camblet_config_init();
+    if (ret < 0)
+    {
+        FATAL("could not init config: %d", ret);
+        goto out;
+    }
+    __camblet_init_status.config = true;
 
-    int ret = 0;
+    ret = sd_table_init();
+    if (ret < 0)
+    {
+        FATAL("could not init sd table: %d", ret);
+        goto out;
+    }
+    __camblet_init_status.sd_table = true;
 
-    ret += chardev_init();
-    ret += socket_init();
+    ret = chardev_init();
+    if (ret < 0)
+    {
+        FATAL("could not init char device: %d", ret);
+        goto out;
+    }
+    __camblet_init_status.chardev = true;
+
+    ret = socket_init();
+    if (ret < 0)
+    {
+        FATAL("could not init socket proto: %d", ret);
+        goto out;
+    }
+    __camblet_init_status.socket = true;
 
     if (proxywasm_modules)
     {
@@ -64,14 +117,16 @@ static int __init camblet_init(void)
         if (result.err)
         {
             FATAL("load_module -> proxywasm_tcp_metadata_filter: %s", result.err);
-            return -1;
+            ret = -1;
+            goto out;
         }
 
         result = load_module("proxywasm_stats_filter", filter_stats, size_filter_stats, "_initialize");
         if (result.err)
         {
             FATAL("load_module -> proxywasm_stats_filter: %s", result.err);
-            return -1;
+            ret = -1;
+            goto out;
         }
     }
 
@@ -79,27 +134,30 @@ static int __init camblet_init(void)
     if (result.err)
     {
         FATAL("load_module -> csr_module: %s", result.err);
-        return -1;
+        ret = -1;
+        goto out;
     }
 
     result = load_module("socket_opa", socket_wasm, socket_wasm_len, NULL);
     if (result.err)
     {
         FATAL("load_module -> socket_opa: %s", result.err);
-        return -1;
+        ret = -1;
+        goto out;
     }
+
+out:
+    if (ret < 0)
+        __camblet_exit();
+    else
+        pr_info("module loaded at 0x%p running on %d CPUs", camblet_init, num_online_cpus());
 
     return ret;
 }
 
 static void __exit camblet_exit(void)
 {
-    socket_exit();
-    chardev_exit();
-    wasm_vm_destroy_per_cpu();
-
-    sd_table_free();
-    camblet_config_free();
+    __camblet_exit();
 
     pr_info("%s: module unloaded from 0x%p", KBUILD_MODNAME, camblet_exit);
 }

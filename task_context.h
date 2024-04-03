@@ -17,8 +17,6 @@
 #define MAX_PATH_LEN 256
 #define MAX_COMM_LEN 64
 
-char *get_current_proc_path(char *buf, int buflen);
-
 struct namespace_ids
 {
     unsigned int uts;
@@ -42,6 +40,11 @@ typedef struct task_context
     char cgroup_path[MAX_PATH_LEN];
 } task_context;
 
+/*
+ * get_task_context
+ *
+ * returns a task_context struct pointer or ERR_PTR() on error
+ */
 task_context *get_task_context(void);
 void free_task_context(struct task_context *context);
 

@@ -41,11 +41,16 @@ typedef struct
     struct list_head list;
 } cert_with_key;
 
+/*
+ * x509_certificate_init
+ *
+ * returns an x509_certificate struct pointer or ERR_PTR() on error
+ */
 x509_certificate *x509_certificate_init(void);
 void x509_certificate_get(x509_certificate *cert);
 void x509_certificate_put(x509_certificate *cert);
 
-void add_cert_to_cache(char *key, x509_certificate *cert);
+int add_cert_to_cache(char *key, x509_certificate *cert);
 cert_with_key *find_cert_from_cache(char *key);
 void remove_cert_from_cache(cert_with_key *cert);
 void remove_cert_from_cache_locked(cert_with_key *cert);

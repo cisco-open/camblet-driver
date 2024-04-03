@@ -37,6 +37,8 @@ static LIST_HEAD(in_flight_command_list);
 static command_answer *this_send_command(char *name, char *data, task_context *context, bool is_message)
 {
     struct command *cmd = kzalloc(sizeof(struct command), GFP_KERNEL);
+    if (!cmd)
+        return ERR_PTR(-ENOMEM);
 
     uuid_gen(&cmd->uuid);
     cmd->name = name;
@@ -70,18 +72,26 @@ static command_answer *this_send_command(char *name, char *data, task_context *c
 
     finish_wait(&cmd->wait_queue, &wait);
 
+    command_answer *cmd_answer = NULL;
     if (cmd->answer == NULL)
     {
         pr_err("command timeout # name[%s] uuid[%pUB] ", name, cmd->uuid.b);
 
         cmd->answer = answer_with_error("timeout");
+        if (IS_ERR(cmd->answer))
+        {
+            cmd_answer = (void *)cmd->answer;
+            goto out;
+        }
     }
 
+    cmd_answer = cmd->answer;
+
+out:
     mutex_lock(&command_list_lock);
     list_del(&cmd->list);
     mutex_unlock(&command_list_lock);
 
-    command_answer *cmd_answer = cmd->answer;
     free_command(cmd);
 
     return cmd_answer;
@@ -103,12 +113,23 @@ void send_message(char *name, char *data, task_context *context)
 
 command_answer *send_augment_command()
 {
-    return send_command("augment", NULL, get_task_context());
+    task_context *ctx = get_task_context();
+    if (IS_ERR(ctx))
+        return (void *)ctx;
+
+    return send_command("augment", NULL, ctx);
 }
 
 command_answer *send_accept_command(u16 port)
 {
+    task_context *ctx = get_task_context();
+    if (IS_ERR(ctx))
+        return (void *)ctx;
+
     JSON_Value *root_value = json_value_init_object();
+    if (!root_value)
+        return ERR_PTR(-ENOMEM);
+
     JSON_Object *root_object = json_value_get_object(root_value);
 
     if (!root_object)
@@ -116,9 +137,11 @@ command_answer *send_accept_command(u16 port)
         return answer_with_error("could not get root object");
     }
 
-    json_object_set_number(root_object, "port", port);
-
-    command_answer *answer = send_command("accept", json_serialize_to_string(root_value), get_task_context());
+    command_answer *answer = NULL;
+    if (json_object_set_number(root_object, "port", port) < 0)
+        answer = answer_with_error("could not set port");
+    else
+        answer = send_command("accept", json_serialize_to_string(root_value), ctx);
 
     json_value_free(root_value);
 
@@ -127,7 +150,14 @@ command_answer *send_accept_command(u16 port)
 
 command_answer *send_connect_command(u16 port)
 {
+    task_context *ctx = get_task_context();
+    if (IS_ERR(ctx))
+        return (void *)ctx;
+
     JSON_Value *root_value = json_value_init_object();
+    if (!root_value)
+        return ERR_PTR(-ENOMEM);
+
     JSON_Object *root_object = json_value_get_object(root_value);
 
     if (!root_object)
@@ -135,48 +165,87 @@ command_answer *send_connect_command(u16 port)
         return answer_with_error("could not get root object");
     }
 
-    json_object_set_number(root_object, "port", port);
-
-    command_answer *answer = send_command("connect", json_serialize_to_string(root_value), get_task_context());
+    command_answer *answer = NULL;
+    if (json_object_set_number(root_object, "port", port) < 0)
+        answer = answer_with_error("could not set port");
+    else
+        answer = send_command("connect", json_serialize_to_string(root_value), ctx);
 
     json_value_free(root_value);
 
     return answer;
 }
 
+void csr_sign_answer_free(csr_sign_answer *answer)
+{
+    if (IS_ERR_OR_NULL(answer))
+        return;
+
+    kfree(answer->error);
+    kfree(answer);
+}
+
+static char *prepare_csr_json(const unsigned char *csr, const char *ttl)
+{
+    char *json = NULL;
+
+    JSON_Value *root_value = json_value_init_object();
+    if (!root_value)
+        return ERR_PTR(-ENOMEM);
+
+    JSON_Object *root_object = json_value_get_object(root_value);
+    if (!root_object)
+        goto out;
+
+    if (json_object_set_string(root_object, "csr", csr) < 0)
+        goto out;
+
+    if (ttl)
+        if (json_object_set_string(root_object, "ttl", ttl) < 0)
+            goto out;
+
+    json = json_serialize_to_string(root_value);
+
+out:
+    json_value_free(root_value);
+    return json;
+}
+
 csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
 {
+    csr_sign_answer *csr_sign_answer = NULL;
+    command_answer *answer = NULL;
     JSON_Value *json = NULL;
-    const char *errormsg;
+    const char *errormsg = NULL;
+    void *error = NULL;
 
-    csr_sign_answer *csr_sign_answer = kzalloc(sizeof(struct csr_sign_answer), GFP_KERNEL);
+    task_context *ctx = get_task_context();
+    if (IS_ERR(ctx))
+        return (void *)ctx;
+
+    csr_sign_answer = kzalloc(sizeof(struct csr_sign_answer), GFP_KERNEL);
+    if (!csr_sign_answer)
+        return ERR_PTR(-ENOMEM);
 
     if (!csr)
     {
-        csr_sign_answer->error = strdup("nil csr");
-
-        return csr_sign_answer;
-    }
-
-    JSON_Value *root_value = json_value_init_object();
-    JSON_Object *root_object = json_value_get_object(root_value);
-
-    if (!root_object)
-    {
-        errormsg = "could not get root object";
+        error = ERR_PTR(-EINVAL);
         goto error;
     }
 
-    json_object_set_string(root_object, "csr", csr);
-    if (ttl)
+    char *csr_json = prepare_csr_json(csr, ttl);
+    if (!csr_json)
     {
-        json_object_set_string(root_object, "ttl", ttl);
+        errormsg = "could not prepare csr json";
+        goto error;
+    }
+    if (IS_ERR(csr_json))
+    {
+        error = csr_json;
+        goto error;
     }
 
-    command_answer *answer = send_command("csr_sign", json_serialize_to_string(root_value), get_task_context());
-
-    json_value_free(root_value);
-
+    answer = send_command("csr_sign", csr_json, ctx);
     if (answer->error)
     {
         errormsg = answer->error;
@@ -186,7 +255,6 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
     if (answer->answer)
     {
         json = json_parse_string(answer->answer);
-
         if (json == NULL)
         {
             errormsg = "could not parse answer JSON data";
@@ -194,7 +262,6 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
         }
 
         JSON_Object *root = json_value_get_object(json);
-
         if (root == NULL)
         {
             errormsg = "could not get root object from parsed JSON";
@@ -202,7 +269,6 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
         }
 
         JSON_Array *trust_anchors = json_object_get_array(root, "trust_anchors");
-
         if (trust_anchors == NULL)
         {
             errormsg = "could not find trust anchors";
@@ -210,13 +276,23 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
         }
 
         csr_sign_answer->cert = x509_certificate_init();
+        if (IS_ERR(csr_sign_answer->cert))
+        {
+            error = csr_sign_answer->cert;
+            goto error;
+        }
 
         csr_sign_answer->cert->trust_anchors_len = json_array_get_count(trust_anchors);
         size_t srclen;
 
         if (csr_sign_answer->cert->trust_anchors_len > 0)
         {
-            csr_sign_answer->cert->trust_anchors = kmalloc(csr_sign_answer->cert->trust_anchors_len * sizeof *csr_sign_answer->cert->trust_anchors, GFP_KERNEL);
+            csr_sign_answer->cert->trust_anchors = kzalloc(csr_sign_answer->cert->trust_anchors_len * sizeof *csr_sign_answer->cert->trust_anchors, GFP_KERNEL);
+            if (!csr_sign_answer->cert->trust_anchors)
+            {
+                error = ERR_PTR(-ENOMEM);
+                goto error;
+            }
 
             size_t u;
             for (u = 0; u < csr_sign_answer->cert->trust_anchors_len; u++)
@@ -231,7 +307,12 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
                 if (raw_subject != NULL)
                 {
                     srclen = strlen(raw_subject);
-                    csr_sign_answer->cert->trust_anchors[u].dn.data = kmalloc(srclen, GFP_KERNEL);
+                    csr_sign_answer->cert->trust_anchors[u].dn.data = kzalloc(srclen, GFP_KERNEL);
+                    if (!csr_sign_answer->cert->trust_anchors[u].dn.data)
+                    {
+                        error = ERR_PTR(-ENOMEM);
+                        goto error;
+                    }
                     csr_sign_answer->cert->trust_anchors[u].dn.len = base64_decode(csr_sign_answer->cert->trust_anchors[u].dn.data, srclen, raw_subject, srclen);
                 }
 
@@ -240,7 +321,12 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
                 if (rsa_n != NULL)
                 {
                     srclen = strlen(rsa_n);
-                    csr_sign_answer->cert->trust_anchors[u].pkey.key.rsa.n = kmalloc(srclen, GFP_KERNEL);
+                    csr_sign_answer->cert->trust_anchors[u].pkey.key.rsa.n = kzalloc(srclen, GFP_KERNEL);
+                    if (!csr_sign_answer->cert->trust_anchors[u].pkey.key.rsa.n)
+                    {
+                        error = ERR_PTR(-ENOMEM);
+                        goto error;
+                    }
                     csr_sign_answer->cert->trust_anchors[u].pkey.key.rsa.nlen = base64_decode(csr_sign_answer->cert->trust_anchors[u].pkey.key.rsa.n, srclen, rsa_n, srclen);
                 }
 
@@ -249,7 +335,12 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
                 if (rsa_e != NULL)
                 {
                     srclen = strlen(rsa_e);
-                    csr_sign_answer->cert->trust_anchors[u].pkey.key.rsa.e = kmalloc(srclen, GFP_KERNEL);
+                    csr_sign_answer->cert->trust_anchors[u].pkey.key.rsa.e = kzalloc(srclen, GFP_KERNEL);
+                    if (!csr_sign_answer->cert->trust_anchors[u].pkey.key.rsa.e)
+                    {
+                        error = ERR_PTR(-ENOMEM);
+                        goto error;
+                    }
                     csr_sign_answer->cert->trust_anchors[u].pkey.key.rsa.elen = base64_decode(csr_sign_answer->cert->trust_anchors[u].pkey.key.rsa.e, srclen, rsa_e, srclen);
                 }
             }
@@ -272,9 +363,19 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
         csr_sign_answer->cert->chain_len = json_array_get_count(chain);
         csr_sign_answer->cert->chain_len++;
         csr_sign_answer->cert->chain = kzalloc(csr_sign_answer->cert->chain_len * sizeof *csr_sign_answer->cert->chain, GFP_KERNEL);
+        if (!csr_sign_answer->cert->chain)
+        {
+            error = ERR_PTR(-ENOMEM);
+            goto error;
+        }
 
         srclen = strlen(raw);
-        csr_sign_answer->cert->chain[0].data = kmalloc(srclen, GFP_KERNEL);
+        csr_sign_answer->cert->chain[0].data = kzalloc(srclen, GFP_KERNEL);
+        if (!csr_sign_answer->cert->chain[0].data)
+        {
+            error = ERR_PTR(-ENOMEM);
+            goto error;
+        }
         csr_sign_answer->cert->chain[0].data_len = base64_decode(csr_sign_answer->cert->chain[0].data, srclen, raw, srclen);
 
         int k;
@@ -288,7 +389,12 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
                 if (raw)
                 {
                     srclen = strlen(raw);
-                    csr_sign_answer->cert->chain[j].data = kmalloc(srclen, GFP_KERNEL);
+                    csr_sign_answer->cert->chain[j].data = kzalloc(srclen, GFP_KERNEL);
+                    if (!csr_sign_answer->cert->chain[j].data)
+                    {
+                        error = ERR_PTR(-ENOMEM);
+                        goto error;
+                    }
                     csr_sign_answer->cert->chain[j].data_len = base64_decode(csr_sign_answer->cert->chain[j].data, srclen, raw, srclen);
 
                     j++;
@@ -309,11 +415,23 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
 error:
     if (errormsg)
     {
-        csr_sign_answer->error = strdup(errormsg);
+        csr_sign_answer->error = kstrdup(errormsg, GFP_KERNEL);
+        if (!csr_sign_answer->error)
+        {
+            error = ERR_PTR(-ENOMEM);
+        }
+        error = ERR_PTR(-ENOMEM);
     }
 
     json_value_free(json);
     free_command_answer(answer);
+
+    if (IS_ERR(error))
+    {
+        x509_certificate_put(csr_sign_answer->cert);
+        csr_sign_answer_free(csr_sign_answer);
+        return error;
+    }
 
     return csr_sign_answer;
 }
@@ -372,17 +490,20 @@ command *get_next_command(void)
 command_answer *answer_with_error(char *error_message)
 {
     command_answer *answer = kzalloc(sizeof(struct command_answer), GFP_KERNEL);
-    answer->error = strdup(error_message);
+    if (!answer)
+        return ERR_PTR(-ENOMEM);
+
+    answer->error = kstrdup(error_message, GFP_KERNEL);
+    if (!answer->error)
+        return ERR_PTR(-ENOMEM);
 
     return answer;
 }
 
 void free_command_answer(command_answer *cmd_answer)
 {
-    if (!cmd_answer)
-    {
+    if (IS_ERR_OR_NULL(cmd_answer))
         return;
-    }
 
     kfree(cmd_answer->error);
     kfree(cmd_answer->answer);
