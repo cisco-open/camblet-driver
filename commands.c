@@ -178,7 +178,7 @@ command_answer *send_connect_command(u16 port)
 
 void csr_sign_answer_free(csr_sign_answer *answer)
 {
-    if (!answer || IS_ERR(answer))
+    if (IS_ERR_OR_NULL(answer))
         return;
 
     kfree(answer->error);
@@ -502,10 +502,8 @@ command_answer *answer_with_error(char *error_message)
 
 void free_command_answer(command_answer *cmd_answer)
 {
-    if (!cmd_answer || IS_ERR(cmd_answer))
-    {
+    if (IS_ERR_OR_NULL(cmd_answer))
         return;
-    }
 
     kfree(cmd_answer->error);
     kfree(cmd_answer->answer);

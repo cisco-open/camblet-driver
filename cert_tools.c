@@ -216,10 +216,8 @@ x509_certificate *x509_certificate_init(void)
 
 static void x509_certificate_free(x509_certificate *cert)
 {
-    if (!cert)
-    {
+    if (IS_ERR_OR_NULL(cert))
         return;
-    }
 
     free_br_x509_certificate(cert->chain, cert->chain_len);
     free_br_x509_trust_anchors(cert->trust_anchors, cert->trust_anchors_len);
@@ -236,18 +234,16 @@ static void x509_certificate_release(struct kref *kref)
 
 void x509_certificate_get(x509_certificate *cert)
 {
-    if (!cert || IS_ERR(cert))
-    {
+    if (IS_ERR_OR_NULL(cert))
         return;
-    }
+
     kref_get(&cert->kref);
 }
 
 void x509_certificate_put(x509_certificate *cert)
 {
-    if (!cert || IS_ERR(cert))
-    {
+    if (IS_ERR_OR_NULL(cert))
         return;
-    }
+
     kref_put(&cert->kref, x509_certificate_release);
 }

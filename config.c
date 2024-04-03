@@ -50,11 +50,6 @@ camblet_config *camblet_config_get_locked()
 void camblet_config_free()
 {
     camblet_config_lock();
-    if (!config || IS_ERR(config))
-    {
-        return;
-    }
-
     kfree(config);
     camblet_config_unlock();
 }

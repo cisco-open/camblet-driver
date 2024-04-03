@@ -335,7 +335,7 @@ static void set_write_buffer_size(camblet_socket *s, int size)
 
 static void camblet_socket_free(camblet_socket *s)
 {
-	if (s && !IS_ERR(s))
+	if (!IS_ERR_OR_NULL(s))
 	{
 		pr_debug("free camblet socket # command[%s]", current->comm);
 
@@ -1490,10 +1490,8 @@ static tcp_connection_context *tcp_connection_context_init(direction direction, 
 
 static void tcp_connection_context_free(tcp_connection_context *ctx)
 {
-	if (!ctx && IS_ERR(ctx))
-	{
+	if (IS_ERR_OR_NULL(ctx))
 		return;
-	}
 
 	kfree(ctx->peer_spiffe_id);
 	kfree(ctx);

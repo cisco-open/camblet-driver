@@ -67,7 +67,7 @@ task_context *get_task_context(void)
 
 void free_task_context(struct task_context *context)
 {
-    if (!context || IS_ERR(context))
+    if (IS_ERR_OR_NULL(context))
         return;
 
     kfree(context);

@@ -29,11 +29,11 @@ buffer_t *buffer_new(int capacity)
 
 void buffer_free(buffer_t *buffer)
 {
-    if (buffer && !IS_ERR(buffer))
-    {
-        kfree(buffer->data);
-        kfree(buffer);
-    }
+    if (IS_ERR_OR_NULL(buffer))
+        return;
+
+    kfree(buffer->data);
+    kfree(buffer);
 }
 
 char *buffer_grow(buffer_t *buffer, int len)
