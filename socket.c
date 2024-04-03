@@ -1858,7 +1858,7 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	if (!client_sk && *err != 0)
 	{
-		goto error;
+		return NULL;
 	}
 
 	// return if the agent is not running
@@ -1961,9 +1961,7 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	}
 
 	if (err != 0)
-	{
-		goto error;
-	}
+		return err;
 
 	// return if the agent is not running, and we don't have a socket context attached to the socket
 	if (sc == NULL && atomic_read(&already_open) == CDEV_NOT_USED)
