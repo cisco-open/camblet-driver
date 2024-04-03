@@ -27,7 +27,6 @@ typedef struct
     struct list_head list;
 } augmentation_response_cache_entry;
 
-void augmentation_response_get(augmentation_response *response);
 void augmentation_response_put(augmentation_response *response);
 /*
  * augment_workload

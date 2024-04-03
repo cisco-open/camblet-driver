@@ -101,12 +101,10 @@ static void augmentation_response_release(struct kref *kref)
     augmentation_response_free(response);
 }
 
-void augmentation_response_get(augmentation_response *response)
+static void augmentation_response_get(augmentation_response *response)
 {
     if (!response)
-    {
         return;
-    }
 
     kref_get(&response->kref);
 }
@@ -114,9 +112,7 @@ void augmentation_response_get(augmentation_response *response)
 void augmentation_response_put(augmentation_response *response)
 {
     if (!response)
-    {
         return;
-    }
 
     kref_put(&response->kref, augmentation_response_release);
 }
@@ -204,13 +200,15 @@ augmentation_response *augment_workload()
 
     augmentation_response_cache_lock();
     response = augmentation_response_cache_get_locked(key);
-    augmentation_response_cache_unlock();
 
     if (response)
     {
         augmentation_response_get(response);
+        augmentation_response_cache_unlock();
         goto ret;
     }
+
+    augmentation_response_cache_unlock();
 
     response = augmentation_response_init();
     if (IS_ERR(response))
@@ -244,13 +242,14 @@ augmentation_response *augment_workload()
 
         augmentation_response_cache_lock();
         int ret = augmentation_response_cache_set_locked(key, response);
-        augmentation_response_cache_unlock();
         if (ret < 0)
         {
             error = ERR_PTR(ret);
+            augmentation_response_cache_unlock();
             goto error;
         }
         augmentation_response_get(response);
+        augmentation_response_cache_unlock();
     }
 
     free_command_answer(answer);
