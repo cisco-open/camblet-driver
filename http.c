@@ -37,7 +37,11 @@ void inject_header(buffer_t *buffer, struct phr_header *headers, size_t num_head
 				const char *old_value_pos = headers[i].value;
 
 				// shift the rest of the buffer
-				buffer_grow(buffer, shift); // resize the buffer if necessary
+				if (!buffer_grow(buffer, shift)) // resize the buffer if necessary
+				{
+					pr_err("could not inject header: could not allocate memory");
+					continue;
+				}
 				memmove(old_value_pos + new_value_len, old_value_pos + headers[i].value_len, buffer->size - (old_value_pos + headers[i].value_len - buffer->data));
 
 				// inject the new value
@@ -63,7 +67,11 @@ void inject_header(buffer_t *buffer, struct phr_header *headers, size_t num_head
 	char *new_header_pos = headers[num_headers - 1].value + headers[num_headers - 1].value_len + 2;
 
 	// shift the rest of the buffer
-	buffer_grow(buffer, new_header_len); // resize the buffer if necessary
+	if (!buffer_grow(buffer, new_header_len)) // resize the buffer if necessary
+	{
+		pr_err("could not inject header: could not allocate memory");
+		return;
+	}
 	memmove(new_header_pos + new_header_len, new_header_pos, buffer->size - (new_header_pos - buffer->data));
 
 	// inject the new header

@@ -41,9 +41,17 @@ uint32_t generate_rsa_keys(br_rsa_private_key *rsa_priv, br_rsa_public_key *rsa_
     br_rsa_keygen rsa_keygen = br_rsa_keygen_get_default();
 
     unsigned char *raw_priv_key = kmalloc(BR_RSA_KBUF_PRIV_SIZE(RSA_BIT_LENGTH), GFP_KERNEL);
+    if (!raw_priv_key)
+        return -ENOMEM;
     unsigned char *raw_pub_key = kmalloc(BR_RSA_KBUF_PUB_SIZE(RSA_BIT_LENGTH), GFP_KERNEL);
+    if (!raw_pub_key)
+        return -ENOMEM;
 
-    return rsa_keygen(&hmac_drbg_ctx.vtable, rsa_priv, raw_priv_key, rsa_pub, raw_pub_key, RSA_BIT_LENGTH, RSA_PUB_EXP);
+    int ret = rsa_keygen(&hmac_drbg_ctx.vtable, rsa_priv, raw_priv_key, rsa_pub, raw_pub_key, RSA_BIT_LENGTH, RSA_PUB_EXP);
+    if (ret == 0)
+        return -1;
+
+    return ret;
 }
 
 void free_rsa_private_key(br_rsa_private_key *key)

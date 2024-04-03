@@ -31,6 +31,7 @@ typedef struct
     char *ttl;
     char *allowed_spiffe_ids[MAX_ALLOWED_SPIFFE_ID];
     int allowed_spiffe_ids_length;
+    int error;
 } opa_socket_context;
 
 void opa_socket_context_free(opa_socket_context ctx);

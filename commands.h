@@ -32,6 +32,7 @@ typedef struct csr_sign_answer
 } csr_sign_answer;
 
 void free_command_answer(command_answer *cmd_answer);
+void csr_sign_answer_free(csr_sign_answer *answer);
 
 void send_message(char *name, char *data, task_context *context);
 command_answer *send_command(char *name, char *data, task_context *context);

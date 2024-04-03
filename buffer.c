@@ -14,7 +14,14 @@
 buffer_t *buffer_new(int capacity)
 {
     buffer_t *buffer = kmalloc(sizeof(buffer_t), GFP_KERNEL);
+    if (!buffer)
+        return ERR_PTR(-ENOMEM);
     buffer->data = kmalloc(capacity, GFP_KERNEL);
+    if (!buffer->data)
+    {
+        buffer_free(buffer);
+        return ERR_PTR(-ENOMEM);
+    }
     buffer->size = 0;
     buffer->capacity = capacity;
     return buffer;
@@ -22,11 +29,11 @@ buffer_t *buffer_new(int capacity)
 
 void buffer_free(buffer_t *buffer)
 {
-    if (buffer)
-    {
-        kfree(buffer->data);
-        kfree(buffer);
-    }
+    if (IS_ERR_OR_NULL(buffer))
+        return;
+
+    kfree(buffer->data);
+    kfree(buffer);
 }
 
 char *buffer_grow(buffer_t *buffer, int len)
@@ -43,6 +50,10 @@ char *buffer_grow(buffer_t *buffer, int len)
         }
 
         buffer->data = krealloc(buffer->data, new_capacity, GFP_KERNEL);
+        if (!buffer->data)
+        {
+            return NULL;
+        }
         buffer->capacity = new_capacity;
     }
 
