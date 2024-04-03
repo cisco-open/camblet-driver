@@ -1880,8 +1880,8 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 	if (opa_socket_ctx.error < 0)
 	{
 		tcp_connection_context_free(conn_ctx);
-		opa_socket_context_free(opa_socket_ctx);
 		*err = opa_socket_ctx.error;
+		opa_socket_context_free(opa_socket_ctx);
 		goto error;
 	}
 
