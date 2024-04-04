@@ -743,7 +743,11 @@ int camblet_recvmsg(struct sock *sock,
 
 			if (ret == -EAGAIN || ret == -EWOULDBLOCK)
 			{
-				continue;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
+				int nonblock = flags & MSG_DONTWAIT;
+#endif
+				if (nonblock == 0)
+					continue;
 			}
 
 			goto bail;
