@@ -21,6 +21,7 @@
 #include <net/ip.h>
 #include <linux/inet.h>
 #include <linux/sockptr.h>
+#include <net/inet_common.h>
 
 #include "bearssl.h"
 #include "commands.h"
@@ -164,6 +165,7 @@ static int ktls_recvmsg(camblet_socket *s, void *buf, size_t size, int flags)
 static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 {
 	mutex_lock(&s->lock);
+	printk("bearssl_sendmsg %s len %d", current->comm, len);
 	int err = br_sslio_write_all(&s->ioc, src, len);
 	if (err < 0)
 	{
@@ -174,6 +176,7 @@ static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 	else
 	{
 	retry:
+		printk("bearssl_sendmsg %s flush", current->comm);
 		err = br_sslio_flush(&s->ioc);
 		if (err == -EAGAIN || err == -EWOULDBLOCK)
 		{
@@ -185,6 +188,7 @@ static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 			len = err;
 		}
 	}
+	printk("bearssl_sendmsg %s ret %d", current->comm, len);
 
 	mutex_unlock(&s->lock);
 
@@ -202,6 +206,7 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 	{
 		return 0;
 	}
+	// printk("br_sslio_read_with_flags %s len %d flags %d", current->comm, len, flags);
 	int ret = br_sslio_run_until(ctx, BR_SSL_RECVAPP);
 	if (ret < 0)
 	{
@@ -210,9 +215,11 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 		{
 			return 0;
 		}
+		// pr_err("br_sslio_read_with_flags %s returned %d", current->comm, ret);
 		return ret;
 	}
 	buf = br_ssl_engine_recvapp_buf(ctx->engine, &alen);
+	printk("br_sslio_read_with_flags %s alen %d", current->comm, alen);
 	if (alen > len)
 	{
 		alen = len;
@@ -220,6 +227,21 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 	memcpy(dst, buf, alen);
 	if (!is_peek)
 		br_ssl_engine_recvapp_ack(ctx->engine, alen);
+
+	size_t left;
+	buf = br_ssl_engine_recvapp_buf(ctx->engine, &left);
+	if (!is_peek && (left > 0))
+	{
+		printk("br_sslio_read_with_flags %s left[%d]: \n%.*s", current->comm, left, left, buf);
+
+		// get the file descriptor of the socket
+		struct camblet_socket *sock = ctx->read_context;
+
+		struct sock *s = sock->sock;
+		// s->sk_data_ready(s);
+	}
+
+	// printk("br_sslio_read_with_flags %s returned %d", current->comm, alen);
 	return (int)alen;
 }
 
@@ -227,6 +249,9 @@ static int bearssl_recvmsg(camblet_socket *s, void *dst, size_t len, int flags)
 {
 	mutex_lock(&s->lock);
 	int ret = br_sslio_read_with_flags(&s->ioc, dst, len, flags);
+	printk("bearssl_recvmsg %s len %d flags %d", current->comm, len, flags);
+	if (ret > 0)
+		printk("bearssl_recvmsg # command [%s] buf\n%.*s", current->comm, ret, dst);
 	mutex_unlock(&s->lock);
 	return ret;
 }
@@ -735,6 +760,14 @@ int camblet_recvmsg(struct sock *sock,
 			ret = -ENOMEM;
 			goto bail;
 		}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
+		if (nonblock)
+		{
+			flags |= MSG_DONTWAIT;
+		}
+#endif
+
 		ret = camblet_socket_read(s, buf, len, flags);
 		if (ret < 0)
 		{
@@ -746,6 +779,8 @@ int camblet_recvmsg(struct sock *sock,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
 				int nonblock = flags & MSG_DONTWAIT;
 #endif
+				printk("recvmsg EAGAIN # command[%s] nonblock: %d", current->comm, nonblock);
+
 				if (nonblock == 0)
 					continue;
 			}
@@ -928,6 +963,8 @@ void camblet_close(struct sock *sk, long timeout)
 
 	if (s)
 	{
+		printk("close camblet socket # command[%s] sk[%p]", current->comm, sk);
+
 		mutex_lock(&s->lock);
 		if (s->ktls_close)
 		{
@@ -1943,6 +1980,36 @@ error:
 	return NULL;
 }
 
+struct proto_ops camblet_stream_ops;
+
+__poll_t camblet_poll(struct file *file, struct socket *sock,
+					  struct poll_table_struct *wait)
+{
+	struct sock *sk = sock->sk;
+	camblet_socket *cs = sk->sk_user_data;
+	if (cs)
+	{
+		// TODO do this in case of bearssl only
+		/// ???
+
+		// check if this is a waiting poll on read
+		if (wait && poll_requested_events(wait) & POLLIN)
+		{
+			size_t left;
+			// TODO we might need to lock here
+			br_ssl_engine_context *ctx = get_ssl_engine_context(cs);
+			br_ssl_engine_recvapp_buf(ctx, &left);
+
+			if (left > 0)
+			{
+				return POLLIN | POLLRDNORM;
+			}
+		}
+	}
+
+	return tcp_poll(file, sock, wait);
+}
+
 int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
@@ -2036,6 +2103,7 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		// and overwrite the socket protocol with our own
 		sk->sk_user_data = sc;
 		WRITE_ONCE(sk->sk_prot, prot);
+		WRITE_ONCE(sk->sk_socket->ops, &camblet_stream_ops);
 	}
 
 	return err;
@@ -2055,6 +2123,9 @@ int socket_init(void)
 	{
 		return err;
 	}
+
+	camblet_stream_ops = inet_stream_ops;
+	camblet_stream_ops.poll = camblet_poll;
 
 	// let's overwrite tcp_prot with our own implementation
 
