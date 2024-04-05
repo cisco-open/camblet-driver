@@ -233,6 +233,8 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 	unsigned char *buf;
 	size_t alen;
 	bool is_peek = flags & MSG_PEEK;
+	bool is_truncated = flags & MSG_TRUNC;
+	bool is_waitall = flags & MSG_WAITALL;
 
 	if (len == 0)
 	{
@@ -253,7 +255,10 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 	{
 		alen = len;
 	}
-	memcpy(dst, buf, alen);
+	if (likely(!is_truncated)) 
+	{
+		memcpy(dst, buf, alen);
+	}
 	if (!is_peek)
 		br_ssl_engine_recvapp_ack(ctx->engine, alen);
 
