@@ -40,12 +40,11 @@ echo -e "GET / HTTP/1.1\r\n\r\n" | openssl s_client -connect 127.0.0.1:7000
 echo "Test openssl client connect to python with ECDHE-RSA-CHACHA20-POLY1305 cipher"
 echo -e "GET / HTTP/1.1\r\n\r\n" | openssl s_client -cipher ECDHE-RSA-CHACHA20-POLY1305 -connect 127.0.0.1:7000
 
-# turn off because of know issue
-# echo "Test file-server using curl"
-# rm -f testfile test.output
-# echo "response" > testfile
-# echo -e "    100 0\n    100 response" > test.output
-# for i in `seq 1 100`; do curl -s localhost:8000/testfile; echo $?; done |sort|uniq -c|diff - test.output
+echo "Test file-server using curl"
+rm -f testfile test.output
+echo "response" > testfile
+echo -e "    100 0\n    100 response" > test.output
+for i in `seq 1 100`; do curl -s localhost:8000/testfile; echo $?; done |sort|uniq -c|diff - test.output
 
 echo "Test sendfile with NGiNX using curl"
 echo -e "    100 0" > test.output
