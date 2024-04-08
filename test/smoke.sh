@@ -13,7 +13,10 @@ sudo docker run -d --rm -p 8080:80 nginx
 
 sleep 2
 
-echo "Test downloading a bigger file"
+echo "Test a normal directory listing with wget"
+wget -d http://localhost:8000/ -O /dev/null
+
+echo "Test downloading a bigger file with curl"
 head -c 2M </dev/urandom > bigfile.o
 curl -v -o /tmp/bigfile_downloaded.o http://localhost:8000/bigfile.o
 
