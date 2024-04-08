@@ -63,6 +63,9 @@ static struct proto camblet_ktls_prot;
 static struct proto camblet_v6_prot;
 static struct proto camblet_v6_ktls_prot;
 
+static struct proto_ops camblet_stream_ops;
+static struct proto_ops camblet_v6_stream_ops;
+
 static br_rsa_private_key *rsa_priv;
 static br_rsa_public_key *rsa_pub;
 
@@ -1964,9 +1967,6 @@ error:
 	return NULL;
 }
 
-struct proto_ops camblet_stream_ops;
-struct proto_ops camblet_v6_stream_ops;
-
 __poll_t camblet_poll(struct file *file, struct socket *sock,
 					  struct poll_table_struct *wait)
 {
@@ -1978,7 +1978,7 @@ __poll_t camblet_poll(struct file *file, struct socket *sock,
 		if (poll_requested_events(wait) & POLLIN)
 		{
 			size_t left;
-			
+
 			mutex_lock(&s->lock);
 			{
 				br_ssl_engine_context *ctx = get_ssl_engine_context(s);
@@ -2016,7 +2016,14 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	{
 		err = connect_v6(sk, uaddr, addr_len);
 		prot = &camblet_v6_prot;
-		// prot_ops = &camblet_v6_stream_ops;
+
+		if (!camblet_v6_stream_ops.poll)
+		{
+			camblet_v6_stream_ops = *sk->sk_socket->ops;
+			camblet_v6_stream_ops.poll = camblet_poll;
+		}
+
+		prot_ops = &camblet_v6_stream_ops;
 	}
 
 	if (err != 0)
@@ -2113,10 +2120,14 @@ int socket_init(void)
 		return err;
 	}
 
+	// for poll support we need to overwrite the inet ops
 	camblet_stream_ops = inet_stream_ops;
 	camblet_stream_ops.poll = camblet_poll;
 
-	camblet_v6_stream_ops.poll = camblet_poll;
+	// inet6_stream_ops is not EXPORT-ed in the kernel, so we need to capture it in
+	// camblet_connect and create our own version.
+	// Here we mark our version uninitialized so we can later check if it was initialized.
+	camblet_v6_stream_ops.poll = NULL;
 
 	// let's overwrite tcp_prot with our own implementation
 
