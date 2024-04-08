@@ -101,7 +101,11 @@ struct camblet_socket
 	i64 direction;
 	char *alpn;
 
-	struct mutex lock;
+	//BearSSL is not thread safe so we need to lock every interaction with it
+	struct mutex bearssl_lock;
+
+	struct mutex readbuffer_lock;
+	struct mutex writebuffer_lock;
 
 	buffer_t *read_buffer;
 	buffer_t *write_buffer;
@@ -175,7 +179,7 @@ static int ktls_recvmsg(camblet_socket *s, void *buf, size_t size, int flags)
 
 static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 {
-	mutex_lock(&s->lock);
+	mutex_lock(&s->bearssl_lock);
 
 	int err = br_sslio_write_all(&s->ioc, src, len);
 	if (err < 0)
@@ -199,7 +203,7 @@ static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 		}
 	}
 
-	mutex_unlock(&s->lock);
+	mutex_unlock(&s->bearssl_lock);
 
 	return len;
 }
@@ -239,9 +243,9 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 
 static int bearssl_recvmsg(camblet_socket *s, void *dst, size_t len, int flags)
 {
-	mutex_lock(&s->lock);
+	mutex_lock(&s->bearssl_lock);
 	int ret = br_sslio_read_with_flags(&s->ioc, dst, len, flags);
-	mutex_unlock(&s->lock);
+	mutex_unlock(&s->bearssl_lock);
 	return ret;
 }
 
@@ -456,7 +460,10 @@ static camblet_socket *camblet_new_server_socket(struct sock *sock, opa_socket_c
 
 	s->direction = INPUT;
 
-	mutex_init(&s->lock);
+	mutex_init(&s->bearssl_lock);
+
+	mutex_init(&s->readbuffer_lock);
+	mutex_init(&s->writebuffer_lock);
 
 	proxywasm *p = this_cpu_proxywasm();
 
@@ -515,7 +522,7 @@ static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_c
 
 	s->direction = OUTPUT;
 
-	mutex_init(&s->lock);
+	mutex_init(&s->bearssl_lock);
 
 	proxywasm *p = this_cpu_proxywasm();
 
@@ -588,7 +595,7 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 
 	pr_debug("TLS handshake # command[%s] sock[%p]", current->comm, s->sock);
 
-	mutex_lock(&s->lock);
+	mutex_lock(&s->bearssl_lock);
 
 	// check if bearssl is already closed
 	unsigned int state = br_ssl_engine_current_state(&s->cc->eng);
@@ -684,7 +691,7 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 	}
 
 bail:
-	mutex_unlock(&s->lock);
+	mutex_unlock(&s->bearssl_lock);
 
 	return ret;
 }
@@ -749,6 +756,7 @@ int camblet_recvmsg(struct sock *sock,
 	bool end_of_stream = false;
 	int action = Pause;
 
+	mutex_lock(&s->readbuffer_lock);
 	int prevbuflen = get_read_buffer_size(s);
 
 	while (action != Continue)
@@ -848,6 +856,7 @@ int camblet_recvmsg(struct sock *sock,
 	ret = len;
 
 bail:
+	mutex_unlock(&s->readbuffer_lock);
 	return ret;
 }
 
@@ -867,6 +876,8 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	{
 		goto bail;
 	}
+
+	mutex_lock(&s->writebuffer_lock);
 
 	size_t prevbuflen = get_write_buffer_size(s);
 
@@ -933,6 +944,7 @@ int camblet_sendmsg(struct sock *sock, struct msghdr *msg, size_t size)
 	ret = size;
 
 bail:
+	mutex_unlock(&s->writebuffer_lock);
 	return ret;
 }
 
@@ -960,7 +972,7 @@ void camblet_close(struct sock *sk, long timeout)
 
 	if (s)
 	{
-		mutex_lock(&s->lock);
+		mutex_lock(&s->bearssl_lock);
 		if (is_ktls(s))
 		{
 			close = s->ktls_close;
@@ -977,7 +989,7 @@ void camblet_close(struct sock *sk, long timeout)
 
 		camblet_socket_free(s);
 
-		mutex_unlock(&s->lock);
+		mutex_unlock(&s->bearssl_lock);
 	}
 
 	close(sk, timeout);
