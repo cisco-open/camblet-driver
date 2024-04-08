@@ -101,7 +101,7 @@ struct camblet_socket
 	i64 direction;
 	char *alpn;
 
-	//BearSSL is not thread safe so we need to lock every interaction with it
+	// BearSSL is not thread safe so we need to lock every interaction with it
 	struct mutex bearssl_lock;
 
 	struct mutex readbuffer_lock;
@@ -523,6 +523,9 @@ static camblet_socket *camblet_new_client_socket(struct sock *sock, opa_socket_c
 	s->direction = OUTPUT;
 
 	mutex_init(&s->bearssl_lock);
+
+	mutex_init(&s->readbuffer_lock);
+	mutex_init(&s->writebuffer_lock);
 
 	proxywasm *p = this_cpu_proxywasm();
 
