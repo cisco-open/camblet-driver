@@ -158,9 +158,17 @@ static int ktls_recvmsg(camblet_socket *s, void *buf, size_t size, int flags)
 
 	iov_iter_kvec(&hdr.msg_iter, READ, &iov, 1, buf_len);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
+	int nonblock = 0;
+	if (flags & MSG_DONTWAIT)
+	{
+		nonblock = MSG_DONTWAIT;
+	}
+#endif
+
 	return s->ktls_recvmsg(s->sock, &hdr, size,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
-						   0,
+						   nonblock,
 #endif
 						   flags, &addr_len);
 }
