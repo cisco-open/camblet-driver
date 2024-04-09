@@ -1304,6 +1304,8 @@ static opa_socket_context socket_eval(const tcp_connection_context *conn_ctx, co
 	return ctx;
 }
 
+// Save original prot methods to be able to use and restore them later.
+
 struct sock *(*accept)(struct sock *sk, int flags, int *err, bool kern);
 int (*connect)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 int (*setsockopt)(struct sock *sk, int level,
@@ -2172,16 +2174,15 @@ int socket_init(void)
 	tcp_prot.accept = camblet_accept;
 	tcp_prot.connect = camblet_connect;
 	tcp_prot.setsockopt = camblet_setsockopt;
-	tcp_prot.getsockopt = camblet_getsockopt;
 
 	tcpv6_prot.accept = camblet_accept;
 	tcpv6_prot.connect = camblet_connect;
 	tcpv6_prot.setsockopt = camblet_setsockopt;
-	tcpv6_prot.getsockopt = camblet_getsockopt;
 
 	memcpy(&camblet_prot, &tcp_prot, sizeof(camblet_prot));
 	camblet_prot.recvmsg = camblet_recvmsg;
 	camblet_prot.sendmsg = camblet_sendmsg;
+	camblet_prot.getsockopt = camblet_getsockopt;
 	camblet_prot.close = camblet_close;
 
 	memcpy(&camblet_ktls_prot, &camblet_prot, sizeof(camblet_prot));
@@ -2190,6 +2191,7 @@ int socket_init(void)
 	memcpy(&camblet_v6_prot, &tcpv6_prot, sizeof(camblet_v6_prot));
 	camblet_v6_prot.recvmsg = camblet_recvmsg;
 	camblet_v6_prot.sendmsg = camblet_sendmsg;
+	camblet_v6_prot.getsockopt = camblet_getsockopt;
 	camblet_v6_prot.close = camblet_close;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 5, 0)
