@@ -2002,12 +2002,12 @@ __poll_t camblet_poll(struct file *file, struct socket *sock,
 		{
 			size_t left;
 
-			mutex_lock(&s->lock);
+			mutex_lock(&s->bearssl_lock);
 			{
 				br_ssl_engine_context *ctx = get_ssl_engine_context(s);
 				br_ssl_engine_recvapp_buf(ctx, &left);
 			}
-			mutex_unlock(&s->lock);
+			mutex_unlock(&s->bearssl_lock);
 
 			if (left > 0)
 			{
