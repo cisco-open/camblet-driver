@@ -21,6 +21,7 @@
 #include <net/ip.h>
 #include <linux/inet.h>
 #include <linux/sockptr.h>
+#include <net/inet_common.h>
 
 #include "bearssl.h"
 #include "commands.h"
@@ -61,6 +62,9 @@ static struct proto camblet_prot;
 static struct proto camblet_ktls_prot;
 static struct proto camblet_v6_prot;
 static struct proto camblet_v6_ktls_prot;
+
+static struct proto_ops camblet_stream_ops;
+static struct proto_ops camblet_v6_stream_ops;
 
 static br_rsa_private_key *rsa_priv;
 static br_rsa_public_key *rsa_pub;
@@ -164,6 +168,7 @@ static int ktls_recvmsg(camblet_socket *s, void *buf, size_t size, int flags)
 static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 {
 	mutex_lock(&s->lock);
+
 	int err = br_sslio_write_all(&s->ioc, src, len);
 	if (err < 0)
 	{
@@ -220,6 +225,7 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 	memcpy(dst, buf, alen);
 	if (!is_peek)
 		br_ssl_engine_recvapp_ack(ctx->engine, alen);
+
 	return (int)alen;
 }
 
@@ -331,6 +337,16 @@ static int get_write_buffer_size(camblet_socket *s)
 static void set_write_buffer_size(camblet_socket *s, int size)
 {
 	s->write_buffer->size = size;
+}
+
+static bool is_bearssl(camblet_socket *s)
+{
+	return s->recvmsg == bearssl_recvmsg;
+}
+
+static bool is_ktls(camblet_socket *s)
+{
+	return s->recvmsg == s->ktls_recvmsg;
 }
 
 static void camblet_socket_free(camblet_socket *s)
@@ -735,6 +751,14 @@ int camblet_recvmsg(struct sock *sock,
 			ret = -ENOMEM;
 			goto bail;
 		}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0)
+		if (nonblock)
+		{
+			flags |= MSG_DONTWAIT;
+		}
+#endif
+
 		ret = camblet_socket_read(s, buf, len, flags);
 		if (ret < 0)
 		{
@@ -929,9 +953,9 @@ void camblet_close(struct sock *sk, long timeout)
 	if (s)
 	{
 		mutex_lock(&s->lock);
-		if (s->ktls_close)
+		if (is_ktls(s))
 		{
-			close = READ_ONCE(s->ktls_close);
+			close = s->ktls_close;
 		}
 
 		pr_debug("free camblet socket # command[%s] sk[%p]", current->comm, sk);
@@ -1943,6 +1967,35 @@ error:
 	return NULL;
 }
 
+__poll_t camblet_poll(struct file *file, struct socket *sock,
+					  struct poll_table_struct *wait)
+{
+	struct sock *sk = sock->sk;
+	camblet_socket *s = sk->sk_user_data;
+	if (s && is_bearssl(s))
+	{
+		// check if this is a waiting poll on read
+		if (poll_requested_events(wait) & POLLIN)
+		{
+			size_t left;
+
+			mutex_lock(&s->lock);
+			{
+				br_ssl_engine_context *ctx = get_ssl_engine_context(s);
+				br_ssl_engine_recvapp_buf(ctx, &left);
+			}
+			mutex_unlock(&s->lock);
+
+			if (left > 0)
+			{
+				return POLLIN | POLLRDNORM;
+			}
+		}
+	}
+
+	return tcp_poll(file, sock, wait);
+}
+
 int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
@@ -1951,16 +2004,26 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	int err;
 	struct proto *prot;
+	struct proto_ops *prot_ops;
 
 	if (sk->sk_family == AF_INET)
 	{
 		err = connect(sk, uaddr, addr_len);
 		prot = &camblet_prot;
+		prot_ops = &camblet_stream_ops;
 	}
 	else
 	{
 		err = connect_v6(sk, uaddr, addr_len);
 		prot = &camblet_v6_prot;
+
+		if (!camblet_v6_stream_ops.poll)
+		{
+			camblet_v6_stream_ops = *sk->sk_socket->ops;
+			camblet_v6_stream_ops.poll = camblet_poll;
+		}
+
+		prot_ops = &camblet_v6_stream_ops;
 	}
 
 	if (err != 0)
@@ -2036,6 +2099,7 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		// and overwrite the socket protocol with our own
 		sk->sk_user_data = sc;
 		WRITE_ONCE(sk->sk_prot, prot);
+		WRITE_ONCE(sk->sk_socket->ops, prot_ops);
 	}
 
 	return err;
@@ -2055,6 +2119,15 @@ int socket_init(void)
 	{
 		return err;
 	}
+
+	// for poll support we need to overwrite the inet ops
+	camblet_stream_ops = inet_stream_ops;
+	camblet_stream_ops.poll = camblet_poll;
+
+	// inet6_stream_ops is not EXPORT-ed in the kernel, so we need to capture it in
+	// camblet_connect and create our own version.
+	// Here we mark our version uninitialized so we can later check if it was initialized.
+	camblet_v6_stream_ops.poll = NULL;
 
 	// let's overwrite tcp_prot with our own implementation
 
