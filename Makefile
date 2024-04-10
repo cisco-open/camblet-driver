@@ -4,7 +4,7 @@ ccflags-y += -foptimize-sibling-calls \
 			 -Dd_m3RecordBacktraces=1 \
 			 -DDEBUG=1 \
 			 -Dd_m3HasFloat=$(EMULATE_FLOATS) \
-			 -I$(PWD) \
+			 -I$(PWD)/include \
 			 -I$(PWD)/third-party/BearSSL/inc/ \
 			 -I$(PWD)/third-party/wasm3/source/ \
 			 -I$(PWD)/third-party/base64 \
@@ -62,26 +62,26 @@ camblet-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  third-party/base64/base64.o \
 			  third-party/parson/json.o \
 			  third-party/picohttpparser/picohttpparser.o \
-			  buffer.o \
-			  device_driver.o \
-			  main.o \
-			  csr.o \
-			  rsa_tools.o \
-			  cert_tools.o \
-			  wasm.o \
-			  opa.o \
-			  proxywasm.o \
-			  socket.o \
-			  task_context.o \
-			  tls.o \
-			  commands.o \
-			  string.o \
-			  augmentation.o \
-			  config.o \
-			  sd.o \
-			  trace.o \
-			  http.o \
-			  spiffe.o
+			  src/buffer.o \
+			  src/device_driver.o \
+			  src/main.o \
+			  src/csr.o \
+			  src/rsa_tools.o \
+			  src/cert_tools.o \
+			  src/wasm.o \
+			  src/opa.o \
+			  src/proxywasm.o \
+			  src/socket.o \
+			  src/task_context.o \
+			  src/tls.o \
+			  src/commands.o \
+			  src/string.o \
+			  src/augmentation.o \
+			  src/config.o \
+			  src/sd.o \
+			  src/trace.o \
+			  src/http.o \
+			  src/spiffe.o
 
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
@@ -96,12 +96,12 @@ static/socket_wasm.h: socket.rego
 	opa build -t wasm -e "socket/allow" socket.rego -o bundle.tar.gz
 	tar zxf bundle.tar.gz /policy.wasm
 	mv policy.wasm socket.wasm
-	xxd -i socket.wasm static/socket_wasm.h
+	xxd -i socket.wasm include/static/socket_wasm.h
 
 static/csr_wasm.h: wasm-modules/csr-rust/**/*.rs
 	cargo build --release --target=wasm32-unknown-unknown
 	cp target/wasm32-unknown-unknown/release/csr-rust.wasm csr.wasm
-	xxd -i csr.wasm static/csr_wasm.h
+	xxd -i csr.wasm include/static/csr_wasm.h
 
 opa-test:
 	opa test *.rego -v
