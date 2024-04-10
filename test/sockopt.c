@@ -51,12 +51,16 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    printf("Connected to server\n");
+
     // send a simple http request
     const char *msg = "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n";
     if (send(sock, msg, strlen(msg), 0) < 0) {
         perror("send");
         return 1;
     }
+
+    printf("Sent:\n%s\n", msg);
 
     char buf[1024];
     int n = recv(sock, buf, sizeof(buf), 0);
@@ -67,7 +71,7 @@ int main(int argc, char **argv) {
 
     buf[n] = '\0';
 
-    printf("Received: %s\n", buf);
+    printf("Received:\n%s\n...\n", buf);
 
     close(sock);
 
