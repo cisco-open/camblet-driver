@@ -124,7 +124,7 @@ func main() {
 
 		tlsConfig := &tls.Config{
 			Certificates: []tls.Certificate{certificate()},
-			NextProtos:   []string{"h2", "http/1.1"},
+			NextProtos:   []string{"h2", "http/1.1", "camblet"},
 		}
 
 		l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
