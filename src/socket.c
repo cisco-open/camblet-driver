@@ -41,16 +41,15 @@
 #include "trace.h"
 #include "http.h"
 
-#define CAMBLET_PROTOCOL "camblet"
-#define CAMBLET_PASSTHROUGH_PROTOCOL CAMBLET_PROTOCOL "/passthrough"
+#define CAMBLET_PASSTHROUGH CAMBLET "/passthrough"
 
 const char *ALPNs[] = {
-	CAMBLET_PROTOCOL,
+	CAMBLET,
 };
 
 const char *ALPNs_passthrough[] = {
-	CAMBLET_PASSTHROUGH_PROTOCOL,
-	CAMBLET_PROTOCOL,
+	CAMBLET_PASSTHROUGH,
+	CAMBLET,
 };
 
 const size_t ALPNs_NUM = sizeof(ALPNs) / sizeof(ALPNs[0]);
@@ -673,7 +672,7 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 			alpn = "no-camblet";
 		}
 
-		if (strcmp(alpn, CAMBLET_PASSTHROUGH_PROTOCOL) == 0)
+		if (strcmp(alpn, CAMBLET_PASSTHROUGH) == 0)
 		{
 			trace_debug(conn_ctx, "passthrough enabled", 0);
 			s->sendmsg = plain_sendmsg;
@@ -1149,11 +1148,13 @@ static int configure_ktls_sock(camblet_socket *s)
 	return 0;
 }
 
-bool sockptr_is_camblet(sockptr_t sp)
+bool sockptr_is_camblet(sockptr_t sp, unsigned int optlen)
 {
-	char value[4];
-	copy_from_sockptr(value, sp, 4);
-	return strncmp(value, "camblet", 4) == 0;
+	if (optlen != sizeof(CAMBLET))
+		return false;
+	char value[sizeof(CAMBLET)];
+	copy_from_sockptr(value, sp, sizeof(CAMBLET));
+	return strncmp(value, CAMBLET, sizeof(CAMBLET)) == 0;
 }
 
 // Let's intercept this call to set the socket options for setting up a simple TLS connection.
@@ -1167,11 +1168,13 @@ int camblet_setsockopt(struct sock *sk, int level,
 	if (level == SOL_TCP && optname == TCP_ULP)
 	{
 		// check if optval is "camblet"
-		if (optlen == sizeof("camblet") && sockptr_is_camblet(optval))
+		if (sockptr_is_camblet(optval, optlen))
 		{
 			opa_socket_context opa_socket_ctx = {.allowed = true, .passthrough = false, .mtls = false};
-			tcp_connection_context conn_ctx = {.direction = OUTPUT};
-			camblet_socket *s = camblet_new_client_socket(sk, opa_socket_ctx, &conn_ctx);
+			tcp_connection_context *conn_ctx = kzalloc(sizeof(tcp_connection_context), GFP_KERNEL);
+			conn_ctx->direction = OUTPUT;
+
+			camblet_socket *s = camblet_new_client_socket(sk, opa_socket_ctx, conn_ctx);
 			if (IS_ERR(s))
 			{
 				pr_err("camblet_setsockopt error # command[%s] error_code[%ld]", current->comm, PTR_ERR(s));

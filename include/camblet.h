@@ -11,9 +11,11 @@
 #ifndef camblet_h
 #define camblet_h
 
+
 #define SOL_CAMBLET 7891
 #define CAMBLET_HOSTNAME 1
 #define CAMBLET_TLS_INFO 2
+#define CAMBLET "camblet"
 
 #define CAMBLET_EINVALIDSPIFFEID 1001
 
