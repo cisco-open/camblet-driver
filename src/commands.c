@@ -26,7 +26,6 @@ static LIST_HEAD(command_list);
 
 // lock for the above list to make it thread safe
 static DEFINE_MUTEX(command_list_lock);
-static unsigned long command_list_lock_flags;
 
 // wait queue for the driver to be woken up when a command is added to the list
 static DECLARE_WAIT_QUEUE_HEAD(command_wait_queue);
