@@ -96,12 +96,12 @@ static/socket_wasm.h: socket.rego
 	opa build -t wasm -e "socket/allow" socket.rego -o bundle.tar.gz
 	tar zxf bundle.tar.gz /policy.wasm
 	mv policy.wasm socket.wasm
-	xxd -i socket.wasm static/socket_wasm.h
+	xxd -i socket.wasm include/static/socket_wasm.h
 
 static/csr_wasm.h: wasm-modules/csr-rust/**/*.rs
 	cargo build --release --target=wasm32-unknown-unknown
 	cp target/wasm32-unknown-unknown/release/csr-rust.wasm csr.wasm
-	xxd -i csr.wasm static/csr_wasm.h
+	xxd -i csr.wasm include/static/csr_wasm.h
 
 opa-test:
 	opa test *.rego -v
