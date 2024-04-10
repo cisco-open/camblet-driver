@@ -66,6 +66,14 @@ func certificate() tls.Certificate {
 var port int
 var tlsOn bool
 
+// logger middleware
+func logger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.URL)
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 
 	flag.IntVar(&port, "port", 8000, "Listening port")
@@ -115,7 +123,7 @@ func main() {
 		}
 	})
 
-	http.Handle("/", http.FileServer(http.Dir("./")))
+	http.Handle("/", logger(http.FileServer(http.Dir("./"))))
 
 	var err error
 
@@ -124,7 +132,7 @@ func main() {
 
 		tlsConfig := &tls.Config{
 			Certificates: []tls.Certificate{certificate()},
-			NextProtos:   []string{"h2", "http/1.1", "camblet"},
+			NextProtos:   []string{"h2", "http/1.1"},
 		}
 
 		l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
