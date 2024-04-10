@@ -352,12 +352,12 @@ static void set_write_buffer_size(camblet_socket *s, int size)
 
 static bool is_bearssl(camblet_socket *s)
 {
-	return s->recvmsg == bearssl_recvmsg;
+	return s->recvmsg && s->recvmsg == bearssl_recvmsg;
 }
 
 static bool is_ktls(camblet_socket *s)
 {
-	return s->recvmsg == s->ktls_recvmsg;
+	return s->recvmsg && s->recvmsg == s->ktls_recvmsg;
 }
 
 static void camblet_socket_free(camblet_socket *s)
@@ -971,27 +971,25 @@ void camblet_close(struct sock *sk, long timeout)
 	void (*close)(struct sock *sk, long timeout) = tcp_close;
 
 	camblet_socket *s = READ_ONCE(sk->sk_user_data);
-
 	if (s)
 	{
 		mutex_lock(&s->bearssl_lock);
+
 		if (is_ktls(s))
 		{
 			close = s->ktls_close;
 		}
 
-		pr_debug("free camblet socket # command[%s] sk[%p]", current->comm, sk);
-
-		if (s->alpn && !s->ktls_sendmsg && !s->opa_socket_ctx.passthrough)
+		if (s->alpn && !is_ktls(s) && !s->opa_socket_ctx.passthrough)
 		{
 			bearssl_close(s);
 		}
 
 		WRITE_ONCE(sk->sk_user_data, NULL);
 
-		camblet_socket_free(s);
-
 		mutex_unlock(&s->bearssl_lock);
+
+		camblet_socket_free(s);
 	}
 
 	close(sk, timeout);
@@ -2081,7 +2079,7 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	if (opa_socket_ctx.allowed)
 	{
-		if (!opa_socket_ctx.workload_id_is_valid)
+		if (opa_socket_ctx.mtls && !opa_socket_ctx.workload_id_is_valid)
 		{
 			err = -CAMBLET_EINVALIDSPIFFEID;
 			goto error;
