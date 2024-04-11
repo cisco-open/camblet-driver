@@ -13,15 +13,15 @@
 #include <linux/tcp.h>
 #include <linux/version.h>
 #include <linux/uaccess.h>
+#include <linux/inet.h>
+#include <linux/sockptr.h>
+#include <net/inet_common.h>
 #include <net/protocol.h>
 #include <net/tcp.h>
 #include <net/transp_v6.h>
 #include <net/tls.h>
 #include <net/sock.h>
 #include <net/ip.h>
-#include <linux/inet.h>
-#include <linux/sockptr.h>
-#include <net/inet_common.h>
 
 #include "bearssl.h"
 #include "commands.h"
@@ -45,6 +45,7 @@
 
 const char *ALPNs[] = {
 	CAMBLET,
+	"http/1.1" // TODO THIS should be here only in case of setscoktopt() is called, otherwise it should not be, or what?
 };
 
 const char *ALPNs_passthrough[] = {
@@ -93,6 +94,11 @@ struct camblet_socket
 
 	x509_certificate *cert;
 
+	// Manual client mode means that the user had manually configured
+	// the socket to use TLS provided by camblet, so we should not use
+	// ALPNs, and detect pass-through. Also hostname verification can be
+	// enabled in this mode via setsockopt.
+	bool manual_client;
 	char *hostname;
 
 	proxywasm *p;
@@ -613,7 +619,7 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 	if (alpn == NULL)
 	{
 		// if we are the client, we should check if the transport is already encrypted
-		if (s->direction == OUTPUT && (s->opa_socket_ctx.passthrough || msghdr_contains_tls_handshake(msg)))
+		if (s->direction == OUTPUT && (s->opa_socket_ctx.passthrough || msghdr_contains_tls_handshake(msg)) && !s->manual_client)
 		{
 			trace_info(conn_ctx, "setting passthrough ALPN", 0);
 
@@ -1179,6 +1185,7 @@ int camblet_setsockopt(struct sock *sk, int level,
 				return PTR_ERR(s);
 			}
 
+			s->manual_client = true;
 			sk->sk_user_data = s;
 
 			return 0;
@@ -1857,7 +1864,8 @@ int camblet_configure_client_tls(camblet_socket *sc)
 	 */
 	br_ssl_engine_set_buffer(&sc->cc->eng, &sc->iobuf, BR_SSL_BUFSIZE_BIDI, true);
 
-	br_ssl_engine_set_protocol_names(&sc->cc->eng, ALPNs, ALPNs_NUM);
+	if (!sc->manual_client)
+		br_ssl_engine_set_protocol_names(&sc->cc->eng, ALPNs, ALPNs_NUM);
 
 	/*
 	 * Reset the client context, for a new handshake. We provide the
