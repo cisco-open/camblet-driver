@@ -20,21 +20,32 @@
 
 #include "../include/camblet.h"
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     int sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0) {
+    if (sock < 0)
+    {
         perror("socket");
         return 1;
     }
 
+    // setting sockopt "SOL_TCP, TCP_ULP, CAMBLET" should be set before connect
     int optval = 1;
-    if (setsockopt(sock, SOL_TCP, TCP_ULP, CAMBLET, sizeof(CAMBLET)) < 0) {
+    if (setsockopt(sock, SOL_TCP, TCP_ULP, CAMBLET, sizeof(CAMBLET)) < 0)
+    {
         perror("setsockopt");
         return 1;
     }
 
+    // if (setsockopt(sock, SOL_TCP, TCP_ULP, CAMBLET_HOSTNAME, sizeof(CAMBLET)) < 0)
+    // {
+    //     perror("setsockopt");
+    //     return 1;
+    // }
+
     socklen_t optlen;
-    if (getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &optval, &optlen) < 0) {
+    if (getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &optval, &optlen) < 0)
+    {
         perror("getsockopt");
         return 1;
     }
@@ -46,7 +57,8 @@ int main(int argc, char **argv) {
     addr.sin_port = htons(8000);
     addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-    if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+    {
         perror("connect");
         return 1;
     }
@@ -55,23 +67,26 @@ int main(int argc, char **argv) {
 
     // send a simple http request
     const char *msg = "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n";
-    if (send(sock, msg, strlen(msg), 0) < 0) {
+    if (send(sock, msg, strlen(msg), 0) < 0)
+    {
         perror("send");
         return 1;
     }
 
     printf("Sent:\n%s\n", msg);
+    printf("Received:\n");
 
     char buf[1024];
-    int n = recv(sock, buf, sizeof(buf), 0);
-    if (n < 0) {
+    int n;
+    while ((n = recv(sock, buf, sizeof(buf), 0)) > 0)
+    {
+        printf("%.*s", n, buf);
+    }
+    if (n < 0)
+    {
         perror("recv");
         return 1;
     }
-
-    buf[n] = '\0';
-
-    printf("Received:\n%s\n...\n", buf);
 
     close(sock);
 
