@@ -55,7 +55,7 @@ int main(int argc, char **argv)
 
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(8000);
+    addr.sin_port = htons(8007);
     addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
