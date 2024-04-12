@@ -590,6 +590,20 @@ static bool msghdr_contains_tls_handshake(struct msghdr *msg)
 	return is_tls_handshake(first_3_bytes);
 }
 
+void camblet_wait_data(struct sock *sk)
+{
+	// Wait for more data on the socket,
+	// effectively blocking until data is available.
+	lock_sock(sk);
+	long timeo = sock_rcvtimeo(sk, 0);
+	int wait = sk_wait_data(sk, &timeo, NULL);
+	release_sock(sk);
+	if (wait < 0)
+	{
+		pr_err("sk_wait_data failed # command[%s] err[%d]", current->comm, wait);
+	}
+}
+
 static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 {
 	int ret = 0;
@@ -650,19 +664,7 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 		}
 		else if (ret == -EAGAIN || ret == -EWOULDBLOCK)
 		{
-			pr_debug("TLS handshake EAGAIN # command[%s] sk[%p]", current->comm, s->sock);
-
-			// Wait for more data on the socket,
-			// effectively blocking until data is available.
-			lock_sock(s->sock);
-			long timeo = sock_rcvtimeo(s->sock, 0);
-			int wait = sk_wait_data(s->sock, &timeo, NULL);
-			release_sock(s->sock);
-			if (wait < 0)
-			{
-				pr_err("sk_wait_data failed # err[%d]", wait);
-			}
-
+			camblet_wait_data(s->sock);
 			goto retry;
 		}
 		else
@@ -780,8 +782,6 @@ int camblet_recvmsg(struct sock *sock,
 	mutex_lock(&s->readbuffer_lock);
 	int prevbuflen = get_read_buffer_size(s);
 
-	struct sk_buff *last;
-
 	while (action != Continue)
 	{
 		char *buf = get_read_buffer_for_read(s, len);
@@ -797,8 +797,6 @@ int camblet_recvmsg(struct sock *sock,
 			flags |= MSG_DONTWAIT;
 		}
 #endif
-
-		last = skb_peek_tail(&sock->sk_receive_queue);
 
 		ret = camblet_socket_read(s, buf, len, flags);
 		if (ret < 0)
@@ -822,17 +820,7 @@ int camblet_recvmsg(struct sock *sock,
 						goto bail;
 					}
 
-					// Wait for more data on the socket,
-					// effectively blocking until data is available.
-					lock_sock(sock);
-					long timeo = sock_rcvtimeo(sock, nonblock);
-					int wait = sk_wait_data(sock, &timeo, last);
-					release_sock(sock);
-					if (wait < 0)
-					{
-						pr_err("sk_wait_data failed # err[%d]", wait);
-					}
-
+					camblet_wait_data(s->sock);
 					continue;
 				}
 			}
@@ -1261,8 +1249,6 @@ int camblet_getsockopt(struct sock *sk, int level,
 		goto out;
 	}
 
-	pr_debug("getsockopt # level[%d] optname[%d]", level, optname);
-
 	int len;
 
 	sockptr_t optlen = USER_SOCKPTR(uoptlen);
@@ -1288,7 +1274,12 @@ int camblet_getsockopt(struct sock *sk, int level,
 			// through the socket from the client side
 			// there return value here is not important as it will be handled
 			// at the send/recvmsg calls
-			ensure_tls_handshake(s, NULL);
+			int err = ensure_tls_handshake(s, NULL);
+			if (err < 0)
+			{
+				pr_err("could not ensure tls handshake # command[%s] err[%d]", current->comm, err);
+				return err;
+			}
 
 			tls_info info = {};
 

@@ -30,7 +30,6 @@ int main(int argc, char **argv)
     }
 
     // setting sockopt "SOL_TCP, TCP_ULP, CAMBLET" should be set before connect
-    int optval = 1;
     if (setsockopt(sock, SOL_TCP, TCP_ULP, CAMBLET, sizeof(CAMBLET)) < 0)
     {
         perror("setsockopt");
@@ -44,15 +43,6 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    socklen_t optlen;
-    if (getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &optval, &optlen) < 0)
-    {
-        perror("getsockopt");
-        return 1;
-    }
-
-    printf("SO_SNDBUF: %d\n", optval);
-
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_port = htons(8007);
@@ -64,7 +54,22 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    printf("Connected to server\n");
+    // Camblet socket options can be read after connect
+    tls_info tls_info;
+    socklen_t tls_inf_len = sizeof(tls_info);
+    if (getsockopt(sock, SOL_CAMBLET, CAMBLET_TLS_INFO, &tls_info, &tls_inf_len) < 0)
+    {
+        perror("getsockopt");
+        return 1;
+    }
+
+    if (tls_info.camblet_enabled != 1)
+    {
+        perror("TLS not enabled");
+        return 1;
+    }
+
+    printf("Connected to server, Camblet is enabled\n");
 
     // send a simple http request
     const char *msg = "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n";
