@@ -767,6 +767,8 @@ int camblet_recvmsg(struct sock *sock,
 	mutex_lock(&s->readbuffer_lock);
 	int prevbuflen = get_read_buffer_size(s);
 
+	struct sk_buff *last;
+
 	while (action != Continue)
 	{
 		char *buf = get_read_buffer_for_read(s, len);
@@ -783,11 +785,16 @@ int camblet_recvmsg(struct sock *sock,
 		}
 #endif
 
+		last = skb_peek_tail(&sock->sk_receive_queue);
+
 		ret = camblet_socket_read(s, buf, len, flags);
 		if (ret < 0)
 		{
 			if (ret == -ERESTARTSYS)
+			{
 				ret = -EINTR;
+				goto bail;
+			}
 
 			if (ret == -EAGAIN || ret == -EWOULDBLOCK)
 			{
@@ -795,7 +802,26 @@ int camblet_recvmsg(struct sock *sock,
 				int nonblock = flags & MSG_DONTWAIT;
 #endif
 				if (nonblock == 0)
+				{
+					if (signal_pending(current))
+					{
+						ret = -EINTR;
+						goto bail;
+					}
+
+					// Wait for more data on the socket,
+					// effectively blocking until data is available.
+					lock_sock(sock);
+					long timeo = sock_rcvtimeo(sock, nonblock);
+					int wait = sk_wait_data(sock, &jiffies, last);
+					release_sock(sock);
+					if (wait < 0)
+					{
+						pr_err("sk_wait_data failed # err[%d]", wait);
+					}
+
 					continue;
+				}
 			}
 
 			goto bail;
