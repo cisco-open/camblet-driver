@@ -650,6 +650,19 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 		}
 		else if (ret == -EAGAIN || ret == -EWOULDBLOCK)
 		{
+			pr_debug("TLS handshake EAGAIN # command[%s] sk[%p]", current->comm, s->sock);
+
+			// Wait for more data on the socket,
+			// effectively blocking until data is available.
+			lock_sock(s->sock);
+			long timeo = sock_rcvtimeo(s->sock, 0);
+			int wait = sk_wait_data(s->sock, &timeo, NULL);
+			release_sock(s->sock);
+			if (wait < 0)
+			{
+				pr_err("sk_wait_data failed # err[%d]", wait);
+			}
+
 			goto retry;
 		}
 		else
@@ -813,7 +826,7 @@ int camblet_recvmsg(struct sock *sock,
 					// effectively blocking until data is available.
 					lock_sock(sock);
 					long timeo = sock_rcvtimeo(sock, nonblock);
-					int wait = sk_wait_data(sock, &jiffies, last);
+					int wait = sk_wait_data(sock, &timeo, last);
 					release_sock(sock);
 					if (wait < 0)
 					{
