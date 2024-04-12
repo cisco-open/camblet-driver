@@ -39,6 +39,7 @@ func certificate() tls.Certificate {
 		Subject: pkix.Name{
 			Organization: []string{"Cis Co"},
 		},
+		DNSNames:  []string{"localhost"},
 		NotBefore: time.Now(),
 		NotAfter:  time.Now().Add(time.Hour * 24 * 180),
 

@@ -37,11 +37,12 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // if (setsockopt(sock, SOL_TCP, TCP_ULP, CAMBLET_HOSTNAME, sizeof(CAMBLET)) < 0)
-    // {
-    //     perror("setsockopt");
-    //     return 1;
-    // }
+    char hostname[] = "localhost";
+    if (setsockopt(sock, SOL_CAMBLET, CAMBLET_HOSTNAME, hostname, sizeof(hostname)) < 0)
+    {
+        perror("setsockopt");
+        return 1;
+    }
 
     socklen_t optlen;
     if (getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &optval, &optlen) < 0)
@@ -74,19 +75,17 @@ int main(int argc, char **argv)
     }
 
     printf("Sent:\n%s\n", msg);
-    printf("Received:\n");
 
-    char buf[1024];
+    char buf[8096];
     int n;
-    while ((n = recv(sock, buf, sizeof(buf), 0)) > 0)
-    {
-        printf("%.*s", n, buf);
-    }
-    if (n < 0)
+    if ((n = recv(sock, buf, sizeof(buf), 0)) < 0)
     {
         perror("recv");
         return 1;
     }
+
+    printf("Received [%d bytes] at first:\n", n);
+    printf("%.*s\n", n, buf);
 
     close(sock);
 
