@@ -1201,6 +1201,19 @@ int camblet_setsockopt(struct sock *sk, int level,
 		// check if optval is "camblet"
 		if (sockptr_is_camblet(optval, optlen))
 		{
+			if (sk->sk_user_data)
+			{
+				pr_err("camblet_setsockopt error: sk_user_data is not NULL # command[%s]", current->comm);
+				return -EISCONN;
+			}
+
+			// if socket is connected
+			if (sk->sk_state == TCP_ESTABLISHED)
+			{
+				pr_err("camblet_setsockopt error: socket already connected # command[%s]", current->comm);
+				return -EISCONN;
+			}
+
 			opa_socket_context opa_socket_ctx = {.allowed = true, .passthrough = false, .mtls = false};
 			tcp_connection_context *conn_ctx = kzalloc(sizeof(tcp_connection_context), GFP_KERNEL);
 			conn_ctx->direction = OUTPUT;
@@ -1226,7 +1239,14 @@ int camblet_setsockopt(struct sock *sk, int level,
 			if (!s)
 			{
 				pr_err("camblet_setsockopt error: sk_user_data is NULL # command[%s]", current->comm);
-				return -1;
+				return -ENOPROTOOPT;
+			}
+
+			// if socket is connected
+			if (sk->sk_state == TCP_ESTABLISHED)
+			{
+				pr_err("camblet_setsockopt error: socket already connected # command[%s]", current->comm);
+				return -EISCONN;
 			}
 
 			s->hostname = kzalloc(optlen, GFP_KERNEL);
@@ -1267,42 +1287,46 @@ int camblet_getsockopt(struct sock *sk, int level,
 	case CAMBLET_TLS_INFO:
 	{
 		camblet_socket *s = sk->sk_user_data;
-		if (s)
+		if (!s)
 		{
-			// trigger tls handshake here to avoid timing issues
-			// caused by calling getsockopt before sending anything
-			// through the socket from the client side
-			// there return value here is not important as it will be handled
-			// at the send/recvmsg calls
-			int err = ensure_tls_handshake(s, NULL);
-			if (err < 0)
-			{
-				pr_err("could not ensure tls handshake # command[%s] err[%d]", current->comm, err);
-				return err;
-			}
-
-			tls_info info = {};
-
-			info.camblet_enabled = s->opa_socket_ctx.allowed;
-			info.mtls_enabled = s->opa_socket_ctx.mtls;
-
-			if (s->opa_socket_ctx.workload_id)
-			{
-				strncpy(info.spiffe_id, s->opa_socket_ctx.workload_id, 256);
-			}
-
-			if (s->conn_ctx->peer_spiffe_id)
-			{
-				strncpy(info.peer_spiffe_id, s->conn_ctx->peer_spiffe_id, 256);
-			}
-
-			len = sizeof(info);
-
-			if (copy_to_sockptr_offset(optlen, 0, &len, sizeof(int)))
-				return -EFAULT;
-			if (copy_to_sockptr_offset(optval, 0, &info, len))
-				return -EFAULT;
+			pr_err("camblet_getsockopt error: sk_user_data is NULL # command[%s]", current->comm);
+			return -ENOPROTOOPT;
 		}
+
+		// trigger tls handshake here to avoid timing issues
+		// caused by calling getsockopt before sending anything
+		// through the socket from the client side
+		// there return value here is not important as it will be handled
+		// at the send/recvmsg calls
+		int err = ensure_tls_handshake(s, NULL);
+		if (err < 0)
+		{
+			pr_err("could not ensure tls handshake # command[%s] err[%d]", current->comm, err);
+			return err;
+		}
+
+		tls_info info = {};
+
+		info.camblet_enabled = s->opa_socket_ctx.allowed;
+		info.mtls_enabled = s->opa_socket_ctx.mtls;
+
+		if (s->opa_socket_ctx.workload_id)
+		{
+			strncpy(info.spiffe_id, s->opa_socket_ctx.workload_id, 256);
+		}
+
+		if (s->conn_ctx->peer_spiffe_id)
+		{
+			strncpy(info.peer_spiffe_id, s->conn_ctx->peer_spiffe_id, 256);
+		}
+
+		len = sizeof(info);
+
+		if (copy_to_sockptr_offset(optlen, 0, &len, sizeof(int)))
+			return -EFAULT;
+		if (copy_to_sockptr_offset(optval, 0, &info, len))
+			return -EFAULT;
+
 		return 0;
 	}
 	}
