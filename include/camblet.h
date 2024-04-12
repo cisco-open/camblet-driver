@@ -25,6 +25,6 @@ typedef struct
     bool mtls_enabled;
     char spiffe_id[256];
     char peer_spiffe_id[256];
-} tls_info;
+} camblet_tls_info;
 
 #endif /* camblet_h */

@@ -55,7 +55,7 @@ int main(int argc, char **argv)
     }
 
     // Camblet socket options can be read after connect
-    tls_info tls_info;
+    camblet_tls_info tls_info;
     socklen_t tls_inf_len = sizeof(tls_info);
     if (getsockopt(sock, SOL_CAMBLET, CAMBLET_TLS_INFO, &tls_info, &tls_inf_len) < 0)
     {

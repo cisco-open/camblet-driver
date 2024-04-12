@@ -1305,7 +1305,7 @@ int camblet_getsockopt(struct sock *sk, int level,
 			return err;
 		}
 
-		tls_info info = {};
+		camblet_tls_info info = {0};
 
 		info.camblet_enabled = s->opa_socket_ctx.allowed;
 		info.mtls_enabled = s->opa_socket_ctx.mtls;
