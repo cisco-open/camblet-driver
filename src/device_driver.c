@@ -17,7 +17,7 @@
 
 #include "base64.h"
 #include "device_driver.h"
-#include "json.h"
+#include "parson/json.h"
 #include "opa.h"
 #include "proxywasm.h"
 #include "csr.h"

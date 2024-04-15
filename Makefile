@@ -5,6 +5,7 @@ ccflags-y += -foptimize-sibling-calls \
 			 -DDEBUG=1 \
 			 -Dd_m3HasFloat=$(EMULATE_FLOATS) \
 			 -I$(PWD)/include \
+			 -I$(PWD)/third-party/ \
 			 -I$(PWD)/third-party/BearSSL/inc/ \
 			 -I$(PWD)/third-party/wasm3/source/ \
 			 -I$(PWD)/third-party/base64 \
