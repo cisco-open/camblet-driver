@@ -8,7 +8,7 @@
  * modified, or distributed except according to those terms.
  */
 
-// this is a simple test program that connets to a server and sets and gets a few socket options,
+// this is a simple test program that connects to a server and sets and gets a few socket options,
 // then connects to a server and sends a http message
 
 #include <stdio.h>
