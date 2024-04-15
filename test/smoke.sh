@@ -8,6 +8,9 @@ go build test/file-server.go
 echo "Starting file server"
 ./file-server >/tmp/file-server.log 2>&1 &
 
+echo "Starting file server with TLS"
+./file-server -tls -port 8007 >/tmp/file-server-tls.log 2>&1 &
+
 echo "Starting NGiNX in docker"
 sudo docker run -d --rm -p 8080:80 nginx
 
@@ -56,6 +59,10 @@ for i in `seq 1 100`; do curl -s -o/dev/null localhost:8080; echo $?; done |sort
 echo "Test sendfile with NGiNX using wget"
 echo -e "    100 0" > test.output
 for i in `seq 1 100`; do wget -q -O/dev/null localhost:8080; echo $?; done |sort|uniq -c|diff - test.output
+
+echo "Test sockopt on file-server with TLS"
+gcc -o sockopt test/sockopt.c
+./sockopt
 
 echo "Stop processes"
 sudo pkill python3

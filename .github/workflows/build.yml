@@ -1,4 +1,4 @@
-name: Makefile CI
+name: Build and test
 
 on:
   push:
@@ -79,7 +79,7 @@ jobs:
     #     ## limits ssh access and adds the ssh public key for the user which triggered the workflow
     #     limit-access-to-actor: true
 
-    - name: Run proxy-wasm smoke test with kTLS
+    - name: Run smoke test with kTLS
       uses: ./camblet-driver/.github/actions/smoketest
       timeout-minutes: 1
  
@@ -94,6 +94,6 @@ jobs:
         sudo modprobe camblet dyndbg==_ ktls_available=0
         sudo dmesg -T
 
-    - name: Run proxy-wasm smoke test with bearSSL
+    - name: Run smoke test with bearSSL
       uses: ./camblet-driver/.github/actions/smoketest
       timeout-minutes: 1
