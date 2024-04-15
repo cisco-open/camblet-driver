@@ -148,6 +148,20 @@ static br_ssl_engine_context *get_ssl_engine_context(camblet_socket *s)
 	return s->direction == ListenerDirectionInbound ? &s->sc->eng : &s->cc->eng;
 }
 
+void camblet_wait_data(camblet_socket *s)
+{
+	// Wait for more data on the socket,
+	// effectively blocking until data is available.
+	lock_sock(s->sock);
+	long timeo = sock_rcvtimeo(s->sock, 0);
+	int wait = sk_wait_data(s->sock, &timeo, NULL);
+	release_sock(s->sock);
+	if (wait < 0)
+	{
+		pr_err("sk_wait_data failed # command[%s] err[%d]", current->comm, wait);
+	}
+}
+
 static int ktls_sendmsg(camblet_socket *s, void *buf, size_t len)
 {
 	struct msghdr hdr = {0};
@@ -190,7 +204,7 @@ static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 	if (err < 0)
 	{
 		const br_ssl_engine_context *ec = get_ssl_engine_context(s);
-		pr_err("br_sslio_write_all error # command[%s] br_last_err[%d]", current->comm, br_ssl_engine_last_error(ec));
+		pr_err("bearssl_sendmsg error # command[%s] br_last_err[%d]", current->comm, br_ssl_engine_last_error(ec));
 		len = err;
 	}
 	else
@@ -199,11 +213,12 @@ static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 		err = br_sslio_flush(&s->ioc);
 		if (err == -EAGAIN || err == -EWOULDBLOCK)
 		{
+			camblet_wait_data(s);
 			goto retry;
 		}
 		else if (err < 0)
 		{
-			pr_err("br_sslio_flush error # command[%s] err[%d]", current->comm, err);
+			pr_err("bearssl_sendmsg error # command[%s] err[%d]", current->comm, err);
 			len = err;
 		}
 	}
@@ -590,20 +605,6 @@ static bool msghdr_contains_tls_handshake(struct msghdr *msg)
 	return is_tls_handshake(first_3_bytes);
 }
 
-void camblet_wait_data(struct sock *sk)
-{
-	// Wait for more data on the socket,
-	// effectively blocking until data is available.
-	lock_sock(sk);
-	long timeo = sock_rcvtimeo(sk, 0);
-	int wait = sk_wait_data(sk, &timeo, NULL);
-	release_sock(sk);
-	if (wait < 0)
-	{
-		pr_err("sk_wait_data failed # command[%s] err[%d]", current->comm, wait);
-	}
-}
-
 static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 {
 	int ret = 0;
@@ -664,7 +665,7 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 		}
 		else if (ret == -EAGAIN || ret == -EWOULDBLOCK)
 		{
-			camblet_wait_data(s->sock);
+			camblet_wait_data(s);
 			goto retry;
 		}
 		else
@@ -820,7 +821,7 @@ int camblet_recvmsg(struct sock *sock,
 						goto bail;
 					}
 
-					camblet_wait_data(s->sock);
+					camblet_wait_data(s);
 					continue;
 				}
 			}
