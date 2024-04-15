@@ -45,7 +45,6 @@
 
 const char *ALPNs[] = {
 	CAMBLET,
-	"http/1.1" // TODO THIS should be here only in case of setscoktopt() is called, otherwise it should not be, or what?
 };
 
 const char *ALPNs_passthrough[] = {
@@ -148,7 +147,7 @@ static br_ssl_engine_context *get_ssl_engine_context(camblet_socket *s)
 	return s->direction == ListenerDirectionInbound ? &s->sc->eng : &s->cc->eng;
 }
 
-void camblet_wait_data(camblet_socket *s)
+static void camblet_wait_data(camblet_socket *s)
 {
 	// Wait for more data on the socket,
 	// effectively blocking until data is available.
@@ -605,6 +604,11 @@ static bool msghdr_contains_tls_handshake(struct msghdr *msg)
 	return is_tls_handshake(first_3_bytes);
 }
 
+static bool is_encrypted_client_flow(camblet_socket *s, struct msghdr *msg)
+{
+	return s->direction == OUTPUT && (s->opa_socket_ctx.passthrough || msghdr_contains_tls_handshake(msg));
+}
+
 static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 {
 	int ret = 0;
@@ -634,7 +638,7 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 	if (alpn == NULL)
 	{
 		// if we are the client, we should check if the transport is already encrypted
-		if (s->direction == OUTPUT && (s->opa_socket_ctx.passthrough || msghdr_contains_tls_handshake(msg)) && !s->manual_client)
+		if (is_encrypted_client_flow(s, msg) && !s->manual_client)
 		{
 			trace_info(conn_ctx, "setting passthrough ALPN", 0);
 
