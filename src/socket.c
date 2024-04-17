@@ -642,7 +642,7 @@ static int ensure_tls_handshake(camblet_socket *s, struct msghdr *msg)
 		{
 			trace_info(conn_ctx, "setting passthrough ALPN", 0);
 
-			br_ssl_engine_set_protocol_names(&s->sc->eng, ALPNs_passthrough, ALPNs_passthrough_NUM);
+			br_ssl_engine_set_protocol_names(&s->cc->eng, ALPNs_passthrough, ALPNs_passthrough_NUM);
 			br_ssl_client_reset(s->cc, s->hostname, false);
 		}
 
@@ -1179,7 +1179,7 @@ static int configure_ktls_sock(camblet_socket *s)
 	s->sendmsg = ktls_sendmsg;
 	s->recvmsg = ktls_recvmsg;
 
-	trace_debug(s->conn_ctx, "kTLS configured", 0);
+	trace_debug(s->conn_ctx, "kTLS configured", 2, "command", current->comm);
 
 	return 0;
 }
@@ -1193,7 +1193,7 @@ bool sockptr_is_camblet(sockptr_t sp, unsigned int optlen)
 	return strncmp(value, CAMBLET, sizeof(CAMBLET)) == 0;
 }
 
-// Let's intercept this call to set the socket options for setting up a simple TLS connection.
+// Let's intercept this call to set the socket options for setting up a simple TLS connection. This only works for the client side.
 //
 // TODO:
 // We should put this method back to the proto after kTLS is configured, because kTLS will override this method.
@@ -1323,6 +1323,11 @@ int camblet_getsockopt(struct sock *sk, int level,
 		if (s->conn_ctx->peer_spiffe_id)
 		{
 			strncpy(info.peer_spiffe_id, s->conn_ctx->peer_spiffe_id, 256);
+		}
+
+		if (s->alpn)
+		{
+			strncpy(info.alpn, s->alpn, 256);
 		}
 
 		len = sizeof(info);

@@ -69,7 +69,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    printf("Connected to server, Camblet is enabled\n");
+    printf("Connected to server with alpn: '%s', Camblet is enabled\n", tls_info.alpn);
 
     // send a simple http request
     const char *msg = "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n";
