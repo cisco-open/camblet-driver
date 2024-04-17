@@ -2051,6 +2051,7 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 	}
 	else
 	{
+		opa_socket_context_free(opa_socket_ctx);
 		tcp_connection_context_free(conn_ctx);
 	}
 
@@ -2200,6 +2201,7 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	}
 	else
 	{
+		opa_socket_context_free(opa_socket_ctx);
 		tcp_connection_context_free(conn_ctx);
 	}
 
