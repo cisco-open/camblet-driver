@@ -2000,9 +2000,7 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 	opa_socket_context opa_socket_ctx = enriched_socket_eval(conn_ctx, INPUT, client_sk, port);
 	if (opa_socket_ctx.error < 0)
 	{
-		tcp_connection_context_free(conn_ctx);
 		*err = opa_socket_ctx.error;
-		opa_socket_context_free(opa_socket_ctx);
 		goto error;
 	}
 
@@ -2059,6 +2057,8 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 
 error:
 	camblet_socket_free(sc);
+	opa_socket_context_free(opa_socket_ctx);
+	tcp_connection_context_free(conn_ctx);
 	if (client_sk)
 		client_sk->sk_prot->close(client_sk, 0);
 
@@ -2143,9 +2143,7 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	opa_socket_context opa_socket_ctx = enriched_socket_eval(conn_ctx, OUTPUT, sk, port);
 	if (opa_socket_ctx.error < 0)
 	{
-		tcp_connection_context_free(conn_ctx);
 		err = opa_socket_ctx.error;
-		opa_socket_context_free(opa_socket_ctx);
 		goto error;
 	}
 
@@ -2209,6 +2207,8 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 error:
 	camblet_socket_free(sc);
+	opa_socket_context_free(opa_socket_ctx);
+	tcp_connection_context_free(conn_ctx);
 	socket_reset(sk);
 
 	return err;
