@@ -11,7 +11,6 @@
 #ifndef camblet_h
 #define camblet_h
 
-
 #define SOL_CAMBLET 7891
 #define CAMBLET_HOSTNAME 1
 #define CAMBLET_TLS_INFO 2
@@ -25,6 +24,7 @@ typedef struct
     bool mtls_enabled;
     char spiffe_id[256];
     char peer_spiffe_id[256];
+    char alpn[256];
 } camblet_tls_info;
 
 #endif /* camblet_h */
