@@ -2049,6 +2049,10 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 		client_sk->sk_user_data = sc;
 		WRITE_ONCE(client_sk->sk_prot, prot);
 	}
+	else
+	{
+		tcp_connection_context_free(conn_ctx);
+	}
 
 	return client_sk;
 
@@ -2193,6 +2197,10 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		sk->sk_user_data = sc;
 		WRITE_ONCE(sk->sk_prot, prot);
 		WRITE_ONCE(sk->sk_socket->ops, prot_ops);
+	}
+	else
+	{
+		tcp_connection_context_free(conn_ctx);
 	}
 
 	return err;
