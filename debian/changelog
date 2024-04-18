@@ -1,3 +1,30 @@
+camblet-driver (0.7.0) unstable; urgency=medium
+
+  * socket: fix leaking tcp_connection_contexts and opa objects (#214)
+  * socket: fixes around camblet_get/setsockopt and recvmsg waiting and other things (#209)
+  * Add read/write buffer lock during send/recvmsg (#207)
+  * socket: fix for bearrssl pre-read data vs poll() (#205)
+  * socket: propagate non-block error codes upwards (#202)
+  * add missing memory allocation checks (#199)
+  * socket: fix bearssl close order and locking (#195)
+  * Support aes gcm and ccm ciphers (#196)
+  * change spinlocks to mutexes (unification)
+  * fixes use = as key value separator in labels fix uniqueness in rego
+  * check spiffe id validity without regex
+  * support workload id templates
+  * rust: update crates and remove unused imports
+  * Use camblet_sendpage in case of kTLS under kernel version 6.5 (#191)
+  * handle -ERESTARTSYS during TLS handshake
+  * fix trace log message size calculation
+  * ci: use build matrix to test on 6.5 and 5.15 kernel as well (#182)
+  * Add BearSSL tests (#178)
+  * opa: builtins parsing and some linkage fixes (#176)
+  * proper and verbose wasm module error printing (#175)
+  * implement camblet_sendpage
+  * HTTP header injection (#167)
+
+ -- Camblet maintainers <team@camblet.io>  Thu, 18 Apr 2024 10:09:04 +0200
+
 camblet-driver (0.6.0) unstable; urgency=medium
 
   * parametrize VERBOSE builds (#171)
