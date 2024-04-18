@@ -231,7 +231,7 @@ static int
 br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags)
 {
 	unsigned char *buf;
-	size_t alen;
+	size_t alen, readlen = 0;
 	bool is_peek = flags & MSG_PEEK;
 	bool is_truncated = flags & MSG_TRUNC;
 	bool is_waitall = flags & MSG_WAITALL;
@@ -240,6 +240,7 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 	{
 		return 0;
 	}
+	read_again:
 	int ret = br_sslio_run_until(ctx, BR_SSL_RECVAPP);
 	if (ret < 0)
 	{
@@ -259,10 +260,23 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 	{
 		memcpy(dst, buf, alen);
 	}
+	else 
+	{
+		pr_alert("not copying %d bytes", alen);
+	}
 	if (!is_peek)
 		br_ssl_engine_recvapp_ack(ctx->engine, alen);
-
-	return (int)alen;
+	
+	readlen += alen;
+	
+	if (is_waitall && (alen < len))
+	{
+		len -= alen;
+		pr_alert("WAIT ALL HAPPENS NOW!, alen is %d len is %d", alen, len);
+		goto read_again;
+	}
+	pr_alert("Returning, readlen is %d the len is %d", readlen, len);
+	return (int)readlen;
 }
 
 static int bearssl_recvmsg(camblet_socket *s, void *dst, size_t len, int flags)
