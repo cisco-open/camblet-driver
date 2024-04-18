@@ -24,7 +24,7 @@
  * IN THE SOFTWARE.
  */
 
-#include <assert.h>
+#include "assert.h"
 #include <linux/slab.h>
 #ifdef __SSE4_2__
 #ifdef _MSC_VER
