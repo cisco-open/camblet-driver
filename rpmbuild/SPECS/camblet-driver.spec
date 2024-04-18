@@ -1,5 +1,5 @@
 Name:           camblet-driver
-Version:        0.7.0
+Version:        0.7.1
 Release:        1%{?dist}
 Summary:        Kernel module for the Camblet project.
 
@@ -57,6 +57,9 @@ fi
 
 
 %changelog
+* Thu Apr 18 2024 Camblet maintainers <team@camblet.io> - 0.7.1-1
+  - Fix deb build by copying all files to the right directory
+
 * Thu Apr 18 2024 Camblet maintainers <team@camblet.io> - 0.7.0-1
   - socket: fix leaking tcp_connection_contexts and opa objects (#214)
   - socket: fixes around camblet_get/setsockopt and recvmsg waiting and other things (#209)

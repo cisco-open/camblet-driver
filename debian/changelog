@@ -1,3 +1,9 @@
+camblet-driver (0.7.1) unstable; urgency=medium
+
+  * Fix deb build by copying all files to the right directory
+
+ -- Camblet maintainers <team@camblet.io>  Thu, 18 Apr 2024 16:00:44 +0200
+
 camblet-driver (0.7.0) unstable; urgency=medium
 
   * socket: fix leaking tcp_connection_contexts and opa objects (#214)
