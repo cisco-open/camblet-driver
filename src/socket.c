@@ -1282,11 +1282,6 @@ int camblet_getsockopt(struct sock *sk, int level,
 	if (copy_from_sockptr(&len, optlen, sizeof(int)))
 		return -EFAULT;
 
-	len = min_t(unsigned int, len, sizeof(int));
-
-	if (len < 0)
-		return -EINVAL;
-
 	switch (optname)
 	{
 	case CAMBLET_TLS_INFO:
@@ -1330,11 +1325,15 @@ int camblet_getsockopt(struct sock *sk, int level,
 			strncpy(info.alpn, s->alpn, 256);
 		}
 
-		len = sizeof(info);
+		int infosize = sizeof(info);
+		if (infosize > len)
+		{
+			infosize = len;
+		}
 
-		if (copy_to_sockptr_offset(optlen, 0, &len, sizeof(int)))
+		if (copy_to_sockptr_offset(optval, 0, &info, infosize))
 			return -EFAULT;
-		if (copy_to_sockptr_offset(optval, 0, &info, len))
+		if (copy_to_sockptr_offset(optlen, 0, &infosize, sizeof(int)))
 			return -EFAULT;
 
 		return 0;
