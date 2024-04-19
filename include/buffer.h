@@ -32,5 +32,12 @@ void buffer_free(buffer_t *buffer);
  * (possibly resizing the buffer) or NULL on realloc error
  */
 char *buffer_grow(buffer_t *buffer, int len);
+/*
+ * buffer_trim
+ *
+ * trims the last number of bytes from the buffer if
+ * the size of the buffer is greater than the specified amount; otherwise, it resets the buffer.
+ */
+void buffer_trim(buffer_t *buffer, int amount);
 
 #endif

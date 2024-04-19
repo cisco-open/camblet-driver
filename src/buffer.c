@@ -59,3 +59,8 @@ char *buffer_grow(buffer_t *buffer, int len)
 
     return buffer->data + buffer_size;
 }
+
+void buffer_trim(buffer_t *buffer, int amount)
+{
+    buffer->size -= (buffer->size < amount) ? buffer->size : amount;
+}
