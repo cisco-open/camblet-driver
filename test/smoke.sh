@@ -2,6 +2,15 @@
 
 set -euo pipefail
 
+function finish {
+    echo "Stop processes"
+    sudo pkill python3
+    sudo pkill file-server
+    sudo docker rm -f $(sudo docker ps -a -q)
+}
+
+trap finish EXIT
+
 echo "Building file server"
 go build test/file-server.go
 
@@ -63,8 +72,3 @@ for i in `seq 1 100`; do wget -q -O/dev/null localhost:8080; echo $?; done |sort
 echo "Test sockopt on file-server with TLS"
 gcc -o sockopt test/sockopt.c
 ./sockopt
-
-echo "Stop processes"
-sudo pkill python3
-sudo pkill file-server
-sudo docker kill $(sudo docker ps -q)
