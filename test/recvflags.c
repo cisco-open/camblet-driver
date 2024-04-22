@@ -18,7 +18,7 @@
 
 int main(int argc, char *argv[])
 {
-  int sock = socket(AF_INET, SOCK_STREAM, 0);
+  int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (sock < 0)
   {
     perror("socket creation failed");
@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
   int n = 0;
   int i = 0;
   int flags = MSG_TRUNC;
-  while (1)
+  while (n != 8785)
   {
     char buf[4096] = {0};
     int recv_size;
@@ -69,14 +69,8 @@ int main(int argc, char *argv[])
       perror("something went wrong during recv");
       goto error;
     }
-    else if (recv_size < sizeof(buf))
-    {
-      printf("%.*s\n", n, buf);
-      printf("RECV SIZE BREAKING %d", recv_size);
-      n += recv_size;
-      break;
-    }
     n += recv_size;
+    printf("!!!!!!!!!!!!!!!!!!!!!!%d", n);
     printf("%.*s", n, buf);
     i++;
   }

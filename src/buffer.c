@@ -64,3 +64,19 @@ void buffer_trim(buffer_t *buffer, int amount)
 {
     buffer->size -= (buffer->size < amount) ? buffer->size : amount;
 }
+
+void buffer_truncate_prefix(buffer_t *buffer, int amount)
+{
+    if (amount < 0)
+    {
+        return;
+    }
+
+    if (amount > buffer->size)
+    {
+        buffer->size = 0;
+        return;
+    }
+    memmove(buffer->data, buffer->data + amount, buffer->size - amount);
+    buffer->size -= amount;
+}

@@ -40,4 +40,11 @@ char *buffer_grow(buffer_t *buffer, int len);
  */
 void buffer_trim(buffer_t *buffer, int amount);
 
+
+/*
+ * buffer_truncate_prefix
+ * truncates the provided amount of bytes from the beginning of the buffer.
+ */
+void buffer_truncate_prefix(buffer_t *buffer, int amount);
+
 #endif

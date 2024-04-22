@@ -232,7 +232,6 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 {
 	unsigned char *buf;
 	size_t alen;
-	bool is_peek = flags & MSG_PEEK;
 
 	if (len == 0)
 	{
@@ -254,8 +253,7 @@ br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags
 		alen = len;
 	}
 	memcpy(dst, buf, alen);
-	if (!is_peek)
-		br_ssl_engine_recvapp_ack(ctx->engine, alen);
+	br_ssl_engine_recvapp_ack(ctx->engine, alen);
 
 	return (int)alen;
 }
@@ -348,6 +346,11 @@ static int get_read_buffer_size(camblet_socket *s)
 static void set_read_buffer_size(camblet_socket *s, int size)
 {
 	s->read_buffer->size = size;
+}
+
+static void truncate_read_buffer_prefix(camblet_socket *s, int amount)
+{
+	buffer_truncate_prefix(s->read_buffer, amount);
 }
 
 static void trim_read_buffer(camblet_socket *s, int amount)
@@ -791,6 +794,7 @@ int camblet_recvmsg(struct sock *sock,
 
 	mutex_lock(&s->readbuffer_lock);
 	int prevbuflen = get_read_buffer_size(s);
+	pr_alert("prevbuflen %d len is %d, peek value %d", prevbuflen, len, flags & MSG_PEEK);
 
 	while (action != Continue)
 	{
@@ -808,7 +812,8 @@ int camblet_recvmsg(struct sock *sock,
 		}
 #endif
 
-		ret = camblet_socket_read(s, buf, len, flags);
+		ret = camblet_socket_read(s, buf + get_read_buffer_size(s), len, flags);
+		pr_alert("read value is :%d", ret);
 		if (ret < 0)
 		{
 			if (ret == -ERESTARTSYS)
@@ -899,14 +904,21 @@ int camblet_recvmsg(struct sock *sock,
 	}
 
 	int read_buffer_size = get_read_buffer_size(s);
+	int copy_size = size;
+	if (read_buffer_size < size)
+		copy_size = read_buffer_size;
 
-	len = copy_to_iter(get_read_buffer(s), read_buffer_size, &msg->msg_iter);
-	if (len < read_buffer_size)
+	len = copy_to_iter(get_read_buffer(s), copy_size, &msg->msg_iter);
+	if (len < copy_size)
 	{
 		pr_warn("recvmsg copy_to_iter copied less than requested");
 	}
+	pr_alert("copied value is is %d", len);
 
-	set_read_buffer_size(s, read_buffer_size - len);
+	if (!(flags & MSG_PEEK))
+	{
+		truncate_read_buffer_prefix(s, len);
+	}
 
 	if (unlikely(flags & MSG_TRUNC))
 	{
@@ -2116,7 +2128,6 @@ __poll_t camblet_poll(struct file *file, struct socket *sock,
 			}
 		}
 	}
-
 	return tcp_poll(file, sock, wait);
 }
 
