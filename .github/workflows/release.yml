@@ -24,6 +24,9 @@ jobs:
       - name: Build camblet-driver Debian package
         run: make deb
 
+      - name: Test camblet-driver Debian package
+        run: sudo apt install -y ../camblet-driver_${{github.ref_name}}_all.deb
+
       - name: Build camblet-driver RedHat package
         run: make rpm
 
