@@ -62,7 +62,7 @@ char *buffer_grow(buffer_t *buffer, int len)
 
 void buffer_truncate(buffer_t *buffer, int amount)
 {
-    if (amount < 0)
+    if (buffer == NULL || amount < 0)
     {
         return;
     }

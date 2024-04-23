@@ -789,7 +789,6 @@ int camblet_recvmsg(struct sock *sock,
 
 	mutex_lock(&s->readbuffer_lock);
 	int prevbuflen = get_read_buffer_size(s);
-	pr_alert("prevbuflen %d len is %d, peek value %d", prevbuflen, len, flags & MSG_PEEK);
 
 	while (action != Continue)
 	{
@@ -808,7 +807,6 @@ int camblet_recvmsg(struct sock *sock,
 #endif
 
 		ret = camblet_socket_read(s, buf, len, flags);
-		pr_alert("read value is :%d", ret);
 		if (ret < 0)
 		{
 			if (ret == -ERESTARTSYS)
@@ -845,7 +843,7 @@ int camblet_recvmsg(struct sock *sock,
 		{
 			set_read_buffer_size(s, get_read_buffer_size(s) + ret);
 		}
-		else
+		if (flags & MSG_TRUNC)
 		{
 			trunc_len += ret;
 		}
@@ -910,9 +908,8 @@ int camblet_recvmsg(struct sock *sock,
 	{
 		pr_warn("recvmsg copy_to_iter copied less than requested");
 	}
-	pr_alert("copied value is is %d", len);
 
-	if (!(flags & MSG_PEEK))
+	if (!(flags & MSG_PEEK) || ktls_available)
 	{
 		truncate_read_buffer(s, len);
 	}
