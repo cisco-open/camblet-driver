@@ -348,14 +348,9 @@ static void set_read_buffer_size(camblet_socket *s, int size)
 	s->read_buffer->size = size;
 }
 
-static void truncate_read_buffer_prefix(camblet_socket *s, int amount)
+static void truncate_read_buffer(camblet_socket *s, int amount)
 {
-	buffer_truncate_prefix(s->read_buffer, amount);
-}
-
-static void trim_read_buffer(camblet_socket *s, int amount)
-{
-	buffer_trim(s->read_buffer, amount);
+	buffer_truncate(s->read_buffer, amount);
 }
 
 static char *get_write_buffer(camblet_socket *s)
@@ -812,7 +807,7 @@ int camblet_recvmsg(struct sock *sock,
 		}
 #endif
 
-		ret = camblet_socket_read(s, buf + get_read_buffer_size(s), len, flags);
+		ret = camblet_socket_read(s, buf, len, flags);
 		pr_alert("read value is :%d", ret);
 		if (ret < 0)
 		{
@@ -846,11 +841,13 @@ int camblet_recvmsg(struct sock *sock,
 		{
 			end_of_stream = true;
 		}
-		set_read_buffer_size(s, get_read_buffer_size(s) + ret);
-		if (flags & MSG_TRUNC)
+		if (likely(!(flags & MSG_TRUNC)))
+		{
+			set_read_buffer_size(s, get_read_buffer_size(s) + ret);
+		}
+		else
 		{
 			trunc_len += ret;
-			trim_read_buffer(s, ret);
 		}
 
 		if (flags & MSG_WAITALL && (ret < len))
@@ -917,7 +914,7 @@ int camblet_recvmsg(struct sock *sock,
 
 	if (!(flags & MSG_PEEK))
 	{
-		truncate_read_buffer_prefix(s, len);
+		truncate_read_buffer(s, len);
 	}
 
 	if (unlikely(flags & MSG_TRUNC))
