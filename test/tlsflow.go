@@ -57,6 +57,7 @@ func main() {
 	var clientHello bool
 	var serverHello bool
 	var mTLS bool
+	var alpn string
 
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSource.Packets() {
@@ -72,7 +73,6 @@ func main() {
 				if clientHelloMessage != nil {
 					clientHello = true
 					println("=== ClientHello detected ===")
-					println(clientHelloMessage.String())
 				}
 			}
 
@@ -81,27 +81,20 @@ func main() {
 				if serverHelloMessage != nil {
 					serverHello = true
 					println("=== ServerHello detected ===")
-					println(serverHelloMessage.String())
+					alpn = serverHelloMessage.AlpnProtocol
 				}
 			}
 
 			// Client Certificate message
 			if isTLS && clientHello && serverHello && packetCount == 3 {
 				mTLS = true
-				println("mTLS detected")
-
-				clientHelloMessage := tlsx.GetClientHello(packet)
-				if clientHelloMessage != nil {
-					clientHello = true
-					println("=== ClientHello detected with ===")
-					println(clientHelloMessage.String())
-				}
+				println("mTLS detected (Client Certificate message)")
 			}
 		}
 	}
 
 	if serverHello && clientHello {
-		fmt.Printf("TLS (mTLS=%t) connection detected\n", mTLS)
+		fmt.Printf("TLS (mTLS=%t) connection detected, ALPN: '%s'\n", mTLS, alpn)
 		os.Exit(0)
 	} else {
 		fmt.Println("No TLS connection detected")
