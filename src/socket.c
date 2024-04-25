@@ -227,41 +227,10 @@ static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 	return len;
 }
 
-static int
-br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags)
-{
-	unsigned char *buf;
-	size_t alen;
-
-	if (len == 0)
-	{
-		return 0;
-	}
-	int ret = br_sslio_run_until(ctx, BR_SSL_RECVAPP);
-	if (ret < 0)
-	{
-		unsigned state = br_ssl_engine_current_state(ctx->engine);
-		if (state & BR_SSL_CLOSED)
-		{
-			return 0;
-		}
-		return ret;
-	}
-	buf = br_ssl_engine_recvapp_buf(ctx->engine, &alen);
-	if (alen > len)
-	{
-		alen = len;
-	}
-	memcpy(dst, buf, alen);
-	br_ssl_engine_recvapp_ack(ctx->engine, alen);
-
-	return (int)alen;
-}
-
 static int bearssl_recvmsg(camblet_socket *s, void *dst, size_t len, int flags)
 {
 	mutex_lock(&s->bearssl_lock);
-	int ret = br_sslio_read_with_flags(&s->ioc, dst, len, flags);
+	int ret = br_sslio_read(&s->ioc, dst, len);
 	mutex_unlock(&s->bearssl_lock);
 	return ret;
 }
