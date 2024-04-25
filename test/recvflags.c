@@ -15,6 +15,7 @@
 #include <arpa/inet.h>
 #include <netinet/tcp.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 int main(int argc, char *argv[])
 {
@@ -43,49 +44,51 @@ int main(int argc, char *argv[])
     goto error;
   }
 
-  printf("Msg: %s was sent\n", msg);
+  struct stat st;
+  if (stat("README.md", &st) < 0)
+  {
+    perror("could not determine file size");
+    goto error;
+  }
+
+  typedef enum
+  {
+    WAITALL_AND_TRUNCATE,
+    WAITALL,
+    NONE
+  } RecvFlags;
 
   int n = 0;
-  int i = 0;
-  int flags = MSG_TRUNC;
-  while (n != 8785)
+  RecvFlags flag_state = WAITALL_AND_TRUNCATE;
+  int flags = 0;
+  while (n != st.st_size + 190)
   {
     char buf[4096] = {0};
     int recv_size;
-    if (i == 0)
+
+    switch (flag_state)
     {
+    case WAITALL_AND_TRUNCATE:
+      flags = MSG_TRUNC;
       flags |= MSG_WAITALL;
-    }
-    else if (i == 1)
-    {
+      flag_state = WAITALL;
+      break;
+    case WAITALL:
       flags = MSG_WAITALL;
-    }
-    else
-    {
+      flag_state = NONE;
+      break;
+    case NONE:
       flags = 0;
+      break;
     }
+
     if ((recv_size = recv(sock, buf, sizeof(buf), flags)) < 0)
     {
       perror("something went wrong during recv");
       goto error;
     }
     n += recv_size;
-    printf("!!!!!!!!!!!!!!!!!!!!!!%d", n);
-    printf("%.*s", n, buf);
-    i++;
   }
-
-  printf("\n%d amount of bytes were received\n", n);
-
-  // int i = 0;
-  // char buf[4096] = {0};
-  // if ((i = recv(sock, buf, sizeof(buf), 0)) < 0)
-  // {
-  //   perror("something happened during recv");
-  //   goto error;
-  // }
-  // printf("%.*s", i, buf);
-  // printf("\n%d amount of bytes were received\n", i);
 
   close(sock);
   return 0;
