@@ -135,8 +135,9 @@ static void service_discovery_table_free_locked(service_discovery_table *table)
         return;
 
     service_discovery_entry *entry;
+    struct hlist_node *tmp;
     int i;
-    hash_for_each(table->htable, i, entry, node)
+    hash_for_each_safe(table->htable, i, tmp, entry, node)
     {
         pr_debug("delete entry # address[%s]", entry->address);
         sd_table_entry_del_locked(entry);
