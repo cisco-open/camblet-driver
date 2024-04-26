@@ -56,11 +56,13 @@ task_context *get_task_context(void)
     context->namespace_ids.time = current->nsproxy->time_ns->ns.inum;
     context->namespace_ids.cgroup = current->nsproxy->cgroup_ns->ns.inum;
 
+    rcu_read_lock();
     struct css_set *cset = task_css_set(current);
     if (cset)
     {
         cgroup_path(cset->dfl_cgrp, context->cgroup_path, sizeof(context->cgroup_path));
     }
+    rcu_read_unlock();
 
     return context;
 }
