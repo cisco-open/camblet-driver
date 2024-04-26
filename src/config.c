@@ -36,7 +36,7 @@ int camblet_config_init()
         return -ENOMEM;
     }
 
-    strlcpy(config->trust_domain, "camblet", MAX_TRUST_DOMAIN_LEN);
+    strscpy(config->trust_domain, "camblet", MAX_TRUST_DOMAIN_LEN);
     camblet_config_unlock();
 
     return 0;

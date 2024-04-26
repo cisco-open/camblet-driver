@@ -92,6 +92,9 @@ default: bearssl
 bearssl:
 	cd third-party/BearSSL && $(MAKE) VERBOSE=$(VERBOSE) linux-km
 
+bearssl_clean:
+	cd third-party/BearSSL && $(MAKE) VERBOSE=$(VERBOSE) linux-km-clean
+
 static/socket_wasm.h: socket.rego
 	opa build -t wasm -e "socket/allow" socket.rego -o bundle.tar.gz
 	tar zxf bundle.tar.gz /policy.wasm
@@ -106,7 +109,7 @@ static/csr_wasm.h: wasm-modules/csr-rust/**/*.rs
 opa-test:
 	opa test *.rego -v
 
-clean:
+clean: bearssl_clean
 	$(MAKE) -C $(KBUILD) M=$(PWD) clean
 	rm -rf target/
 
