@@ -359,7 +359,7 @@ static int load_camblet_config(const char *data)
         if (strcmp(config->trust_domain, trust_domain) != 0)
         {
             pr_info("change trust domain # old[%s] new[%s]", config->trust_domain, trust_domain);
-            strlcpy(config->trust_domain, trust_domain, MAX_TRUST_DOMAIN_LEN);
+            strscpy(config->trust_domain, trust_domain, MAX_TRUST_DOMAIN_LEN);
         }
         camblet_config_unlock();
     }
