@@ -812,7 +812,7 @@ int camblet_recvmsg(struct sock *sock,
 		{
 			set_read_buffer_size(s, get_read_buffer_size(s) + ret);
 		}
-		if (flags & MSG_TRUNC)
+		else if (flags & MSG_TRUNC)
 		{
 			trunc_len += ret;
 		}
