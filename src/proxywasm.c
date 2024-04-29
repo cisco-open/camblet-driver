@@ -436,8 +436,8 @@ wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module)
     result = link_proxywasm_hostfunctions(filter, module);
     if (result.err)
     {
-        kfree(proxywasm);
-        return result;
+        pr_crit("proxywasm host function linking failed for module %s failed: %s -> %s", module->name, result.err, wasm_vm_last_error(module));
+        goto exit_error;
     }
 
     strcpy(filter->name, module->name);
@@ -459,8 +459,7 @@ error:
     if (result.err)
     {
         pr_crit("proxywasm function lookups failed for module %s failed: %s -> %s", module->name, result.err, wasm_vm_last_error(module));
-        kfree(proxywasm);
-        return result;
+        goto exit_error;
     }
 
     // Create the root context
@@ -468,16 +467,14 @@ error:
     if (result.err)
     {
         pr_crit("proxy_on_context_create for module %s failed # err[%s: %s]", module->name, result.err, wasm_vm_last_error(module));
-        kfree(proxywasm);
-        return result;
+        goto exit_error;
     }
 
     result = wasm_vm_call_direct(vm, filter->proxy_on_vm_start, proxywasm->root_context->id, 0);
     if (result.err)
     {
         pr_crit("proxy_on_vm_start for module %s failed # err[%s: %s]", module->name, result.err, wasm_vm_last_error(module));
-        kfree(proxywasm);
-        return result;
+        goto exit_error;
     }
 
     i32 plugin_configuration_size = 0; // TODO
@@ -486,8 +483,7 @@ error:
     if (result.err)
     {
         pr_crit("proxy_on_configure for module %s failed # err[%s: %s]", module->name, result.err, wasm_vm_last_error(module));
-        kfree(proxywasm);
-        return result;
+        goto exit_error;
     }
 
     if (proxywasm->filters == NULL)
@@ -505,6 +501,12 @@ error:
     }
 
     return wasm_vm_ok;
+
+exit_error:
+    free_proxywasm_context(proxywasm->root_context);
+    kfree(proxywasm);
+    kfree(filter);
+    return result;
 }
 
 wasm_vm_result proxywasm_create_context(proxywasm *p, buffer_t *upstream_buffer, buffer_t *downstream_buffer)
