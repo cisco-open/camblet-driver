@@ -84,6 +84,7 @@ void wasm_vm_unlock(wasm_vm *vm);
 wasm_vm_result wasm_vm_get_module(wasm_vm *vm, const char *module);
 wasm_vm_result wasm_vm_get_function(wasm_vm *vm, const char *module, const char *function);
 const char *wasm_vm_last_error(wasm_vm_module *module);
+wasm_vm_result wasm_vm_compile_module(wasm_vm_module *module);
 
 M3Result SuppressLookupFailure(M3Result i_result);
 

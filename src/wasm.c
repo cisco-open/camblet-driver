@@ -186,9 +186,7 @@ wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char 
 
     result = m3_ParseModule(vm->_env, &module, wasm, code_size);
     if (result)
-    {
         goto on_error;
-    }
 
     runtime = m3_NewRuntime(vm->_env, STACK_SIZE_BYTES, NULL);
     if (runtime == NULL)
@@ -199,9 +197,7 @@ wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char 
 
     result = m3_LoadModule(runtime, module);
     if (result)
-    {
         goto on_error;
-    }
 
     char *module_name = kstrdup(name, GFP_KERNEL);
     if (!module_name)
@@ -223,6 +219,8 @@ wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char 
     return (wasm_vm_result){.data = {{.module = module}}, .err = NULL};
 
 on_error:
+    if (runtime)
+        pr_err("wasm_vm_load_module: %s: %s", result, wasm_vm_last_error(module));
     m3_FreeModule(module);
     m3_FreeRuntime(runtime);
     kfree(wasm);
@@ -492,6 +490,16 @@ void wasm_vm_lock(wasm_vm *vm)
 void wasm_vm_unlock(wasm_vm *vm)
 {
     mutex_unlock(&vm->_lock);
+}
+
+wasm_vm_result wasm_vm_compile_module(wasm_vm_module *module)
+{
+    M3Result result = m3_CompileModule(module);
+    if (result)
+    {
+        return (wasm_vm_result){.err = result};
+    }
+    return wasm_vm_ok;
 }
 
 wasm_vm_result wasm_vm_get_module(wasm_vm *vm, const char *name)
