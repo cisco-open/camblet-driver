@@ -59,3 +59,19 @@ char *buffer_grow(buffer_t *buffer, int len)
 
     return buffer->data + buffer_size;
 }
+
+void buffer_truncate(buffer_t *buffer, int amount)
+{
+    if (buffer == NULL || amount < 0)
+    {
+        return;
+    }
+
+    if (amount > buffer->size)
+    {
+        buffer->size = 0;
+        return;
+    }
+    memmove(buffer->data, buffer->data + amount, buffer->size - amount);
+    buffer->size -= amount;
+}

@@ -78,3 +78,7 @@ gcc -o sockopt test/sockopt.c
 
 echo "Test passthrough ALPN on file-server with TLS"
 python3 test/passthrough.py
+
+echo "Test various recv flag parameters"
+gcc -o flags test/recvflags.c
+./flags

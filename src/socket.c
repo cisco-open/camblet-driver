@@ -227,43 +227,10 @@ static int bearssl_sendmsg(camblet_socket *s, void *src, size_t len)
 	return len;
 }
 
-static int
-br_sslio_read_with_flags(br_sslio_context *ctx, void *dst, size_t len, int flags)
-{
-	unsigned char *buf;
-	size_t alen;
-	bool is_peek = flags & MSG_PEEK;
-
-	if (len == 0)
-	{
-		return 0;
-	}
-	int ret = br_sslio_run_until(ctx, BR_SSL_RECVAPP);
-	if (ret < 0)
-	{
-		unsigned state = br_ssl_engine_current_state(ctx->engine);
-		if (state & BR_SSL_CLOSED)
-		{
-			return 0;
-		}
-		return ret;
-	}
-	buf = br_ssl_engine_recvapp_buf(ctx->engine, &alen);
-	if (alen > len)
-	{
-		alen = len;
-	}
-	memcpy(dst, buf, alen);
-	if (!is_peek)
-		br_ssl_engine_recvapp_ack(ctx->engine, alen);
-
-	return (int)alen;
-}
-
 static int bearssl_recvmsg(camblet_socket *s, void *dst, size_t len, int flags)
 {
 	mutex_lock(&s->bearssl_lock);
-	int ret = br_sslio_read_with_flags(&s->ioc, dst, len, flags);
+	int ret = br_sslio_read(&s->ioc, dst, len);
 	mutex_unlock(&s->bearssl_lock);
 	return ret;
 }
@@ -348,6 +315,11 @@ static int get_read_buffer_size(camblet_socket *s)
 static void set_read_buffer_size(camblet_socket *s, int size)
 {
 	s->read_buffer->size = size;
+}
+
+static void truncate_read_buffer(camblet_socket *s, int amount)
+{
+	buffer_truncate(s->read_buffer, amount);
 }
 
 static char *get_write_buffer(camblet_socket *s)
@@ -759,7 +731,7 @@ int camblet_recvmsg(struct sock *sock,
 					int flags,
 					int *addr_len)
 {
-	int ret, len;
+	int ret, len, trunc_len = 0;
 
 	camblet_socket *s = sock->sk_user_data;
 
@@ -836,8 +808,20 @@ int camblet_recvmsg(struct sock *sock,
 		{
 			end_of_stream = true;
 		}
+		if (likely(!(flags & MSG_TRUNC)))
+		{
+			set_read_buffer_size(s, get_read_buffer_size(s) + ret);
+		}
+		else if (flags & MSG_TRUNC)
+		{
+			trunc_len += ret;
+		}
 
-		set_read_buffer_size(s, get_read_buffer_size(s) + ret);
+		if (flags & MSG_WAITALL && (ret < len))
+		{
+			len -= ret;
+			continue;
+		}
 
 		if (s->direction == INPUT && s->opa_socket_ctx.http)
 		{
@@ -884,16 +868,29 @@ int camblet_recvmsg(struct sock *sock,
 	}
 
 	int read_buffer_size = get_read_buffer_size(s);
+	int copy_size = size;
+	if (read_buffer_size < size)
+		copy_size = read_buffer_size;
 
-	len = copy_to_iter(get_read_buffer(s), read_buffer_size, &msg->msg_iter);
-	if (len < read_buffer_size)
+	len = copy_to_iter(get_read_buffer(s), copy_size, &msg->msg_iter);
+	if (len < copy_size)
 	{
 		pr_warn("recvmsg copy_to_iter copied less than requested");
 	}
 
-	set_read_buffer_size(s, read_buffer_size - len);
+	if (!(flags & MSG_PEEK) || ktls_available)
+	{
+		truncate_read_buffer(s, len);
+	}
 
-	ret = len;
+	if (unlikely(flags & MSG_TRUNC))
+	{
+		ret = trunc_len;
+	}
+	else
+	{
+		ret = len;
+	}
 
 bail:
 	mutex_unlock(&s->readbuffer_lock);
@@ -2094,7 +2091,6 @@ __poll_t camblet_poll(struct file *file, struct socket *sock,
 			}
 		}
 	}
-
 	return tcp_poll(file, sock, wait);
 }
 

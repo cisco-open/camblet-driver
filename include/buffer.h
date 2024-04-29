@@ -33,4 +33,10 @@ void buffer_free(buffer_t *buffer);
  */
 char *buffer_grow(buffer_t *buffer, int len);
 
+/*
+ * buffer_truncate
+ * truncates the provided amount of bytes from the beginning of the buffer.
+ */
+void buffer_truncate(buffer_t *buffer, int amount);
+
 #endif
