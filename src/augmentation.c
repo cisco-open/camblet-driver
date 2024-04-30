@@ -196,7 +196,10 @@ augmentation_response *augment_workload()
 
     char *key = get_task_context_key(ctx);
     if (IS_ERR(key))
+    {
+        free_task_context(ctx);
         return (void *)key;
+    }
 
     augmentation_response_cache_lock();
     response = augmentation_response_cache_get_locked(key);
@@ -255,10 +258,12 @@ augmentation_response *augment_workload()
     free_command_answer(answer);
 
 ret:
+    free_task_context(ctx);
     kfree(key);
     return response;
 
 error:
+    free_task_context(ctx);
     kfree(key);
     augmentation_response_free(response);
     return error;
