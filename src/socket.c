@@ -349,7 +349,7 @@ static bool is_bearssl(camblet_socket *s)
 
 static bool is_ktls(camblet_socket *s)
 {
-	return s->recvmsg && s->recvmsg == s->ktls_recvmsg;
+	return s->recvmsg && s->recvmsg == ktls_recvmsg;
 }
 
 static void camblet_socket_free(camblet_socket *s)
