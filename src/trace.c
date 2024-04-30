@@ -360,6 +360,9 @@ int trace_log(const tcp_connection_context *conn_ctx, const char *message, int l
     va_end(args);
 
     send_message("log", json_serialize_to_string(root_value), task_ctx);
+    json_value_free(root_value);
+
+    return ret;
 
 out:
     json_value_free(root_value);

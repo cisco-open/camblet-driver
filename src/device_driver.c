@@ -597,9 +597,7 @@ static int parse_command(const char *data)
         const char *command_name = json_object_get_string(data_root, "command_name");
         if (!command_name)
         {
-            pr_err("missing 'command_name' property # command[%s]", command);
-            status = -EINVAL;
-            goto request_trace_out;
+            command_name = "";
         }
 
         pr_debug("manage trace # command[%s] action[%s] pid[%d] uid[%d] command_name[%s]", command, action, pid, uid, command_name);
