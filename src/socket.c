@@ -878,7 +878,7 @@ int camblet_recvmsg(struct sock *sock,
 		pr_warn("recvmsg copy_to_iter copied less than requested");
 	}
 
-	if (!(flags & MSG_PEEK) || ktls_available)
+	if (!(flags & MSG_PEEK) || is_ktls(s))
 	{
 		truncate_read_buffer(s, len);
 	}
