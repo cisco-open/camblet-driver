@@ -174,7 +174,7 @@ void clear_trace_requests()
     unlock_trace_requests();
 }
 
-char *compose_log_message(const char *message, int n, va_list args)
+static char *compose_log_message_with_args(const char *message, int n, va_list args)
 {
     int i;
     va_list args_copy;
@@ -251,12 +251,22 @@ out:
     return retval;
 }
 
-int trace_log(const tcp_connection_context *conn_ctx, const char *message, int log_level, int n, ...)
+char *compose_log_message(const char *message, int n, ...)
+{
+    va_list args;
+    va_start(args, n);
+    char *log_message = compose_log_message_with_args(message, n, args);
+    va_end(args);
+
+    return log_message;
+}
+
+int send_trace(const tcp_connection_context *conn_ctx, const char *message, int log_level, int n, ...)
 {
     int ret = 0;
     unsigned int i;
-    va_list args, args_copy;
-    char *level = NULL;
+    va_list args;
+    char *level = "default";
 
     task_context *task_ctx = get_task_context();
     if (IS_ERR(task_ctx))
@@ -269,37 +279,21 @@ int trace_log(const tcp_connection_context *conn_ctx, const char *message, int l
 
     if (log_level > 0)
     {
-        va_start(args, n);
-        va_copy(args_copy, args);
-        char *log_message = compose_log_message(message, n, args_copy);
-        if (IS_ERR(log_message))
-            return PTR_ERR(log_message);
-
         switch (log_level)
         {
         case LOGLEVEL_ERR:
-            pr_err("%s", log_message);
             level = "error";
             break;
         case LOGLEVEL_WARNING:
-            pr_warn("%s", log_message);
             level = "warning";
             break;
         case LOGLEVEL_INFO:
-            pr_info("%s", log_message);
             level = "info";
             break;
         case LOGLEVEL_DEBUG:
-            pr_debug("%s", log_message);
             level = "debug";
             break;
-        default:
-            printk("%s", log_message);
         }
-
-        kfree(log_message);
-        va_end(args_copy);
-        va_end(args);
     }
 
     trace_request *tr = get_trace_request_by_partial_match(task_ctx->pid, task_ctx->uid.val, task_ctx->command_name);
