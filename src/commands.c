@@ -409,8 +409,6 @@ csr_sign_answer *send_csrsign_command(const unsigned char *csr, const char *ttl)
         }
     }
 
-    return csr_sign_answer;
-
 error:
     if (errormsg)
     {
