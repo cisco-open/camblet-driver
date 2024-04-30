@@ -1484,15 +1484,20 @@ static int handle_cert_gen_locked(camblet_socket *sc)
 	csr_sign_answer *csr_sign_answer;
 	csr_sign_answer = send_csrsign_command(csr_ptr, sc->opa_socket_ctx.ttl);
 	if (IS_ERR(csr_sign_answer))
+	{
+		kfree(csr_ptr);
 		return PTR_ERR(csr_sign_answer);
+	}
 	if (csr_sign_answer->error)
 	{
 		pr_err("error during CSR signing # err[%s]", csr_sign_answer->error);
+		kfree(csr_ptr);
 		x509_certificate_put(csr_sign_answer->cert);
 		csr_sign_answer_free(csr_sign_answer);
 		return -1;
 	}
 
+	kfree(csr_ptr);
 	x509_certificate_get(csr_sign_answer->cert);
 	sc->cert = csr_sign_answer->cert;
 	csr_sign_answer_free(csr_sign_answer);
