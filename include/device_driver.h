@@ -20,9 +20,9 @@ wasm_vm_result load_module(const char *name, const char *code, unsigned length, 
 
 #define SUCCESS 0
 #define FAILURE -1
-#define DEVICE_NAME "camblet"              /* Dev name as it appears in /dev/devices   */
-#define DEVICE_BUFFER_SIZE 2 * 1024 * 1024 /* Max length of the message from the device */
-
+#define DEVICE_NAME "camblet"                    /* Dev name as it appears in /dev/devices   */
+#define DEVICE_WRITE_BUFFER_SIZE 2 * 1024 * 1024 /* Max length of the write buffer of the device */
+#define DEVICE_READ_BUFFER_SIZE 64 * 1024        /* Max length of the read buffer of the device */
 enum
 {
     CDEV_NOT_USED = 0,

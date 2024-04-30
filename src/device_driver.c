@@ -37,8 +37,11 @@ static int major; /* major number assigned to our device driver */
 /* Is device open? Used to prevent multiple access to device */
 atomic_t already_open = ATOMIC_INIT(CDEV_NOT_USED);
 
-static char device_buffer[DEVICE_BUFFER_SIZE];
-static size_t device_buffer_size = 0;
+static char device_write_buffer[DEVICE_WRITE_BUFFER_SIZE];
+static size_t device_write_buffer_size = 0;
+
+static char device_read_buffer[DEVICE_READ_BUFFER_SIZE];
+static size_t device_read_buffer_size = 0;
 
 static int device_open(struct inode *, struct file *);
 static int device_release(struct inode *, struct file *);
@@ -714,7 +717,7 @@ static int device_release(struct inode *inode, struct file *file)
 {
     pr_info("communcation device closed # command[%s]", current->comm);
 
-    device_buffer_size = 0;
+    device_write_buffer_size = 0;
 
     /* We're now ready for our next caller */
     atomic_set(&already_open, CDEV_NOT_USED);
@@ -941,16 +944,10 @@ cleanup:
     return serialized_string;
 }
 
-/*
- * Called when a process, which already opened the dev file, attempts to
- * read from it.
- */
-static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
-                           char __user *buffer, /* buffer to fill with data */
-                           size_t length,       /* length of the buffer     */
-                           loff_t *offset)
+static ssize_t fill_read_buffer(void)
 {
-    pr_debug("read from userspace # length[%lu] offset[%llu]", length, *offset);
+    if (device_read_buffer_size > 0)
+        return device_read_buffer_size;
 
     command *c = get_next_command();
     if (c == NULL)
@@ -974,78 +971,102 @@ static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
         return -EINTR;
     }
 
-    pr_debug("sent command # command[%s]", command_json);
+    pr_debug("command added to read buffer # command[%s]", command_json);
 
-    int bytes_read = 0;
-    int bytes_to_read = strlen(command_json);
-
-    if (bytes_to_read >= length)
+    if (strlen(command_json) > DEVICE_READ_BUFFER_SIZE - 1)
     {
-        pr_err("read buffer too small # bytes_to_read[%d]", bytes_to_read);
+        pr_err("command size is bigger than read buffer size");
+        return -E2BIG;
     }
 
-    if (bytes_to_read > 0)
+    device_read_buffer_size = strscpy(device_read_buffer, command_json, DEVICE_READ_BUFFER_SIZE - 1);
+    strcat(device_read_buffer, "\n");
+    device_read_buffer_size += 1;
+    kfree(command_json);
+
+    return device_read_buffer_size;
+}
+
+/*
+ * Called when a process, which already opened the dev file, attempts to
+ * read from it.
+ */
+static ssize_t device_read(struct file *file,   /* see include/linux/fs.h   */
+                           char __user *buffer, /* buffer to fill with data */
+                           size_t length,       /* length of the buffer     */
+                           loff_t *offset)
+{
+    pr_debug("read from userspace # length[%lu] offset[%llu]", length, *offset);
+
+    ssize_t ret = fill_read_buffer();
+    if (ret < 0)
+        return ret;
+
+    int bytes_read = 0;
+
+    if (device_read_buffer_size > 0)
     {
-        if (copy_to_user(buffer, command_json, bytes_to_read))
-        {
-            kfree(command_json);
+        int ret = copy_to_user(buffer, device_read_buffer, length);
+        if (ret)
             return -EFAULT;
-        }
 
-        put_user('\n', buffer + bytes_to_read);
+        bytes_read = device_read_buffer_size;
+        if (length < device_read_buffer_size)
+            bytes_read = length;
 
-        bytes_read = bytes_to_read + 1;
+        memmove(device_read_buffer, device_read_buffer + bytes_read, device_read_buffer_size - bytes_read);
+        device_read_buffer_size -= bytes_read;
+
         *offset = 0;
     }
 
-    kfree(command_json);
     return bytes_read;
 }
 
 /* called when somebody tries to write into our device file. */
 static ssize_t device_write(struct file *file, const char *buffer, size_t length, loff_t *offset)
 {
-    int maxbytes;       /* maximum bytes that can be read from offset to DEVICE_BUFFER_SIZE */
+    int maxbytes;       /* maximum bytes that can be read from offset to DEVICE_WRITE_BUFFER_SIZE */
     int bytes_to_write; /* gives the number of bytes to write */
     int bytes_writen;   /* number of bytes actually written */
-    maxbytes = DEVICE_BUFFER_SIZE - *offset;
+    maxbytes = DEVICE_WRITE_BUFFER_SIZE - *offset;
     if (maxbytes > length)
         bytes_to_write = length;
     else
         bytes_to_write = maxbytes;
 
-    bytes_writen = bytes_to_write - copy_from_user(device_buffer + device_buffer_size, buffer, bytes_to_write);
+    bytes_writen = bytes_to_write - copy_from_user(device_write_buffer + device_write_buffer_size, buffer, bytes_to_write);
     pr_debug("write from userspace # bytes[%d]", bytes_writen);
     *offset += bytes_writen;
-    device_buffer_size += bytes_writen;
+    device_write_buffer_size += bytes_writen;
 
-    // search for the end of the string in device_buffer
+    // search for the end of the string in device_write_buffer
     for (;;)
     {
         int i = 0;
-        for (; i < device_buffer_size; i++)
+        for (; i < device_write_buffer_size; i++)
         {
-            if (device_buffer[i] == '\n')
+            if (device_write_buffer[i] == '\n')
             {
                 break;
             }
         }
 
-        if (i == device_buffer_size)
+        if (i == device_write_buffer_size)
         {
             // no end of string found, we need to read more
             return bytes_writen;
         }
 
         // parse the json
-        int status = parse_command(device_buffer);
+        int status = parse_command(device_write_buffer);
         if (status != 0)
         {
             pr_err("could not parse command # err[%d]", status);
         }
 
-        memmove(device_buffer, device_buffer + i, device_buffer_size - i);
-        device_buffer_size -= i + 1;
+        memmove(device_write_buffer, device_write_buffer + i, device_write_buffer_size - i);
+        device_write_buffer_size -= i + 1;
     }
 
     return bytes_writen;
