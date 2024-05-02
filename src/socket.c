@@ -2323,5 +2323,7 @@ void socket_exit(void)
 	free_rsa_private_key(rsa_priv);
 	free_rsa_public_key(rsa_pub);
 
+	free_cert_cache();
+
 	pr_info("socket support unloaded");
 }

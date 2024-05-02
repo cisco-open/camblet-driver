@@ -13,6 +13,7 @@
 #include <linux/module.h>
 
 #include "device_driver.h"
+#include "csr.h"
 #include "opa.h"
 #include "socket.h"
 #include "wasm.h"
@@ -42,6 +43,8 @@ MODULE_PARM_DESC(ktls_available, "Marks if kTLS is available on the system");
 typedef struct camblet_init_status
 {
     bool wasm;
+    bool wasm_opa;
+    bool wasm_csr;
     bool chardev;
     bool socket;
     bool sd_table;
@@ -56,6 +59,10 @@ static void __camblet_exit(void)
         socket_exit();
     if (__camblet_init_status.chardev)
         chardev_exit();
+    if (__camblet_init_status.wasm_csr)
+        free_csr_modules();
+    if (__camblet_init_status.wasm_opa)
+        free_opa_modules();
     if (__camblet_init_status.wasm)
         wasm_vm_destroy_per_cpu();
     if (__camblet_init_status.sd_table)
@@ -138,6 +145,8 @@ static int __init camblet_init(void)
         goto out;
     }
 
+    __camblet_init_status.wasm_csr = true;
+
     result = load_module("socket_opa", socket_wasm, socket_wasm_len, NULL);
     if (result.err)
     {
@@ -145,6 +154,8 @@ static int __init camblet_init(void)
         ret = -1;
         goto out;
     }
+
+    __camblet_init_status.wasm_opa = true;
 
 out:
     if (ret < 0)

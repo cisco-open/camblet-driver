@@ -247,3 +247,17 @@ void x509_certificate_put(x509_certificate *cert)
 
     kref_put(&cert->kref, x509_certificate_release);
 }
+
+void free_cert_cache()
+{
+    cert_with_key *cert_bundle, *tmp;
+
+    cert_cache_lock();
+
+    list_for_each_entry_safe(cert_bundle, tmp, &cert_cache, list)
+    {
+        remove_cert_from_cache_locked(cert_bundle);
+    }
+
+    cert_cache_unlock();
+}
