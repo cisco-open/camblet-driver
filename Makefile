@@ -13,6 +13,10 @@ ccflags-y += -foptimize-sibling-calls \
 			 -Wall -g \
 			 #-Dd_m3LogCompile=1
 
+# The wasm compiler module is not sanitized since it does a lot of recursion at the
+# beginning and it's causing a stack overflow together with the sanitized code.
+KASAN_SANITIZE_m3_compile.o := n
+
 # Enable floating point arithmetic
 ARCH := $(shell uname -m)
 ifeq ($(ARCH), x86_64)
