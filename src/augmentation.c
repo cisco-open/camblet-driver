@@ -268,3 +268,18 @@ error:
     augmentation_response_free(response);
     return error;
 }
+
+// cleanup the cache
+void free_augmentation_cache()
+{
+    augmentation_response_cache_entry *entry, *tmp;
+
+    augmentation_response_cache_lock();
+
+    list_for_each_entry_safe(entry, tmp, &augmentation_response_cache, list)
+    {
+        augmentation_response_cache_remove_locked(entry);
+    }
+
+    augmentation_response_cache_unlock();
+}

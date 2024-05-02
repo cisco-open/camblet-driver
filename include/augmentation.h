@@ -35,4 +35,6 @@ void augmentation_response_put(augmentation_response *response);
  */
 augmentation_response *augment_workload(void);
 
+void free_augmentation_cache(void);
+
 #endif
