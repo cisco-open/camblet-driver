@@ -38,5 +38,6 @@ void opa_socket_context_free(opa_socket_context ctx);
 wasm_vm_result init_opa_for(wasm_vm *vm, wasm_vm_module *module);
 opa_socket_context this_cpu_opa_socket_eval(const char *input);
 void load_opa_data(const char *data);
+void free_opa_modules(void);
 
 #endif

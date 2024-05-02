@@ -46,11 +46,20 @@ void csr_unlock(csr_module *csr)
     wasm_vm_unlock(csr->vm);
 }
 
+static void free_csr_module(csr_module *csr)
+{
+    if (csr)
+    {
+        kfree(csr);
+    }
+}
+
 wasm_vm_result init_csr_for(wasm_vm *vm, wasm_vm_module *module)
 {
     wasm_vm_result result;
-    csr_module *csr = csr_modules[wasm_vm_cpu(vm)];
-    if (csr == NULL)
+    unsigned cpu = wasm_vm_cpu(vm);
+    csr_module *csr = csr_modules[cpu];
+    if (!csr)
     {
         csr = kzalloc(sizeof(struct csr_module), GFP_KERNEL);
         if (!csr)
@@ -58,7 +67,7 @@ wasm_vm_result init_csr_for(wasm_vm *vm, wasm_vm_module *module)
             return wasm_vm_error("could not allocate memory");
         }
         csr->vm = vm;
-        csr_modules[wasm_vm_cpu(vm)] = csr;
+        csr_modules[cpu] = csr;
     }
     wasm_vm_try_get_function(csr->generate_csr, wasm_vm_get_function(vm, module->name, "csr_gen"));
     wasm_vm_try_get_function(csr->csr_malloc, wasm_vm_get_function(vm, module->name, "csr_malloc"));
@@ -68,6 +77,10 @@ error:
     if (result.err)
     {
         pr_crit("csr module function lookups failed # module[%s] result_err[%s] wasm_last_err[%s]", module->name, result.err, wasm_vm_last_error(module));
+
+        free_csr_module(csr);
+        csr_modules[cpu] = NULL;
+
         return result;
     }
 
@@ -171,4 +184,19 @@ bail:
         }
     }
     return result;
+}
+
+void free_csr_modules(void)
+{
+    unsigned cpu;
+
+    for_each_online_cpu(cpu)
+    {
+        csr_module *csr = csr_modules[cpu];
+        if (csr)
+        {
+            free_csr_module(csr);
+            csr_modules[cpu] = NULL;
+        }
+    }
 }

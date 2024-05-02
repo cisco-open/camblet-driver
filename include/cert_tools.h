@@ -61,4 +61,6 @@ int set_cert_validity(x509_certificate *x509_cert);
 
 size_t linkedlist_length(struct list_head *head);
 
+void free_cert_cache(void);
+
 #endif

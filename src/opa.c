@@ -686,7 +686,7 @@ wasm_vm_result init_opa_for(wasm_vm *vm, wasm_vm_module *module)
     wasm_vm_result result;
     wasm_vm_function *builtinsFunc;
 
-    opa_wrapper *opa = kmalloc(sizeof(struct opa_wrapper), GFP_KERNEL);
+    opa_wrapper *opa = kzalloc(sizeof(struct opa_wrapper), GFP_KERNEL);
     if (!opa)
     {
         return wasm_vm_error("could not allocate memory");
@@ -821,6 +821,22 @@ void load_opa_data(const char *data)
         if (ret < 0)
         {
             pr_err("could not set opa data");
+        }
+    }
+}
+
+void free_opa_modules(void)
+{
+    unsigned cpu;
+
+    for_each_online_cpu(cpu)
+    {
+        opa_wrapper *opa = opas[cpu];
+        if (opa)
+        {
+            kfree(opa->builtins);
+            kfree(opa);
+            opas[cpu] = NULL;
         }
     }
 }
