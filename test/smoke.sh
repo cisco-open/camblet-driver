@@ -2,31 +2,31 @@
 
 set -euo pipefail
 
-function finish {
-    echo "Stop processes"
-    sudo pkill python3
-    sudo pkill file-server
-    sudo docker rm -f $(sudo docker ps -a -q)
-}
+# function finish {
+#     echo "Stop processes"
+#     sudo pkill python3
+#     sudo pkill file-server
+#     sudo docker rm -f $(sudo docker ps -a -q)
+# }
 
-trap finish EXIT
+# trap finish EXIT
 
-echo "Building file server"
-go build test/file-server.go
+# echo "Building file server"
+# go build test/file-server.go
 
-echo "Starting file server"
-./file-server >/tmp/file-server.log 2>&1 &
+# echo "Starting file server"
+# ./file-server >/tmp/file-server.log 2>&1 &
 
-echo "Starting file server with TLS"
-./file-server -tls -port 8007 >/tmp/file-server-tls.log 2>&1 &
+# echo "Starting file server with TLS"
+# ./file-server -tls -port 8007 >/tmp/file-server-tls.log 2>&1 &
 
-echo "Starting file server with TLS for passthrough"
-./file-server -tls -port 8010 >/tmp/file-server-tls-passthrough.log 2>&1 &
+# echo "Starting file server with TLS for passthrough"
+# ./file-server -tls -port 8010 >/tmp/file-server-tls-passthrough.log 2>&1 &
 
-echo "Starting NGiNX in docker"
-sudo docker run -d --rm -p 8080:80 nginx
+# echo "Starting NGiNX in docker"
+# sudo docker run -d --rm -p 8080:80 nginx
 
-sleep 2
+# sleep 2
 
 echo "Test a normal directory listing with wget"
 wget -d http://localhost:8000/ -O /dev/null

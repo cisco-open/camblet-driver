@@ -160,7 +160,7 @@ _install_opa:
 _install_wasm_target:
 ifndef GITHUB_ACTION
 	sudo curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-	sudo ln -s $$HOME/.cargo/bin/* /usr/bin/
+	sudo ln -f -s $$HOME/.cargo/bin/* /usr/bin/
 	rustup default stable
 	rustup target add wasm32-unknown-unknown
 	sudo rustup default stable
