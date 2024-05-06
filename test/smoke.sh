@@ -40,8 +40,6 @@ curl -v -F "bigfile_downloaded.o=@/tmp/bigfile_downloaded.o" http://localhost:80
 diff bigfile.o bigfile_downloaded.o
 
 echo "Test bearssl with non-bearssl compatibility"
-python3 -m http.server 7000 >/tmp/python.log &
-sleep 1
 echo "testing with curl using default cipher..."
 curl -k -v https://localhost:7000/
 echo "testing with curl using AES_GCM_128 cipher..."

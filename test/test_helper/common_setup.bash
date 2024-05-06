@@ -2,7 +2,6 @@
 
 _common_setup() {
     load 'test_helper/bats-support/load'
-    load 'test_helper/bats-assert/load'
 
     PROJECT_ROOT="$( cd "$( dirname "$BATS_TEST_FILENAME" )/.." >/dev/null 2>&1 && pwd )"
     PATH="$PROJECT_ROOT/src:$PATH"
@@ -12,14 +11,20 @@ _common_setup() {
 _run_kernel_modul_with_ktls() {
     sudo modprobe tls
     sudo modprobe camblet dyndbg==_ ktls_available=1
-    sudo dmesg -T
+    # sudo dmesg -T
 }
 
 # Run the kernel module without kTLS
 _run_kernel_modul_without_ktls() {
-    sudo rmmod tls
+    # sudo rmmod tls
     sudo modprobe camblet dyndbg==_ ktls_available=0
-    sudo dmesg -T
+    # sudo dmesg -T
+}
+
+_run_agent() {
+    cd ../camblet
+    sudo build/camblet agent --policies-path /etc/camblet/policies/ --services-path /etc/camblet/services/ >/tmp/camblet-agent 2>&1 &
+    cd ../camblet-driver
 }
 
 _run_file_server() {
@@ -32,6 +37,10 @@ _run_file_server_with_TLS() {
 
 _run_file_server_with_TLS_for_passtrhough() {
     ./file-server -tls -port 8010 >/tmp/file-server-tls-passthrough.log 2>&1 &
+}
+
+_run_python_server() {
+    python3 -m http.server 7000 >/tmp/python.log &
 }
 
 _run_nginx_in_docker() {

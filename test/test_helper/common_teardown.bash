@@ -3,6 +3,11 @@
 # Teardown the kernel module
 _teardown_kernel_modul() {
     sudo rmmod camblet
+    sudo rmmod bearssl
+}
+
+_teardown_camblet_agent() {
+    sudo pkill camblet
 }
 
 _teardown_file_server() {

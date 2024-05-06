@@ -10,7 +10,7 @@ setup_suite() {
 
 _install_setup_prerequisits() {
     make setup-vm
-    sudo apt install openssl -y
+    sudo apt install openssl docker.io -y
 }
 
 _build_and_install_camblet_with_dkms() {
@@ -28,18 +28,18 @@ _build_and_install_camblet_with_dkms() {
 }
 
 _build_and_install_camblet_cli() {
-    if [[ -z "${GITHUB_ACTION}" ]]; then
-        cd ../camblet
-    else
+    if [[ "${GITHUB_ACTION}" ]]; then
         echo "checking out '${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}' branch"
         git checkout ${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}} || echo "branch not found"
     fi
+    cd ../camblet
     make build
     sudo mkdir -p /etc/camblet
     sudo cp -a camblet.d/policies /etc/camblet/
     sudo cp -a camblet.d/services /etc/camblet/
     sudo cp config.yaml /etc/camblet/config.yaml
     sudo cp build/camblet /usr/local/bin/
+    cd ../camblet-driver
 }
 
 _build_go_file_server() {
@@ -57,6 +57,7 @@ _build_flags() {
 
 
 teardown_suite() {
+    echo "Teardown suite started...."
     _teardown_file_server
     _teardown_flags
     _teardown_sockopt

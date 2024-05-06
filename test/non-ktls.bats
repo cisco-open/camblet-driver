@@ -5,26 +5,21 @@ setup_file() {
 
     _common_setup
     _run_kernel_modul_without_ktls
+    _run_agent
     _run_file_server
     _run_file_server_with_TLS
     _run_file_server_with_TLS_for_passtrhough
+    _run_python_server
     _run_nginx_in_docker
 }
 # Runs before every test
-# setup() {
-
-# }
+setup() {
+    load 'test_helper/bats-support/load'
+    load 'test_helper/bats-assert/load'
+}
 @test "test file-server with TLS" {
-    # run echo "Test a normal directory listing with wget"
-    # run wget -d http://localhost:8000/ -O /dev/null
-    # assert_success
-
-    # run echo "Test downloading a bigger file with curl"
-    # head -c 2M </dev/urandom > bigfile.o
-    # assert_success
-    # curl -v -o /tmp/bigfile_downloaded.o http://localhost:8000/bigfile.o
-    # assert_success
-    run smoke.sh
+    run test/smoke.sh
+    echo "Status received: $status"
     assert_success
 }
 # Runs after every test
@@ -37,4 +32,5 @@ teardown_file() {
     _teardown_python_apps
     _teardown_docker_containers
     _teardown_kernel_modul
+    _teardown_camblet_agent
 }
