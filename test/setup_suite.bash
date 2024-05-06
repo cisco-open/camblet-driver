@@ -58,14 +58,14 @@ _build_flags() {
 
 teardown_suite() {
     echo "Teardown suite started...."
-    _teardown_file_server
+    _teardown_file_server_build
     _teardown_flags
     _teardown_sockopt
     sudo dkms remove camblet/$TEST_TAG
     sudo rm -rf /usr/src/camblet-$TEST_TAG/
 }
 
-_teardown_file_server() {
+_teardown_file_server_build() {
     rm file-server
 }
 
