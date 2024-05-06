@@ -26,7 +26,7 @@
 
 #include "assert.h"
 #include <linux/slab.h>
-#ifdef __SSE4_2__
+#if __SSE4_2__ && !__KERNEL__
 #ifdef _MSC_VER
 #include <nmmintrin.h>
 #else
@@ -104,7 +104,7 @@ static const char *token_char_map = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\
 static const char *findchar_fast(const char *buf, const char *buf_end, const char *ranges, size_t ranges_size, int *found)
 {
     *found = 0;
-#if __SSE4_2__
+#if __SSE4_2__ && !__KERNEL__
     if (likely(buf_end - buf >= 16)) {
         __m128i ranges16 = _mm_loadu_si128((const __m128i *)ranges);
 
@@ -134,7 +134,7 @@ static const char *get_token_to_eol(const char *buf, const char *buf_end, const 
 {
     const char *token_start = buf;
 
-#ifdef __SSE4_2__
+#if __SSE4_2__ && !__KERNEL__
     static const char ALIGNED(16) ranges1[16] = "\0\010"    /* allow HT */
                                                 "\012\037"  /* allow SP and up to but not including DEL */
                                                 "\177\177"; /* allow chars w. MSB set */
