@@ -11,19 +11,16 @@ _common_setup() {
 _run_kernel_modul_with_ktls() {
     sudo modprobe tls
     sudo modprobe camblet dyndbg==_ ktls_available=1
-    # sudo dmesg -T
 }
 
 # Run the kernel module without kTLS
 _run_kernel_modul_without_ktls() {
-    # sudo rmmod tls
     sudo modprobe camblet dyndbg==_ ktls_available=0
-    # sudo dmesg -T
 }
 
 _run_agent() {
     cd ../camblet
-    sudo build/camblet agent --policies-path /etc/camblet/policies/ --services-path /etc/camblet/services/ >/tmp/camblet-agent 2>&1 &
+    sudo build/camblet agent --policies-path /etc/camblet/policies/ --services-path /etc/camblet/services/ >/tmp/camblet-agent.log 2>&1 &
     cd ../camblet-driver
 }
 
@@ -41,6 +38,7 @@ _run_file_server_with_TLS_for_passtrhough() {
 
 _run_python_server() {
     python3 -m http.server 7000 >/tmp/python.log &
+    sleep 1
 }
 
 _run_nginx_in_docker() {

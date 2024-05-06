@@ -49,7 +49,7 @@ curl -k -v --ciphers ECDHE-RSA-AES256-GCM-SHA384 https://localhost:7000/
 echo "testing with curl using CHACHA_POLY cipher..."
 curl -k -v --ciphers ECDHE-RSA-CHACHA20-POLY1305 https://localhost:7000/
 echo "testing with wget..."
-wget --no-check-certificate https://localhost:7000/
+wget --no-check-certificate https://localhost:7000/ -O/dev/null
 
 echo "Test openssl client connect to python with default cipher"
 echo -e "GET / HTTP/1.1\r\n\r\n" | openssl s_client -connect 127.0.0.1:7000
