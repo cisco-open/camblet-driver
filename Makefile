@@ -241,3 +241,6 @@ endif
 
 minigun:
 	for i in `seq 1 100`; do curl \-4 -s localhost:8000/tls.c > /dev/null; echo $$?; done
+
+tests:
+	./test/bats/bin/bats test/
