@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+
+# Runs only once in the beginning of the suite
 setup_suite() {
     _install_setup_prerequisits
     _build_and_install_camblet_with_dkms
@@ -55,9 +57,8 @@ _build_flags() {
     gcc -o flags test/recvflags.c
 }
 
-
+# Runs only once in the end of the suite
 teardown_suite() {
-    echo "Teardown suite started...."
     _teardown_file_server_build
     _teardown_flags
     _teardown_sockopt
