@@ -27,6 +27,7 @@ _run_kernel_modul() {
         sudo modprobe tls
         sudo modprobe camblet dyndbg==_ ktls_available=1
     else
+        sudo rmmod tls
         sudo modprobe camblet dyndbg==_ ktls_available=0
     fi
 }
