@@ -2325,6 +2325,7 @@ void socket_exit(void)
 
 	free_augmentation_cache();
 	free_cert_cache();
+	free_proxywasms();
 
 	pr_info("socket support unloaded");
 }
