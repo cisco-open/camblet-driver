@@ -12,7 +12,10 @@ setup_suite() {
 
 _install_setup_prerequisits() {
     make setup-vm
-    sudo apt install openssl docker.io -y
+    sudo apt install openssl -y
+    if [[ -n "${GITHUB_ACTION}" ]]; then
+        sudo apt install docker.io -y
+    fi
 }
 
 _build_and_install_camblet_with_dkms() {
