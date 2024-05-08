@@ -13,7 +13,7 @@ setup_suite() {
 _install_setup_prerequisits() {
     make setup-vm
     sudo apt install openssl -y
-    if [[ -n "${GITHUB_ACTION}" ]]; then
+    if [[ -z "${GITHUB_ACTION}" ]]; then
         sudo apt install docker.io -y
     fi
 }
