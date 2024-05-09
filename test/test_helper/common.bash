@@ -24,9 +24,11 @@ setup_file() {
 
 _run_kernel_modul() {
     if $ktls_in_use; then
+        echo '# Running tests with ktls' >&3
         sudo modprobe tls
         sudo modprobe camblet dyndbg==_ ktls_available=1
     else
+        echo '# Running tests with non-ktls' >&3
         sudo rmmod tls
         sudo modprobe camblet dyndbg==_ ktls_available=0
     fi
