@@ -178,6 +178,33 @@ proxywasm_context *proxywasm_get_context(proxywasm *p)
     return p->current_context;
 }
 
+void free_proxywasm(proxywasm *p)
+{
+    if (p != NULL)
+    {
+        proxywasm_filter *f;
+        for (f = p->filters; f != NULL; f = f->next)
+        {
+            kfree(f);
+        }
+        free_proxywasm_context(p->root_context);
+        kfree(p);
+    }
+}
+
+void free_proxywasms(void)
+{
+    int i;
+    for (i = 0; i < NR_CPUS; i++)
+    {
+        if (proxywasms[i] != NULL)
+        {
+            free_proxywasm(proxywasms[i]);
+            proxywasms[i] = NULL;
+        }
+    }
+}
+
 m3ApiRawFunction(proxy_log)
 {
     m3ApiReturnType(i32);
@@ -345,6 +372,20 @@ m3ApiRawFunction(proxy_set_buffer_bytes)
     m3ApiReturn(set_buffer_bytes(filter->proxywasm->current_context, buffer_type, start, size, buffer_data, buffer_size));
 }
 
+m3ApiRawFunction(proxy_get_current_time_nanoseconds)
+{
+    m3ApiReturnType(i32);
+    m3ApiGetArgMem(i64 *, result);
+
+    struct timespec64 ts;
+    ktime_get_real_ts64(&ts);
+
+    i64 current_time = ts.tv_sec * 1000000000 + ts.tv_nsec;
+    memcpy(result, &current_time, sizeof(i64));
+
+    m3ApiReturn(WasmResult_Ok);
+}
+
 static wasm_vm_result link_proxywasm_hostfunctions(proxywasm_filter *filter, wasm_vm_module *module)
 {
     M3Result result = m3Err_none;
@@ -357,6 +398,7 @@ static wasm_vm_result link_proxywasm_hostfunctions(proxywasm_filter *filter, was
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_set_property", "i(*i*i)", proxy_set_property, filter)));
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_buffer_bytes", "i(iii**)", proxy_get_buffer_bytes, filter)));
     _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_set_buffer_bytes", "i(iii**)", proxy_set_buffer_bytes, filter)));
+    _(SuppressLookupFailure(m3_LinkRawFunctionEx(module, env, "proxy_get_current_time_nanoseconds", "i(i)", proxy_get_current_time_nanoseconds, filter)));
 
 _catch:
     return (wasm_vm_result){.err = result};

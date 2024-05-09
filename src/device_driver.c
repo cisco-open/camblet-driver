@@ -210,7 +210,9 @@ wasm_vm_result load_module(const char *name, const char *code, unsigned length, 
             }
         }
 
-        result = wasm_vm_compile_module(module);
+        // since for proxywasm we don't expose a lot of host functions required for compilation
+        if (strstr(name, PROXY_WASM) == NULL)
+            result = wasm_vm_compile_module(module);
 
         wasm_vm_unlock(vm);
         wasm_vm_dump_symbols(vm);

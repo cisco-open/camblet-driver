@@ -43,8 +43,9 @@ MODULE_PARM_DESC(ktls_available, "Marks if kTLS is available on the system");
 typedef struct camblet_init_status
 {
     bool wasm;
-    bool wasm_opa;
     bool wasm_csr;
+    bool wasm_opa;
+    bool wasm_proxywasm;
     bool chardev;
     bool socket;
     bool sd_table;
@@ -136,6 +137,7 @@ static int __init camblet_init(void)
             goto out;
         }
     }
+    __camblet_init_status.wasm_proxywasm = true;
 
     result = load_module("csr_module", csr_wasm, csr_wasm_len, NULL);
     if (result.err)
@@ -144,7 +146,6 @@ static int __init camblet_init(void)
         ret = -1;
         goto out;
     }
-
     __camblet_init_status.wasm_csr = true;
 
     result = load_module("socket_opa", socket_wasm, socket_wasm_len, NULL);
@@ -154,7 +155,6 @@ static int __init camblet_init(void)
         ret = -1;
         goto out;
     }
-
     __camblet_init_status.wasm_opa = true;
 
 out:
