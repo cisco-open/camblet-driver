@@ -293,3 +293,11 @@ The package can be installed with the following command:
 ```bash
 sudo dnf install ../camblet-driver-0.7.1-1.noarch.rpm
 ```
+
+## Testing
+
+We are using [bats-core](https://bats-core.readthedocs.io/en/stable/index.html) for running our tests.
+
+```bash
+make tests
+```

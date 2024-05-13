@@ -160,7 +160,7 @@ _install_opa:
 _install_wasm_target:
 ifndef GITHUB_ACTION
 	sudo curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-	sudo ln -s $$HOME/.cargo/bin/* /usr/bin/
+	sudo ln -f -s $$HOME/.cargo/bin/* /usr/bin/
 	rustup default stable
 	rustup target add wasm32-unknown-unknown
 	sudo rustup default stable
@@ -241,3 +241,6 @@ endif
 
 minigun:
 	for i in `seq 1 100`; do curl \-4 -s localhost:8000/tls.c > /dev/null; echo $$?; done
+
+tests:
+	./test/bats/bin/bats test/
