@@ -9,8 +9,12 @@ load 'test_helper/common.bash'
     assert_output 'N'
 }
 
-@test "Test a normal directory listing with wget" {
-    wget -d http://localhost:8000/ -O /dev/null
+@test "Test a normal directory listing with wget on IPv4" {
+    wget -4 -d http://localhost:8000/ -O /dev/null
+}
+
+@test "Test a normal directory listing with wget on IPv6" {
+    wget -6 -d http://localhost:8000/ -O /dev/null
 }
 
 @test "Test downloading and uploading 2MB file with curl" {
