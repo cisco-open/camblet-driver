@@ -497,6 +497,7 @@ wasm_vm_result wasm_vm_compile_module(wasm_vm_module *module)
     M3Result result = m3_CompileModule(module);
     if (result)
     {
+        pr_err("wasm_vm_compile_module: %s", wasm_vm_last_error(module));
         return (wasm_vm_result){.err = result};
     }
     return wasm_vm_ok;

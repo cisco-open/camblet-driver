@@ -86,7 +86,9 @@ proxywasm *proxywasm_for_vm(wasm_vm *vm);
 proxywasm *this_cpu_proxywasm(void);
 void proxywasm_lock(proxywasm *p, proxywasm_context *c);
 void proxywasm_unlock(proxywasm *p);
+proxywasm_context *proxywasm_get_context(proxywasm *p);
 void proxywasm_set_context(proxywasm *p, proxywasm_context *context);
+void free_proxywasms(void);
 
 wasm_vm_result init_proxywasm_for(wasm_vm *vm, wasm_vm_module *module);
 
@@ -99,8 +101,6 @@ wasm_vm_result proxy_on_upstream_connection_close(proxywasm *p, PeerType peer_ty
 
 wasm_vm_result proxywasm_create_context(proxywasm *p, buffer_t *upstream_buffer, buffer_t *downstream_buffer);
 wasm_vm_result proxywasm_destroy_context(proxywasm *p);
-
-proxywasm_context *proxywasm_get_context(proxywasm *p);
 
 // set_property_v is convenience funtion for setting a property on a context, with simple C string paths,
 // use the '.' as delimiter, those will be replaced to a '0' delimiter
