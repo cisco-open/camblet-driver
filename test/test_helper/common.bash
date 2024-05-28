@@ -29,7 +29,6 @@ _run_kernel_modul() {
         sudo modprobe camblet dyndbg==_ ktls_available=1
     else
         echo '# Running tests with non-ktls' >&3
-        sudo rmmod tls
         sudo modprobe camblet dyndbg==_ ktls_available=0
     fi
 }
