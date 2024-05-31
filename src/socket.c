@@ -65,6 +65,12 @@ static struct proto camblet_v6_ktls_prot;
 static struct proto_ops camblet_stream_ops;
 static struct proto_ops camblet_v6_stream_ops;
 
+/*
+* Because inet6_stream_ops is not exported in the kernel, we need to
+* store it in a global variable (in connect) to be able to use it later on.
+*/
+static struct proto_ops *_inet6_stream_ops = NULL;
+
 static br_rsa_private_key *rsa_priv;
 static br_rsa_public_key *rsa_pub;
 
@@ -1008,19 +1014,19 @@ void camblet_close(struct sock *sk, long timeout)
 	camblet_socket *s = READ_ONCE(sk->sk_user_data);
 	if (s)
 	{
-		mutex_lock(&s->bearssl_lock);
+		WRITE_ONCE(sk->sk_user_data, NULL);
 
 		if (is_ktls(s))
 		{
 			close = s->ktls_close;
 		}
 
-		if (s->alpn && !is_ktls(s) && !s->opa_socket_ctx.passthrough)
+		mutex_lock(&s->bearssl_lock);
+
+		if (s->alpn && !s->opa_socket_ctx.passthrough)
 		{
 			bearssl_close(s);
 		}
-
-		WRITE_ONCE(sk->sk_user_data, NULL);
 
 		mutex_unlock(&s->bearssl_lock);
 
@@ -1037,8 +1043,6 @@ void ensure_camblet_ktls_prot(struct sock *sock, struct proto *camblet_ktls_prot
 
 	if (close == NULL)
 	{
-		close = sock->sk_prot->close;
-
 		int (*setsockopt)(struct sock *sk, int level,
 						  int optname, sockptr_t optval,
 						  unsigned int optlen);
@@ -1076,7 +1080,7 @@ static int configure_ktls_sock(camblet_socket *s)
 	if (!is_cipher_supported(params->cipher_suite) || !ktls_available)
 	{
 		if (!ktls_available)
-			pr_warn("configure kTLS error: kTLS is not available on this system # command[%s]", current->comm);
+			pr_debug("configure kTLS error: kTLS is not available on this system # command[%s]", current->comm);
 		else
 			pr_warn("configure kTLS error: only ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256, "
 					"ECDHE_RSA_WITH_AES_128_GCM_SHA256, "
@@ -1122,6 +1126,19 @@ static int configure_ktls_sock(camblet_socket *s)
 	// We have to set the protocol to the original here because the kTLS proto gets created from the sockets original protocol,
 	// so if it contains the camblet protocol parts it will spread to places where kTLS is used but camblet is not.
 	s->sock->sk_prot = s->sock->sk_family == AF_INET6 ? &tcpv6_prot : &tcp_prot;
+
+	// Do the same for the socket ops, but since only client sockets are supported, we have to do a little more work to find out
+	// if we need to do the swap or not (server sockets are not supported).
+	// We don't have to put them back after the kTLS override, since the only thing we change it is poll,
+	// and that is only for BearSSL.
+	if (s->sock->sk_socket->ops == &camblet_stream_ops)
+	{
+		s->sock->sk_socket->ops = &inet_stream_ops;
+	}
+	else if (s->sock->sk_socket->ops == &camblet_v6_stream_ops)
+	{
+		s->sock->sk_socket->ops = _inet6_stream_ops;
+	}
 
 	ret = s->sock->sk_prot->setsockopt(s->sock, SOL_TCP, TCP_ULP, KERNEL_SOCKPTR("tls"), sizeof("tls"));
 	if (ret != 0)
@@ -2050,8 +2067,12 @@ struct sock *camblet_accept(struct sock *sk, int flags, int *err, bool kern)
 
 		// We should save the ssl context here to the socket
 		// and overwrite the socket protocol with our own
+		write_lock_bh(&client_sk->sk_callback_lock);
+
 		client_sk->sk_user_data = sc;
 		WRITE_ONCE(client_sk->sk_prot, prot);
+
+		write_unlock_bh(&client_sk->sk_callback_lock);
 	}
 	else
 	{
@@ -2074,8 +2095,7 @@ error:
 __poll_t camblet_poll(struct file *file, struct socket *sock,
 					  struct poll_table_struct *wait)
 {
-	struct sock *sk = sock->sk;
-	camblet_socket *s = sk->sk_user_data;
+	camblet_socket *s = READ_ONCE(sock->sk->sk_user_data);
 	if (s && is_bearssl(s))
 	{
 		// check if this is a waiting poll on read
@@ -2120,8 +2140,9 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		err = connect_v6(sk, uaddr, addr_len);
 		prot = &camblet_v6_prot;
 
-		if (!camblet_v6_stream_ops.poll)
+		if (unlikely(!camblet_v6_stream_ops.poll))
 		{
+			_inet6_stream_ops = sk->sk_socket->ops;
 			camblet_v6_stream_ops = *sk->sk_socket->ops;
 			camblet_v6_stream_ops.poll = camblet_poll;
 		}
@@ -2198,9 +2219,13 @@ int camblet_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 		// We should save the ssl context here to the socket
 		// and overwrite the socket protocol with our own
+		write_lock_bh(&sk->sk_callback_lock);
+
 		sk->sk_user_data = sc;
 		WRITE_ONCE(sk->sk_prot, prot);
 		WRITE_ONCE(sk->sk_socket->ops, prot_ops);
+
+		write_unlock_bh(&sk->sk_callback_lock);
 	}
 	else
 	{
