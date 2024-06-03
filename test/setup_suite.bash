@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+TEST_TAG=0.0.0
+
 # Runs only once in the beginning of the suite
 setup_suite() {
     _install_setup_prerequisits
@@ -19,7 +21,6 @@ _install_setup_prerequisits() {
 }
 
 _build_and_install_camblet_with_dkms() {
-    TEST_TAG=0.0.0
     sudo cp -r . /usr/src/camblet-$TEST_TAG/
     sudo dkms add -m camblet -v $TEST_TAG
     if sudo dkms build -m camblet -v $TEST_TAG; then
@@ -65,7 +66,7 @@ teardown_suite() {
     _teardown_file_server_build
     _teardown_flags
     _teardown_sockopt
-    sudo dkms remove camblet/$TEST_TAG
+    sudo dkms remove camblet/$TEST_TAG --all
     sudo rm -rf /usr/src/camblet-$TEST_TAG/
 }
 

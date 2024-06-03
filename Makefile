@@ -243,4 +243,6 @@ minigun:
 	for i in `seq 1 100`; do curl \-4 -s localhost:8000/tls.c > /dev/null; echo $$?; done
 
 tests:
+	KTLS_IN_USE=true  envsubst '$$KTLS_IN_USE' < test/tests.bats.template > test/ktls.bats
+	KTLS_IN_USE=false envsubst '$$KTLS_IN_USE' < test/tests.bats.template > test/non-ktls.bats
 	./test/bats/bin/bats test/

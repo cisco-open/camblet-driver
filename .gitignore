@@ -20,3 +20,4 @@ linux/
 *.rpm
 test/tls-perf
 *pyc
+test/*.bats

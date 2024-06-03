@@ -1,12 +1,12 @@
-ktls_in_use=false;
+ktls_in_use=${KTLS_IN_USE}
 
 load 'test_helper/bats-support/load.bash'
 load 'test_helper/bats-assert/load.bash'
 load 'test_helper/common.bash'
 
-@test "Test if the non-ktls enabled kernel modul is in use" {
+@test "Test if the ktls enabled kernel module is in use" {
     run cat /sys/module/camblet/parameters/ktls_available
-    assert_output 'N'
+    assert_output $([ $ktls_in_use = "true" ] && echo 'Y' || echo 'N')
 }
 
 @test "Test a normal directory listing with wget" {
