@@ -1,1 +1,6 @@
 extend-diff-ignore = "rpmbuild/"
+extend-diff-ignore = "third-party/wasm3/platforms"
+extend-diff-ignore = "third-party/wasm3/test"
+extend-diff-ignore = "test/bats"
+extend-diff-ignore = "test/test_helper/bats-assert"
+extend-diff-ignore = "test/test_helper/bats-support"

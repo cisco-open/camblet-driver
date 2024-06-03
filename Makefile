@@ -187,7 +187,7 @@ deb:
 	$(eval PACKAGE_VERSION := $(shell dpkg-parsechangelog -S Version | cut -d'-' -f1))
 	make clean
 	rm -f ../camblet-driver_$(PACKAGE_VERSION).orig.tar.xz
-	tar --exclude='./.git' --exclude='linux' --exclude='rpmbuild' --exclude 'debian' -cvJf ../camblet-driver_$(PACKAGE_VERSION).orig.tar.xz .
+	tar --exclude='./.git' --exclude='third-party/wasm3/platforms' --exclude='third-party/wasm3/test' --exclude='test/bats' --exclude='test/test_helper/bats-assert' --exclude='test/test_helper/bats-support' --exclude='linux' --exclude='rpmbuild' --exclude 'debian' -cvJf ../camblet-driver_$(PACKAGE_VERSION).orig.tar.xz .
 	dpkg-buildpackage -tc
 
 rpm:
@@ -195,7 +195,7 @@ rpm:
 	make clean
 	rm -f rpmbuild/SOURCES/camblet-driver-*.tar.xz
 	mkdir -p rpmbuild/SOURCES
-	tar --exclude='./.git' --exclude='linux' --exclude='rpmbuild' --exclude 'debian' -cvJf rpmbuild/SOURCES/camblet-driver-$(PACKAGE_VERSION).tar.xz .
+	tar --exclude='./.git' --exclude='third-party/wasm3/platforms' --exclude='third-party/wasm3/test' --exclude='test/bats' --exclude='test/test_helper/bats-assert' --exclude='test/test_helper/bats-support' --exclude='linux' --exclude='rpmbuild' --exclude 'debian' -cvJf rpmbuild/SOURCES/camblet-driver-$(PACKAGE_VERSION).tar.xz .
 	rpmbuild -v -ba --define '_topdir ${PWD}/rpmbuild/' rpmbuild/SPECS/camblet-driver.spec
 
 .PHONY: bump_version
