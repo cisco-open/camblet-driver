@@ -132,12 +132,37 @@ Between two applications - both of them intercepted by this module - the traffic
 
 ## Debugging
 
-Most of the logs of this module are on debug level and can be shown using [dynamic debug](https://www.kernel.org/doc/html/latest/admin-guide/dynamic-debug-howto.html) feature of the Linux kernel.
+### Logging
 
-Use the following command to turn on debug level logging for the module:
+Most of the logs of this module are on the debug level and can be shown using the [dynamic debug](https://www.kernel.org/doc/html/latest/admin-guide/dynamic-debug-howto.html) feature of the Linux kernel.
+
+Use the following command to turn on debug-level logging for the module:
 
 ```bash
 echo -n '-p; module camblet file opa.c  +pftl' | sudo tee /proc/dynamic_debug/control > /dev/null
+```
+
+### Kernel debugging environment
+
+The kernel module can be traced for memory leaks and other issues with the help of fine tools, like [KASAN](https://www.kernel.org/doc/html/latest/dev-tools/kasan.html) and [Kmemleak](https://www.kernel.org/doc/html/latest/dev-tools/kmemleak.html).
+
+To create a kernel debugging environment on Fedora, follow these steps:
+
+```bash
+limactl start --name fedora-debug template://fedora --vm-type vz --set '.mounts[0].writable=true'
+
+# Enter the VM
+limactl shell fedora-debug
+
+sudo dnf update
+sudo dnf install kernel-debug kernel-debug-devel
+
+# Check the current debug kernel version, and set it as default (ls /boot/)
+CURRENT_DEBUG_KERNEL=vmlinuz-6.8.7-200.fc39.aarch64+debug
+
+sudo grubby --set-default ${CURRENT_DEBUG_KERNEL}
+sudo grubby --update-kernel=${CURRENT_DEBUG_KERNEL} --args kmemleak=on kasan=on
+sudo reboot
 ```
 
 ### Test mTLS
@@ -195,13 +220,13 @@ sudo dnf install dkms
 The Camblet can be installed with DKMS in the following way currently:
 
 ```bash
-sudo git clone --recurse-submodule https://github.com/cisco-open/camblet-driver.git /usr/src/camblet-0.6.0/
+sudo git clone --recurse-submodule https://github.com/cisco-open/camblet-driver.git /usr/src/camblet-0.7.1/
 
 # Add the kernel module to the DKMS source control
-sudo dkms add -m camblet -v 0.6.0
+sudo dkms add -m camblet -v 0.7.1
 
 # Build and install the kernel module against the current kernel version
-sudo dkms install -m camblet -v 0.6.0
+sudo dkms install -m camblet -v 0.7.1
 
 # Load the kernel module
 sudo modprobe camblet
@@ -217,8 +242,8 @@ Un-installation is very simple as well:
 sudo modprobe -r camblet
 
 # Remove the kernel module from DKMS source control
-sudo dkms uninstall -m camblet -v 0.6.0
-sudo dkms remove -m camblet -v 0.6.0
+sudo dkms uninstall -m camblet -v 0.7.1
+sudo dkms remove -m camblet -v 0.7.1
 ```
 
 ### Debian package
@@ -242,7 +267,7 @@ make deb
 The package can be installed with the following command:
 
 ```bash
-sudo apt install ../camblet-driver_0.4.0-1_all.deb
+sudo apt install ../camblet-driver_0.7.1-1_all.deb
 ```
 
 ### RPM package
@@ -266,5 +291,13 @@ make rpm
 The package can be installed with the following command:
 
 ```bash
-sudo dnf install ../camblet-driver-0.4.0-1.noarch.rpm
+sudo dnf install ../camblet-driver-0.7.1-1.noarch.rpm
+```
+
+## Testing
+
+We are using [bats-core](https://bats-core.readthedocs.io/en/stable/index.html) for running our tests.
+
+```bash
+make tests
 ```

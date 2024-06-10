@@ -1,5 +1,5 @@
 Name:           camblet-driver
-Version:        0.6.0
+Version:        0.7.1
 Release:        1%{?dist}
 Summary:        Kernel module for the Camblet project.
 
@@ -57,6 +57,33 @@ fi
 
 
 %changelog
+* Thu Apr 18 2024 Camblet maintainers <team@camblet.io> - 0.7.1-1
+  - Fix deb build by copying all files to the right directory
+
+* Thu Apr 18 2024 Camblet maintainers <team@camblet.io> - 0.7.0-1
+  - socket: fix leaking tcp_connection_contexts and opa objects (#214)
+  - socket: fixes around camblet_get/setsockopt and recvmsg waiting and other things (#209)
+  - Add read/write buffer lock during send/recvmsg (#207)
+  - socket: fix for bearrssl pre-read data vs poll() (#205)
+  - socket: propagate non-block error codes upwards (#202)
+  - add missing memory allocation checks (#199)
+  - socket: fix bearssl close order and locking (#195)
+  - Support aes gcm and ccm ciphers (#196)
+  - change spinlocks to mutexes (unification)
+  - check spiffe id validity without regex
+  - fixes use = as key value separator in labels fix uniqueness in rego
+  - support workload id templates
+  - rust: update crates and remove unused imports
+  - Use camblet_sendpage in case of kTLS under kernel version 6.5 (#191)
+  - handle -ERESTARTSYS during TLS handshake
+  - fix trace log message size calculation
+  - ci: use build matrix to test on 6.5 and 5.15 kernel as well (#182)
+  - Add BearSSL tests (#178)
+  - opa: builtins parsing and some linkage fixes (#176)
+  - proper and verbose wasm module error printing (#175)
+  - implement camblet_sendpage
+  - HTTP header injection (#167)
+
 * Tue Feb 27 2024 Camblet maintainers <team@camblet.io> - 0.6.0-1
   - parametrize VERBOSE builds (#171)
   - chore: do not use deprecated -EXTRA_CFLAGS (#169)

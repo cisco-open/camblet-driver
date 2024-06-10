@@ -27,7 +27,8 @@
                 "third-party/BearSSL/inc/",
                 "third-party/parson/",
                 "third-party/picohttpparser/",
-                "third-party/wasm3/source/"
+                "third-party/wasm3/source/",
+                "${workspaceFolder}/include"
             ],
             "macFrameworkPath": [],
             "cStandard": "gnu11",

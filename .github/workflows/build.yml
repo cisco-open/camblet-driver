@@ -1,4 +1,4 @@
-name: Makefile CI
+name: Build and test
 
 on:
   push:
@@ -9,7 +9,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-20.04]
+        os: [ubuntu-24.04, ubuntu-22.04, ubuntu-20.04]
 
     runs-on: ${{ matrix.os }}
 
@@ -29,71 +29,17 @@ jobs:
         fetch-depth: 0
 
     - name: Setup Golang with cache
-      uses: magnetikonline/action-golang-cache@v4
+      uses: magnetikonline/action-golang-cache@v5
       with:
         go-version-file: camblet/go.mod
 
-    - name: Install/setup prerequisites
+    - name: Run camblet tests using bats-core
       working-directory: camblet-driver
       run: |
-        make setup-vm
-        sudo apt install openssl
-
-    - name: Build with DKMS
-      working-directory: camblet-driver
-      run: |
-        TEST_TAG=0.0.0
-        sudo cp -r . /usr/src/camblet-$TEST_TAG/
-        sudo dkms add -m camblet -v $TEST_TAG
-        if sudo dkms build -m camblet -v $TEST_TAG; then
-          echo "DKMS build succeeded"
-        else
-          echo "DKMS build failed"
-          cat /var/lib/dkms/camblet/$TEST_TAG/build/make.log
-          exit 1
-        fi
-        sudo dkms install -m camblet -v $TEST_TAG
-
-    - name: Build Camblet CLI
-      working-directory: camblet
-      run: |
-        echo "checking out '${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}' branch"
-        git checkout ${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}} || echo "branch not found"
-        make build
-        sudo mkdir -p /etc/camblet
-        sudo cp -a camblet.d/policies /etc/camblet/
-        sudo cp -a camblet.d/services /etc/camblet/
-        sudo cp config.yaml /etc/camblet/config.yaml
-        sudo cp build/camblet /usr/local/bin/
-  
-    - name: Run the kernel module with kTLS
-      working-directory: camblet-driver 
-      run: |
-        sudo modprobe tls
-        sudo modprobe camblet ktls_available=1
-        sudo dmesg -T
+        make tests
 
     # - name: Setup upterm session
     #   uses: lhotari/action-upterm@v1
     #   with:
     #     ## limits ssh access and adds the ssh public key for the user which triggered the workflow
     #     limit-access-to-actor: true
-
-    - name: Run proxy-wasm smoke test with kTLS
-      uses: ./camblet-driver/.github/actions/smoketest
-      timeout-minutes: 1
- 
-    - name: Remove kernel module with kTLS
-      working-directory: camblet-driver
-      run: sudo rmmod camblet
-
-    - name: Run the kernel module with bearSSL
-      working-directory: camblet-driver 
-      run: |
-        sudo rmmod tls
-        sudo modprobe camblet ktls_available=0
-        sudo dmesg -T
-
-    - name: Run proxy-wasm smoke test with bearSSL
-      uses: ./camblet-driver/.github/actions/smoketest
-      timeout-minutes: 1

@@ -4,7 +4,7 @@ ccflags-y += -foptimize-sibling-calls \
 			 -Dd_m3RecordBacktraces=1 \
 			 -DDEBUG=1 \
 			 -Dd_m3HasFloat=$(EMULATE_FLOATS) \
-			 -I$(PWD) \
+			 -I$(PWD)/include \
 			 -I$(PWD)/third-party/BearSSL/inc/ \
 			 -I$(PWD)/third-party/wasm3/source/ \
 			 -I$(PWD)/third-party/base64 \
@@ -12,6 +12,10 @@ ccflags-y += -foptimize-sibling-calls \
 			 -I$(PWD)/third-party/picohttpparser \
 			 -Wall -g \
 			 #-Dd_m3LogCompile=1
+
+# The wasm compiler module is not sanitized since it does a lot of recursion at the
+# beginning and it's causing a stack overflow together with the sanitized code.
+KASAN_SANITIZE_m3_compile.o := n
 
 # Enable floating point arithmetic
 ARCH := $(shell uname -m)
@@ -62,25 +66,26 @@ camblet-objs :=  third-party/wasm3/source/m3_api_libc.o \
 			  third-party/base64/base64.o \
 			  third-party/parson/json.o \
 			  third-party/picohttpparser/picohttpparser.o \
-			  buffer.o \
-			  device_driver.o \
-			  main.o \
-			  csr.o \
-			  rsa_tools.o \
-			  cert_tools.o \
-			  wasm.o \
-			  opa.o \
-			  proxywasm.o \
-			  socket.o \
-			  task_context.o \
-			  tls.o \
-			  commands.o \
-			  string.o \
-			  augmentation.o \
-			  config.o \
-			  sd.o \
-			  trace.o \
-			  http.o
+			  src/buffer.o \
+			  src/device_driver.o \
+			  src/main.o \
+			  src/csr.o \
+			  src/rsa_tools.o \
+			  src/cert_tools.o \
+			  src/wasm.o \
+			  src/opa.o \
+			  src/proxywasm.o \
+			  src/socket.o \
+			  src/task_context.o \
+			  src/tls.o \
+			  src/commands.o \
+			  src/string.o \
+			  src/augmentation.o \
+			  src/config.o \
+			  src/sd.o \
+			  src/trace.o \
+			  src/http.o \
+			  src/spiffe.o
 
 # Set the path to the Kernel build utils.
 KBUILD=/lib/modules/$(shell uname -r)/build/
@@ -91,21 +96,24 @@ default: bearssl
 bearssl:
 	cd third-party/BearSSL && $(MAKE) VERBOSE=$(VERBOSE) linux-km
 
+bearssl_clean:
+	cd third-party/BearSSL && $(MAKE) VERBOSE=$(VERBOSE) linux-km-clean
+
 static/socket_wasm.h: socket.rego
 	opa build -t wasm -e "socket/allow" socket.rego -o bundle.tar.gz
 	tar zxf bundle.tar.gz /policy.wasm
 	mv policy.wasm socket.wasm
-	xxd -i socket.wasm static/socket_wasm.h
+	xxd -i socket.wasm include/static/socket_wasm.h
 
 static/csr_wasm.h: wasm-modules/csr-rust/**/*.rs
 	cargo build --release --target=wasm32-unknown-unknown
 	cp target/wasm32-unknown-unknown/release/csr-rust.wasm csr.wasm
-	xxd -i csr.wasm static/csr_wasm.h
+	xxd -i csr.wasm include/static/csr_wasm.h
 
 opa-test:
 	opa test *.rego -v
 
-clean:
+clean: bearssl_clean
 	$(MAKE) -C $(KBUILD) M=$(PWD) clean
 	rm -rf target/
 
@@ -152,7 +160,7 @@ _install_opa:
 _install_wasm_target:
 ifndef GITHUB_ACTION
 	sudo curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-	sudo ln -s $$HOME/.cargo/bin/* /usr/bin/
+	sudo ln -f -s $$HOME/.cargo/bin/* /usr/bin/
 	rustup default stable
 	rustup target add wasm32-unknown-unknown
 	sudo rustup default stable
@@ -167,9 +175,9 @@ setup-dev-env:
 	test -f .vscode/c_cpp_properties.json || cp .vscode/c_cpp_properties.json.template .vscode/c_cpp_properties.json
 	brew tap messense/macos-cross-toolchains
 	brew install $(shell lima uname -m)-unknown-linux-gnu
-	test -d ../linux || git clone --depth=1 --branch v6.2 https://github.com/torvalds/linux.git ../linux
+	test -d ../linux || git clone --depth=1 --branch v6.8 https://github.com/torvalds/linux.git ../linux
 	cd ../linux && lima make tinyconfig
-	cd ../linux && lima make -j
+	cd ../linux && lima make -j2
 
 # Usage: make debug LINE=get_command+0x88/0x130
 debug:
@@ -179,7 +187,7 @@ deb:
 	$(eval PACKAGE_VERSION := $(shell dpkg-parsechangelog -S Version | cut -d'-' -f1))
 	make clean
 	rm -f ../camblet-driver_$(PACKAGE_VERSION).orig.tar.xz
-	tar --exclude='./.git' --exclude='linux' --exclude='rpmbuild' --exclude 'debian' -cvJf ../camblet-driver_$(PACKAGE_VERSION).orig.tar.xz .
+	tar --exclude='./.git' --exclude='third-party/wasm3/platforms' --exclude='third-party/wasm3/test' --exclude='test/bats' --exclude='test/test_helper/bats-assert' --exclude='test/test_helper/bats-support' --exclude='linux' --exclude='rpmbuild' --exclude 'debian' -cvJf ../camblet-driver_$(PACKAGE_VERSION).orig.tar.xz .
 	dpkg-buildpackage -tc
 
 rpm:
@@ -187,7 +195,7 @@ rpm:
 	make clean
 	rm -f rpmbuild/SOURCES/camblet-driver-*.tar.xz
 	mkdir -p rpmbuild/SOURCES
-	tar --exclude='./.git' --exclude='linux' --exclude='rpmbuild' --exclude 'debian' -cvJf rpmbuild/SOURCES/camblet-driver-$(PACKAGE_VERSION).tar.xz .
+	tar --exclude='./.git' --exclude='third-party/wasm3/platforms' --exclude='third-party/wasm3/test' --exclude='test/bats' --exclude='test/test_helper/bats-assert' --exclude='test/test_helper/bats-support' --exclude='linux' --exclude='rpmbuild' --exclude 'debian' -cvJf rpmbuild/SOURCES/camblet-driver-$(PACKAGE_VERSION).tar.xz .
 	rpmbuild -v -ba --define '_topdir ${PWD}/rpmbuild/' rpmbuild/SPECS/camblet-driver.spec
 
 .PHONY: bump_version
@@ -230,3 +238,11 @@ endif
 	#     mtls: false
 	# To run the perf test please use the following command:
 	# cd test/tls-perf && ./tls-perf -l 1000 -t 2 -T 10 127.0.0.1 8000
+
+minigun:
+	for i in `seq 1 100`; do curl \-4 -s localhost:8000/tls.c > /dev/null; echo $$?; done
+
+tests:
+	KTLS_IN_USE=true  envsubst '$$KTLS_IN_USE' < test/tests.bats.template > test/ktls.bats
+	KTLS_IN_USE=false envsubst '$$KTLS_IN_USE' < test/tests.bats.template > test/non-ktls.bats
+	./test/bats/bin/bats test/

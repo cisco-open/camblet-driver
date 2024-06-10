@@ -37,7 +37,7 @@ sed -i '' 's/PACKAGE_VERSION=".*"/PACKAGE_VERSION="'"$new_tag"'"/' dkms.conf
 # Update the kernel-module.spec
 sed -i '' 's/Version:        .*/Version:        '"$new_tag"'/' rpmbuild/SPECS/camblet-driver.spec
 # Update the main.c
-sed -i '' 's/MODULE_VERSION(".*")/MODULE_VERSION("'"$new_tag"'")/' main.c
+sed -i '' 's/MODULE_VERSION(".*")/MODULE_VERSION("'"$new_tag"'")/' src/main.c
 # Update the Readme.md
 sed -i '' 's/github.com\/cisco-open\/camblet-driver.git \/usr\/src\/camblet-.*\//github.com\/cisco-open\/camblet-driver.git \/usr\/src\/camblet-'"$new_tag"'\//' README.md; \
 sed -i '' 's/sudo dkms add -m camblet -v .*$/sudo dkms add -m camblet -v '"$new_tag"'/' README.md; \

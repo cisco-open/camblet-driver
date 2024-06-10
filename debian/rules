@@ -28,7 +28,7 @@ override_dh_builddeb:
 override_dh_auto_install:
 	dh_auto_install
 	mkdir -p debian/camblet-driver/usr/src/camblet-${PACKAGE_VERSION}/
-	cp -r *.c *.h dkms.conf Makefile static/ third-party/ debian/camblet-driver/usr/src/camblet-${PACKAGE_VERSION}/
+	cp -r src/ include/ dkms.conf Makefile third-party/ debian/camblet-driver/usr/src/camblet-${PACKAGE_VERSION}/
 
 # dh_make generated override targets.
 # This is an example for Cmake (see <https://bugs.debian.org/641051>).
