@@ -66,7 +66,7 @@ int chardev_init(void)
 
     pr_info("char device registered # major[%d]", major);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0) && !defined(RHEL_RELEASE)
     cls = class_create(THIS_MODULE, DEVICE_NAME);
 #else
     cls = class_create(DEVICE_NAME);
