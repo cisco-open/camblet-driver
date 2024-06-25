@@ -31,8 +31,6 @@ jobs:
 
       - name: Build camblet-driver RedHat package
         run: make rpm
-        with:
-          subject-path: 'rpmbuild/RPMS/noarch/camblet-driver-*.rpm'
 
       - name: Generate artifact attestation for deb and rpm packages
         uses: actions/attest-build-provenance@v1
