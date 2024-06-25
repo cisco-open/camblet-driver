@@ -220,13 +220,13 @@ sudo dnf install dkms
 The Camblet can be installed with DKMS in the following way currently:
 
 ```bash
-sudo git clone --recurse-submodule https://github.com/cisco-open/camblet-driver.git /usr/src/camblet-0.7.1/
+sudo git clone --recurse-submodule https://github.com/cisco-open/camblet-driver.git /usr/src/camblet-0.8.0/
 
 # Add the kernel module to the DKMS source control
-sudo dkms add -m camblet -v 0.7.1
+sudo dkms add -m camblet -v 0.8.0
 
 # Build and install the kernel module against the current kernel version
-sudo dkms install -m camblet -v 0.7.1
+sudo dkms install -m camblet -v 0.8.0
 
 # Load the kernel module
 sudo modprobe camblet
@@ -242,8 +242,8 @@ Un-installation is very simple as well:
 sudo modprobe -r camblet
 
 # Remove the kernel module from DKMS source control
-sudo dkms uninstall -m camblet -v 0.7.1
-sudo dkms remove -m camblet -v 0.7.1
+sudo dkms uninstall -m camblet -v 0.8.0
+sudo dkms remove -m camblet -v 0.8.0
 ```
 
 ### Debian package

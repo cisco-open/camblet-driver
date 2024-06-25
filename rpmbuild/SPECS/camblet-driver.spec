@@ -1,5 +1,5 @@
 Name:           camblet-driver
-Version:        0.7.1
+Version:        0.8.0
 Release:        1%{?dist}
 Summary:        Kernel module for the Camblet project.
 
@@ -57,6 +57,45 @@ fi
 
 
 %changelog
+* Ked Jún 25 2024 Camblet maintainers <team@camblet.io> - 0.8.0-1
+  - fix class_create on red hat linuxes
+  - Generate artifact attestiation for deb and rpm packages (#227)
+  - .github: Add Scorecard workflow
+  - ci: run on ubuntu-24.04 as well
+  - remove the duplicate bats test with make tricks
+  - Do not remove ktls module during test (#229)
+  - fix kTLS camblet stream ops leakage
+  - Exclude bats and wasm3/platform dirs from debian and rpm build (#228)
+  - chore: Update Linux kernel version to v6.8 in Makefile (#226)
+  - Replace shell script based testing with bats-core (#225)
+  - fix proxywasm leaks
+  - picohttpparser: remove x86 intrinsics in kernel
+  - add kernel debug env instructions to README
+  - fix augmentation cache leak on exit
+  - cert cache and wasm module leak fix
+  - update wasm3 to avoid module name leaks
+  - disable KASAN for m3_compile (stackoverflow issue)
+  - add macro block
+  - refactor trace log to macros
+  - Use is_ktls function instead of ktls_available (#221)
+  - fix csr_ptr leak
+  - fix is_ktls detection (caused leaks)
+  - commands: fix json object leak
+  - augmentation: fix task_context leak
+  - point to rebased wasm3
+  - proxywasm leak fixes
+  - pre-compile modules after loading
+  - sd: fix broken removing iteration
+  - fix rcu locking
+  - some fixes on fedora (and kernel 6.8)
+  - trace fixes - 'command_name' is not required - fix double free of task context
+  - Add support for MSG_TRUNC and MSG_WAITALL flags (#204)
+  - add alpn=passthrough test through python
+  - fix getsockopt truncation
+  - sockopt: add alpn to tls_info
+  - make test repeatable in case of an error (#217)
+  - Add debian package test to release process
+
 * Thu Apr 18 2024 Camblet maintainers <team@camblet.io> - 0.7.1-1
   - Fix deb build by copying all files to the right directory
 
