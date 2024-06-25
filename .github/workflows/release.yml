@@ -29,18 +29,15 @@ jobs:
       - name: Test camblet-driver Debian package
         run: sudo apt install -y ../camblet-driver_${{github.ref_name}}_all.deb
 
-      - name: Generate artifact attestation for deb package
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-path: '../camblet-driver_*.deb'
-
       - name: Build camblet-driver RedHat package
         run: make rpm
         with:
           subject-path: 'rpmbuild/RPMS/noarch/camblet-driver-*.rpm'
 
-      - name: Generate artifact attestation for rpm package
+      - name: Generate artifact attestation for deb and rpm packages
         uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: '../camblet-driver_*.deb, rpmbuild/RPMS/noarch/camblet-driver-*.rpm'
 
       - name: Release
         uses: ncipollo/release-action@v1
