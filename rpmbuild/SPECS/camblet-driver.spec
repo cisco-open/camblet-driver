@@ -57,7 +57,7 @@ fi
 
 
 %changelog
-* Ked Jún 25 2024 Camblet maintainers <team@camblet.io> - 0.8.0-1
+* Tue Jun 25 2024 Camblet maintainers <team@camblet.io> - 0.8.0-1
   - fix class_create on red hat linuxes
   - Generate artifact attestiation for deb and rpm packages (#227)
   - .github: Add Scorecard workflow
