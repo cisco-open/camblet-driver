@@ -35,7 +35,7 @@ jobs:
       - name: Generate artifact attestation for deb and rpm packages
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: '${{ github.workspace }}/../camblet-driver_*.deb, ${{ github.workspace }}/rpmbuild/RPMS/noarch/camblet-driver-*.rpm'
+          subject-path: '/home/runner/work/camblet-driver/camblet-driver_*.deb, ${{ github.workspace }}/rpmbuild/RPMS/noarch/camblet-driver-*.rpm'
 
       - name: Release
         uses: ncipollo/release-action@v1
