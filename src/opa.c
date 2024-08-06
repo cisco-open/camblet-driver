@@ -517,11 +517,11 @@ opa_socket_context parse_opa_socket_eval_result(char *json)
     return ret;
 }
 
-static size_t get_memory_page_count(size_t size)
+static size_t get_memory_page_count(wasm_vm_module *module, size_t size)
 {
-    size_t pages = size / d_m3MemPageSize;
+    size_t pages = size / wasm_vm_page_size(module);
 
-    if (pages * d_m3MemPageSize == size)
+    if (pages * wasm_vm_page_size(module) == size)
     {
         return pages;
     }
@@ -781,7 +781,8 @@ opa_socket_context this_cpu_opa_socket_eval(const char *input)
     int rest = inputAddr + inputLen - memorySize;
     if (rest > 0) // need to grow memory
     {
-        M3Result m3result = ResizeMemory(opa->eval->module->runtime, get_memory_page_count(memorySize + rest));
+        size_t pageCount = get_memory_page_count(opa->eval->module, memorySize + rest);
+        M3Result m3result = ResizeMemory(opa->eval->module->runtime, pageCount);
         if (m3result)
         {
             pr_crit("could not grow wasm module memory");
