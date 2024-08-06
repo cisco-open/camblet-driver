@@ -74,6 +74,7 @@ wasm_vm_result wasm_vm_load_module(wasm_vm *vm, const char *name, unsigned char 
 wasm_vm_result wasm_vm_call(wasm_vm *vm, const char *module, const char *name, ...);
 wasm_vm_result wasm_vm_call_direct(wasm_vm *vm, wasm_vm_function *func, ...);
 uint8_t *wasm_vm_memory(wasm_vm_module *module);
+uint32_t wasm_vm_page_size(wasm_vm_module *module);
 wasm_vm_result wasm_vm_global(wasm_vm_module *module, const char *name);
 wasm_vm_result wasm_vm_malloc(wasm_vm *vm, const char *module, unsigned size);
 wasm_vm_result wasm_vm_free(wasm_vm *vm, const char *module, i32 ptr, unsigned size);

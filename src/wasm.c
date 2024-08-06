@@ -322,6 +322,11 @@ uint8_t *wasm_vm_memory(wasm_vm_module *module)
     return m3_GetMemory(module->runtime, &len, 0);
 }
 
+uint32_t wasm_vm_page_size(wasm_vm_module *module)
+{
+    return module->runtime->memory.pageSize;
+}
+
 wasm_vm_result wasm_vm_global(wasm_vm_module *module, const char *name)
 {
     IM3Global g = m3_FindGlobal(module, name);
